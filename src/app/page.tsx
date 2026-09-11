@@ -14,8 +14,9 @@ export default async function Page() {
     <ChatApp
       user={{
         id: session.id,
-        phone: session.phone,
+        username: session.username,
         name: session.name,
+        phone: session.phone,
         avatar: session.avatar,
         avatarColor: session.avatarColor,
         about: session.about,

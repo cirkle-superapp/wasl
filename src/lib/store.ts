@@ -2,25 +2,36 @@
 
 import { create } from 'zustand'
 
+export type UserPhoneNumber = {
+  id: string
+  number: string
+  label: string | null
+  active: boolean
+}
+
 export type CurrentUser = {
   id: string
-  phone: string
+  username: string
   name: string
+  phone: string | null
   avatar: string | null
   avatarColor: string | null
   about: string
   verified?: boolean
+  phoneNumbers?: UserPhoneNumber[]
 }
 
 export type Participant = {
   userId: string
+  username?: string
   name: string
-  phone: string
+  phone: string | null
   avatar: string | null
   avatarColor: string | null
   online: boolean
   lastSeen: string
   about: string
+  verified?: boolean
 }
 
 export type Reaction = {

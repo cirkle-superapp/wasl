@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
           user: {
             select: {
               id: true,
+              username: true,
               name: true,
               phone: true,
               avatar: true,
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
               about: true,
               online: true,
               lastSeen: true,
+              verified: true,
             },
           },
         },
@@ -85,6 +87,7 @@ export async function GET(req: NextRequest) {
         isGroup: c.isGroup,
         participants: c.participants.map((p) => ({
           userId: p.userId,
+          username: p.user.username,
           name: p.user.name,
           phone: p.user.phone,
           avatar: p.user.avatar,
@@ -92,6 +95,7 @@ export async function GET(req: NextRequest) {
           online: p.user.online,
           lastSeen: p.user.lastSeen,
           about: p.user.about,
+          verified: p.user.verified,
         })),
         lastMessage: lastMessage
           ? {

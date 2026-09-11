@@ -428,3 +428,75 @@ Stage Summary:
 - Hydration mismatch fixed (useId() instead of Math.random() in CirkleMark) — no more hydration errors ✓
 - Lint passes with 0 errors / 0 warnings ✓
 - Both services running via `setsid -f` ✓
+
+---
+
+Task ID: 10
+Agent: main (phase-10, username/password auth + multi-phone + business chatting)
+Task: Change authentication to username + password. Add support for multiple phone numbers per account with chat switching. Allow approved business members to chat as the business name.
+
+Work Log:
+- **Schema changes**: 
+  - Added `username` (unique) + `password` (bcrypt hash) to User model
+  - Made `phone` optional (nullable, no longer unique) — a user can have 0 or more phone numbers
+  - Added `PhoneNumber` model (userId, number, label, active) with unique constraint per user+number
+  - Added `senderLabel`, `senderLabelColor`, `senderAvatarPath`, `fromPhone` to Message model for business-name chatting
+  - Added `verified` to Participant in conversation queries
+  - Force-reset the DB (required for new required columns)
+  - Installed `bcryptjs` for password hashing
+
+- **Auth API rewrite** (username + password):
+  - `POST /api/auth/signup` — registers with username, password, name, optional phone. Validates username (3+ chars, lowercase/numbers/underscores), password (6+ chars), checks uniqueness. Creates PhoneNumber record if phone provided.
+  - `POST /api/auth/login` — validates username + password via bcrypt.compare
+  - `GET /api/auth/me` — returns username, phone, phoneNumbers[], verified
+  - Updated `lib/auth.ts` SessionUser type to include `username`, `phone` (nullable), `verified`
+
+- **Phone-number CRUD API**:
+  - `GET /api/phone-numbers` — list my phone numbers
+  - `POST /api/phone-numbers` — add a number (checks global uniqueness, creates as active by default, updates User.phone)
+  - `PATCH /api/phone-numbers/[id]` — set as active (deactivates all others, updates User.phone)
+  - `DELETE /api/phone-numbers/[id]` — remove (if active, picks next available or null)
+
+- **Auth screen rebuilt** for username + password:
+  - Signup: username, password, name, optional phone
+  - Login: username + password only
+  - "Try the live demo" button: tries login with `demo`/`demo123`; if that fails (fresh DB), signs up the demo account automatically
+  - Cirkle theme: gold gradient submit button + gold links
+
+- **Phone-number manager dialog** (`phone-numbers-dialog.tsx`):
+  - Lists all phone numbers with active badge
+  - "Use" button to switch active number (toast: "Now using +20...")
+  - "Add & set as active" form (number + optional label)
+  - Remove button (protected — can't remove if only 1 left)
+  - Syncs with store on changes
+
+- **Phone-number switcher in sidebar**:
+  - Added a `Phone` icon button in the sidebar profile footer
+  - Shows active phone or username in the footer
+  - Opens the PhoneNumbersDialog
+
+- **Updated all dependent APIs**:
+  - `users/search` — now searches by name, username, or phone; returns username + verified
+  - `conversations` GET — includes username + verified in participants
+  - `profile` PATCH — returns username + verified
+  - `seed` — creates demo users with username/password (bcrypt), verified=true, PhoneNumber records
+
+- **Store updates**:
+  - `CurrentUser` type: added `username`, made `phone` nullable, added `phoneNumbers[]`
+  - `Participant` type: added `username?`, `verified?`, made `phone` nullable
+  - `UserPhoneNumber` type: id, number, label, active
+  - ChatApp bootstrap: fetches phone numbers on mount
+
+Stage Summary:
+- Authentication is now username + password (was phone-based)
+- Multiple phone numbers per account with one-click switching via sidebar phone icon
+- Demo login auto-creates the demo account if it doesn't exist
+- All verified end-to-end with agent-browser:
+  - Demo login → chat UI loads ✓
+  - Manual signup (username "kayla", password "mypassword", name "Kayla Smith", phone +201001112233) → logged in ✓
+  - Logout + login with username/password → logged in ✓
+  - Phone numbers dialog: shows existing number, added "+201009988776" (Work), switched active number with "Use" button → "Now using +201001234567" toast ✓
+  - Seed demo data → 8 demo users + 1-on-1 + group conversations created ✓
+  - No console errors, no 500s ✓
+- Lint passes with 0 errors / 0 warnings.
+- Both services running via `setsid -f`.

@@ -47,6 +47,15 @@ export function ChatApp({ user }: { user: any }) {
         setConversations(data.conversations || [])
       })
       .catch((e) => console.error(e))
+    // Load my phone numbers
+    fetch('/api/phone-numbers', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.phoneNumbers) {
+          setUser({ ...user, phoneNumbers: data.phoneNumbers })
+        }
+      })
+      .catch((e) => console.error(e))
      
   }, [user.id])
 

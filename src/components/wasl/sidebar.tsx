@@ -13,11 +13,13 @@ import {
   Trash2,
   Loader2,
   CheckCheck,
+  Phone,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
 import { StoryBar } from './story-bar'
+import { PhoneNumbersDialog } from './phone-numbers-dialog'
 import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -53,6 +55,7 @@ export function Sidebar({
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
   const [loading, setLoading] = useState(true)
+  const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
@@ -238,7 +241,7 @@ export function Sidebar({
       </div>
 
       {/* Profile footer */}
-      <div className="border-t border-border bg-[var(--wasl-sidebar-bg)] px-3 py-2 flex items-center gap-3">
+      <div className="border-t border-border bg-[var(--wasl-sidebar-bg)] px-3 py-2 flex items-center gap-2">
         <button
           onClick={onOpenSettings}
           className="flex items-center gap-3 flex-1 min-w-0 text-left hover:bg-muted/50 rounded-lg p-1 -m-1 transition-colors"
@@ -252,11 +255,21 @@ export function Sidebar({
           <div className="min-w-0">
             <div className="text-sm font-medium truncate">{user?.name}</div>
             <div className="text-xs text-muted-foreground truncate">
-              {user?.phone}
+              {user?.phone || user?.username || 'No number'}
             </div>
           </div>
         </button>
+        {/* Phone-number switcher button */}
+        <button
+          onClick={() => setPhoneNumbersOpen(true)}
+          className="p-2 rounded-lg text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted transition-colors shrink-0"
+          title="Switch phone number"
+        >
+          <Phone className="w-4 h-4" />
+        </button>
       </div>
+
+      <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
     </div>
   )
 }

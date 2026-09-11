@@ -27,11 +27,13 @@ export async function PATCH(req: NextRequest) {
     data,
     select: {
       id: true,
+      username: true,
       phone: true,
       name: true,
       avatar: true,
       avatarColor: true,
       about: true,
+      verified: true,
     },
   })
   return NextResponse.json({ user: updated })

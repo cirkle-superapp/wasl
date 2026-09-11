@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { pickAvatarColor } from '@/lib/avatar'
+import bcrypt from 'bcryptjs'
 
 export const runtime = 'nodejs'
 
@@ -36,31 +37,52 @@ export async function POST(req: NextRequest) {
       'Habiba Samy',
       'Jana Khaled',
       'Malek Emad',
-      'Salma Wael',
+      'Salma Adel',
     ]
     const phones = Array.from({ length: 20 }, (_, i) => `+20100${String(i).padStart(8, '0')}`)
-    const created: { id: string; name: string; phone: string }[] = []
+    const created: { id: string; name: string; username: string }[] = []
     for (let i = 0; i < count; i++) {
       const phone = phones[i]
       const name = demoNames[i]
-      let user = await db.user.findUnique({ where: { phone } })
+      const username = `demo_${name.toLowerCase().replace(/\s+/g, '_')}`
+      let user = await db.user.findUnique({ where: { username } })
       if (!user) {
-        user = await db.user.create({
-          data: {
-            phone,
-            name,
-            avatarColor: pickAvatarColor(phone),
-            about: [
-              'Hey there! I am using Wasl.',
-              'Available',
-              'Busy',
-              'At work',
-              'Can\'t talk now',
-            ][i % 5],
-          },
-        })
+        // Also check if someone already has this phone
+        const existingPhone = await db.user.findFirst({ where: { phone } })
+        if (existingPhone) {
+          user = existingPhone
+        } else {
+          const hashedPassword = await bcrypt.hash('demo123', 10)
+          user = await db.user.create({
+            data: {
+              username,
+              password: hashedPassword,
+              name,
+              phone,
+              avatarColor: pickAvatarColor(phone),
+              about: [
+                'Hey there! I am using Wasl.',
+                'Available',
+                'Busy',
+                'At work',
+                "Can't talk now",
+              ][i % 5],
+              verified: true,
+              verifiedAt: new Date(),
+            },
+          })
+          // Create a PhoneNumber record
+          await db.phoneNumber.create({
+            data: {
+              userId: user.id,
+              number: phone,
+              label: 'Primary',
+              active: true,
+            },
+          })
+        }
       }
-      created.push({ id: user.id, name: user.name, phone: user.phone })
+      created.push({ id: user.id, name: user.name, username: user.username })
     }
 
     // Create a 1-on-1 conversation between current user and the first demo user

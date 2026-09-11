@@ -5,8 +5,9 @@ export const SESSION_COOKIE = 'wasl_session'
 
 export type SessionUser = {
   id: string
-  phone: string
+  username: string
   name: string
+  phone: string | null
   avatar: string | null
   avatarColor: string | null
   about: string
@@ -21,8 +22,9 @@ export async function getSession(): Promise<SessionUser | null> {
     where: { id: userId },
     select: {
       id: true,
-      phone: true,
+      username: true,
       name: true,
+      phone: true,
       avatar: true,
       avatarColor: true,
       about: true,

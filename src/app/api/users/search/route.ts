@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
         {
           OR: [
             { name: { contains: q } },
+            { username: { contains: q } },
             { phone: { contains: q } },
           ],
         },
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     },
     select: {
       id: true,
+      username: true,
       name: true,
       phone: true,
       avatar: true,
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
       about: true,
       online: true,
       lastSeen: true,
+      verified: true,
     },
     take: 50,
   })

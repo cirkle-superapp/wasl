@@ -5,50 +5,48 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Phone, User } from 'lucide-react'
+import { Loader2, User, Lock, Phone } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
-import { WaslLogo } from './wasl-logo'
 import { useColorTheme } from './color-theme-provider'
+import { WaslLogo } from './wasl-logo'
 import { cn } from '@/lib/utils'
 
-const DEMO_PHONE = '+201001234567'
-const DEMO_NAME = 'Demo User'
+const DEMO_USERNAME = 'demo'
+const DEMO_PASSWORD = 'demo123'
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('signup')
-  const [phone, setPhone] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
 
-  // Quick prefill helper for demo: ?demo=1
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('demo') === '1') {
-        setPhone(DEMO_PHONE)
-        setName(DEMO_NAME)
-      }
-    }
-  }, [])
-
-  // Core submission logic — callable directly so the demo button can trigger
-  // a full signup + navigation in a single click.
+  // Core submission logic
   const authenticate = useCallback(
     async (
-      overridePhone?: string,
+      overrideUsername?: string,
+      overridePassword?: string,
       overrideName?: string,
+      overridePhone?: string,
       overrideMode?: 'login' | 'signup'
     ) => {
-      const p = (overridePhone ?? phone).trim()
+      const u = (overrideUsername ?? username).trim().toLowerCase()
+      const p = overridePassword ?? password
       const n = (overrideName ?? name).trim()
+      const ph = (overridePhone ?? phone).trim() || undefined
       const m = overrideMode ?? mode
+      if (!u) {
+        toast.error('Please enter a username')
+        return
+      }
       if (!p) {
-        toast.error('Please enter your phone number')
+        toast.error('Please enter a password')
         return
       }
       if (m === 'signup' && n.length < 2) {
@@ -60,7 +58,12 @@ export function AuthScreen() {
         const res = await fetch(`/api/auth/${m}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: p, name: n }),
+          body: JSON.stringify({
+            username: u,
+            password: p,
+            name: n || undefined,
+            phone: ph,
+          }),
         })
         const data = await res.json()
         if (!res.ok) {
@@ -69,8 +72,6 @@ export function AuthScreen() {
         }
         setUser(data)
         toast.success(`Welcome to Wasl, ${data.name}!`)
-        // Hard refresh so the server component re-reads the new session cookie
-        // and swaps the AuthScreen for the ChatApp.
         router.refresh()
       } catch (err) {
         console.error(err)
@@ -79,7 +80,7 @@ export function AuthScreen() {
         setLoading(false)
       }
     },
-    [phone, name, mode, setUser, router]
+    [username, password, name, phone, mode, setUser, router]
   )
 
   function submit(e: React.FormEvent) {
@@ -87,12 +88,51 @@ export function AuthScreen() {
     void authenticate()
   }
 
-  function handleDemoLogin() {
-    // One-click: pre-fill, switch to signup mode, and authenticate immediately.
-    setPhone(DEMO_PHONE)
-    setName(DEMO_NAME)
-    setMode('signup')
-    void authenticate(DEMO_PHONE, DEMO_NAME, 'signup')
+  async function handleDemoLogin() {
+    setUsername(DEMO_USERNAME)
+    setPassword(DEMO_PASSWORD)
+    setMode('login')
+    // Try login first; if the demo user doesn't exist yet (fresh DB), sign up.
+    setLoading(true)
+    try {
+      // Attempt login
+      const loginRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: DEMO_USERNAME, password: DEMO_PASSWORD }),
+      })
+      if (loginRes.ok) {
+        const data = await loginRes.json()
+        setUser(data)
+        toast.success(`Welcome to Wasl, ${data.name}!`)
+        router.refresh()
+        return
+      }
+      // Login failed → try signup (creates the demo account)
+      const signupRes = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: DEMO_USERNAME,
+          password: DEMO_PASSWORD,
+          name: 'Demo User',
+          phone: '+201001234567',
+        }),
+      })
+      const data = await signupRes.json()
+      if (!signupRes.ok) {
+        toast.error(data?.error || 'Failed to start demo')
+        return
+      }
+      setUser(data)
+      toast.success(`Welcome to Wasl, ${data.name}!`)
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+      toast.error('Network error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -134,47 +174,88 @@ export function AuthScreen() {
             </h2>
             <p className="text-sm text-muted-foreground">
               {mode === 'signup'
-                ? 'Sign up with your phone number to start messaging on Wasl.'
-                : 'Log in to continue your conversations.'}
+                ? 'Sign up with a username and password to start messaging on Wasl.'
+                : 'Log in with your username and password.'}
             </p>
           </div>
 
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone number</Label>
+              <Label htmlFor="username">Username</Label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+20 100 123 4567"
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g. ahmad_ali"
                   className="pl-9"
-                  autoComplete="tel"
+                  autoComplete="username"
                   disabled={loading}
+                  autoCapitalize="none"
+                  spellCheck={false}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="name">
-                {mode === 'signup' ? 'Your name' : 'Display name (optional)'}
-              </Label>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Ahmad Ali"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
                   className="pl-9"
-                  autoComplete="name"
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   disabled={loading}
                 />
               </div>
             </div>
+
+            {mode === 'signup' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Your name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="name"
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Ahmad Ali"
+                      className="pl-9"
+                      autoComplete="name"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone number (optional)</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+20 100 123 4567"
+                      className="pl-9"
+                      autoComplete="tel"
+                      disabled={loading}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    You can add more phone numbers later and switch between them.
+                  </p>
+                </div>
+              </>
+            )}
 
             <Button
               type="submit"

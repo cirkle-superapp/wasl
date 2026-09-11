@@ -12,8 +12,13 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  phone     String   @unique
+  // Username-based authentication
+  username  String   @unique
+  password  String
   name      String
+  // The "active" phone number — used as the display number for this account.
+  // A user can have multiple phone numbers and switch between them.
+  phone     String?
   about     String   @default("Hey there! I am using Wasl.")
   avatar    String?
   avatarColor String?
@@ -34,9 +39,27 @@ model User {
   countersignedCommits Commit[]   @relation("CommitCounterparty")
   stories          Story[]
   folders          ChatFolder[]
+  phoneNumbers     PhoneNumber[]
   // Business
   ownedBusinesses   Business[]     @relation("BusinessOwner")
   businessMemberships BusinessMember[]
+}
+
+/// A phone number attached to a user account. A user can have multiple numbers
+/// and switch the "active" one at any time. Only the active number is visible
+/// to other users and used for outgoing messages.
+model PhoneNumber {
+  id        String   @id @default(cuid())
+  userId    String
+  number    String
+  label     String?  // e.g. "Personal", "Work", "Business"
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, number])
+  @@index([userId])
 }
 
 model Conversation {
@@ -74,10 +97,19 @@ model Message {
   conversationId String
   senderId       String
   content        String
-  type           String   @default("text") // text, image, system, commit
+  type           String   @default("text") // text, image, system, commit, voice, poll
   status         String   @default("sent") // sent, delivered, read
   replyToId      String?
   commitId       String?  // link to a Commit when type === 'commit'
+  // When sending "as a business", this overrides the sender display name + avatar
+  // color in the chat. The senderId stays the real user; this just controls how
+  // the message appears to others.
+  senderLabel    String?
+  senderLabelColor String?
+  senderAvatarPath String?
+  // Which phone number was active when this message was sent (optional, for
+  // display purposes).
+  fromPhone      String?
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
