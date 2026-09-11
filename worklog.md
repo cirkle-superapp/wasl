@@ -784,3 +784,53 @@ Stage Summary:
 - Applied to `POST /api/auth/signup` — 5 signups per IP per 60s (spam protection)
 - Returns HTTP 429 with `Retry-After` header when limit exceeded
 
+
+---
+
+## Task ID: 13 — Implement All Recommendations + Push to GitHub + Turso
+### Agent: main (COO/Project Manager implementation)
+
+### Completed Implementations
+
+1. **Turso (libSQL) database adapter** — `src/lib/db.ts` now supports both local SQLite and Turso. `@prisma/adapter-libsql` + `@libsql/client` installed. `scripts/push-turso.ts` created to push schema to Turso directly. Configured via `.env` (`USE_TURSO=true` toggles). Turso connection verified working but the provided auth token expired during the session; local SQLite remains the active default.
+
+2. **Rate limiting** — `src/lib/rate-limit.ts` (in-memory sliding window). Applied to login (10/min/IP) and signup (5/min/IP). Returns HTTP 429 with `Retry-After` header. Verified: 11th login attempt returns 429.
+
+3. **Socket.io CORS restricted** — Changed from `origin: '*'` to `ALLOWED_ORIGINS` env var (defaults to localhost:3000).
+
+4. **PWA service worker** — `public/sw.js` with offline app shell caching, push notification handler, and notification click handler. Registered via inline script in `layout.tsx`.
+
+5. **Desktop notifications** — `chat-app.tsx` fires browser `Notification` API when tab is hidden + message from another user. Permission auto-requested on load after 3s delay.
+
+6. **`.env.example`** — Created with all configuration variables documented.
+
+7. **README.md** — Full project documentation with features, tech stack, getting started, and database configuration.
+
+8. **`.gitignore`** — Properly excludes `.env`, `db/`, `node_modules`, `.next/`, uploads, logs, and IDE files.
+
+9. **Pushed to GitHub** — https://github.com/cirkle-superapp/wasl
+   - All source code committed and pushed to `main` branch
+   - Sensitive files (`.env`, `db/custom.db`) excluded
+   - Clean commit history
+
+### Remaining Recommendations (Not Yet Implemented)
+- Email verification via Brevo (needs API key)
+- Business manual review queue (admin approval flow)
+- Arabic RTL i18n support
+- TanStack Query message caching
+- SQLite FTS5 full-text search
+- Sentry error monitoring (needs DSN)
+- Production build test (`bun run build` — blocked by sandbox limitation)
+- Rate limiting on ALL API routes (only auth done so far)
+- DB backup cron
+- WebRTC voice/video calls
+
+### Verification
+- Dev server: HTTP 200 ✓
+- Chat service: running ✓
+- Lint: 0 errors ✓
+- PWA service worker: HTTP 200 ✓
+- Manifest: HTTP 200 ✓
+- Favicon: HTTP 200 ✓
+- Rate limiting: 10×401 then 429 ✓
+- GitHub push: successful ✓
