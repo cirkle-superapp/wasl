@@ -105,15 +105,16 @@
   --wasl-sidebar-bg: #ffffff;
 
   /* Cirkle brand tokens — constant across themes (gold / teal / rose / steel / charcoal / cream).
-     Imported from github.com/fortleem/CIRKLE. These are the Cirkle signature
-     hex values; the [data-theme="cirkle"] selector below swaps the Wasl
-     signature palette to use them. */
+     Imported from github.com/fortleem/CIRKLE and tuned to match the live
+     cirkleapp.vercel.app production palette. */
   --cirkle-gold: #c2a060;
   --cirkle-gold-light: #e5c98a;
   --cirkle-gold-dark: #9a7a3e;
-  --cirkle-teal: #1a4a5a;
+  --cirkle-teal: #1a4a5a;          /* deep teal — used for headers/gradients */
+  --cirkle-teal-bright: #009588;   /* production Cirkle teal-600 — primary accent */
   --cirkle-teal-light: #2a6a7a;
   --cirkle-rose: #c25a6e;
+  --cirkle-rose-bright: #ff2357;  /* production Cirkle rose-500 */
   --cirkle-steel: #4a6b88;
   --cirkle-charcoal: #1a1a14;
   --cirkle-cream: #fdfcf9;
@@ -171,10 +172,13 @@
    colors automatically. Light mode (default, no .dark).
    ========================================================================== */
 [data-theme="cirkle"] {
-  /* Map Wasl semantic colors to Cirkle brand */
-  --wasl-green: var(--cirkle-gold);
-  --wasl-green-dark: var(--cirkle-gold-dark);
-  --wasl-teal: var(--cirkle-teal);
+  /* Map Wasl semantic colors to Cirkle brand.
+     --wasl-green is the primary "action" accent (send button, ticks, unread
+     badges, online dot) → use the bright Cirkle teal #009588 (production teal-600).
+     --wasl-teal is the "header/background" teal → use the deep Cirkle teal #1a4a5a. */
+  --wasl-green: #009588;              /* Cirkle teal-600 — primary accent */
+  --wasl-green-dark: #00776e;        /* Cirkle teal-700 — hover */
+  --wasl-teal: #1a4a5a;              /* deep teal — headers */
   --wasl-teal-dark: #123843;
   --wasl-bubble-out: #f5ecd6;        /* warm cream-gold for outgoing bubbles */
   --wasl-bubble-in: #ffffff;         /* white for incoming bubbles */
@@ -182,28 +186,28 @@
   --wasl-sidebar-bg: #fdfcf9;        /* Cirkle cream surface */
 
   /* Override shadcn tokens to harmonize with Cirkle */
-  --primary: oklch(0.62 0.08 70);            /* gold */
-  --primary-foreground: oklch(0.18 0.02 70); /* charcoal */
-  --ring: oklch(0.62 0.08 70);
+  --primary: oklch(0.62 0.10 190);            /* Cirkle teal #009588 */
+  --primary-foreground: oklch(0.98 0.01 40); /* cream */
+  --ring: oklch(0.62 0.10 190);
   --accent: oklch(0.65 0.12 350);           /* rose */
   --accent-foreground: oklch(0.98 0.01 40); /* cream */
   --sidebar: oklch(0.98 0.01 40);
   --sidebar-foreground: oklch(0.20 0.02 70);
-  --sidebar-primary: oklch(0.40 0.06 200);  /* teal */
+  --sidebar-primary: oklch(0.62 0.10 190);  /* Cirkle teal */
   --sidebar-primary-foreground: oklch(0.98 0.01 40);
   --sidebar-accent: oklch(0.95 0.02 40);
   --sidebar-accent-foreground: oklch(0.20 0.02 70);
   --sidebar-border: oklch(0.90 0.02 40);
-  --sidebar-ring: oklch(0.62 0.08 70);
+  --sidebar-ring: oklch(0.62 0.10 190);
 }
 
-/* Cirkle dark mode — charcoal background + gold accents (Cirkle app style) */
+/* Cirkle dark mode — charcoal background + teal accents (Cirkle app style) */
 .dark[data-theme="cirkle"] {
-  --wasl-green: var(--cirkle-gold);
-  --wasl-green-dark: var(--cirkle-gold-dark);
-  --wasl-teal: var(--cirkle-teal-light);
-  --wasl-teal-dark: var(--cirkle-teal);
-  --wasl-bubble-out: #2a2418;          /* dark warm gold for outgoing */
+  --wasl-green: #00baa7;               /* Cirkle teal-500 — brighter for dark mode */
+  --wasl-green-dark: #009588;
+  --wasl-teal: #2a6a7a;
+  --wasl-teal-dark: #1a4a5a;
+  --wasl-bubble-out: #1a3a3a;          /* dark teal for outgoing */
   --wasl-bubble-in: #1f1a14;           /* dark cream/charcoal for incoming */
   --wasl-chat-bg: #0f0d0a;             /* near-black cream */
   --wasl-sidebar-bg: #1a1a14;          /* Cirkle charcoal */
@@ -214,7 +218,7 @@
   --card-foreground: oklch(0.95 0.02 40);
   --popover: oklch(0.14 0.01 70);
   --popover-foreground: oklch(0.95 0.02 40);
-  --primary: oklch(0.68 0.10 70);            /* gold */
+  --primary: oklch(0.70 0.10 190);            /* Cirkle teal (bright for dark) */
   --primary-foreground: oklch(0.14 0.01 70);
   --secondary: oklch(0.20 0.01 70);
   --secondary-foreground: oklch(0.95 0.02 40);
@@ -225,15 +229,15 @@
   --destructive: oklch(0.65 0.22 25);
   --border: oklch(0.22 0.01 70);
   --input: oklch(0.22 0.01 70);
-  --ring: oklch(0.68 0.10 70);
+  --ring: oklch(0.70 0.10 190);
   --sidebar: oklch(0.12 0.005 70);
   --sidebar-foreground: oklch(0.95 0.02 40);
-  --sidebar-primary: oklch(0.68 0.10 70);
+  --sidebar-primary: oklch(0.70 0.10 190);
   --sidebar-primary-foreground: oklch(0.14 0.01 70);
   --sidebar-accent: oklch(0.18 0.01 70);
   --sidebar-accent-foreground: oklch(0.95 0.02 40);
   --sidebar-border: oklch(0.22 0.01 70);
-  --sidebar-ring: oklch(0.68 0.10 70);
+  --sidebar-ring: oklch(0.70 0.10 190);
 }
 
 /* Cirkle signature gradients (available in both themes) */

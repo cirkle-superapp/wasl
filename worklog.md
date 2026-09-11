@@ -239,3 +239,43 @@ Stage Summary:
   - All three favicons serve HTTP 200 (logo.svg, wasl-favicon.svg, cirkle-favicon.svg).
 - Lint passes with 0 errors / 0 warnings.
 - Both services (dev :3000, chat-service :3003) running via `setsid -f`.
+
+---
+
+Task ID: 6
+Agent: main (phase-6, Cirkle default theme)
+Task: Fix the issue where the app still showed green colors by default instead of the Cirkle color theme. Make the Cirkle palette (teal/gold/cream from cirkleapp.vercel.app) the default, and tune the colors to match the live Cirkle production app.
+
+Work Log:
+- Root cause: the `ColorThemeProvider` defaulted to `'wasl'` (green) when no localStorage preference was set, and the inline pre-hydration script only applied `data-theme="cirkle"` when the stored value was explicitly `'cirkle'`. So a fresh visitor always saw the green theme.
+- Fetched the live Cirkle production CSS from cirkleapp.vercel.app to extract the real palette:
+  - Primary teal: `#009588` (teal-600), hover `#00776e` (teal-700), bright `#00baa7` (teal-500)
+  - Rose accent: `#ff2357` (rose-500)
+  - Deep teal for headers: `#1a4a5a`
+  - Gold: `#c2a060` / `#e5c98a` / `#9a7a3e`
+- Made the Cirkle theme the DEFAULT:
+  - `color-theme-provider.tsx`: `DEFAULT_THEME = 'cirkle'`; `readStoredTheme()` returns `'cirkle'` when no stored value; `applyTheme('wasl')` removes the attribute, else sets `data-theme="cirkle"`.
+  - `layout.tsx` inline script: defaults to `data-theme="cirkle"` when no stored preference, only removes it if the stored value is `'wasl'`.
+- Tuned the Cirkle theme colors to match the production Cirkle app:
+  - `--wasl-green` (primary action accent: send button, unread badges, online dot, status ticks) → `#009588` (Cirkle teal-600) instead of gold. This makes the accent color the bright Cirkle teal, matching cirkleapp.vercel.app.
+  - `--wasl-teal` (header background) → `#1a4a5a` (deep Cirkle teal) — unchanged.
+  - Dark mode `--wasl-green` → `#00baa7` (teal-500, brighter for dark backgrounds).
+  - Dark mode outgoing bubble → `#1a3a3a` (dark teal) instead of dark gold.
+  - shadcn `--primary`, `--ring`, `--sidebar-primary` → Cirkle teal oklch.
+- Updated the settings dialog Cirkle swatch button to show the teal-first palette (#009588, #1a4a5a, #c2a060) and label "Teal · gold · cream".
+
+Stage Summary:
+- The app now defaults to the Cirkle color theme on first visit (no longer green).
+- Verified with agent-browser (cleared localStorage + cookies):
+  - `data-theme="cirkle"` by default.
+  - `--wasl-green` = `#009588` (Cirkle teal-600) — the production accent color.
+  - `--wasl-teal` = `#1a4a5a` (Cirkle deep teal) — headers.
+  - Auth hero shows the animated Cirkle orb logo + Cirkle gradient.
+  - Send button: `rgb(0, 149, 136)` = #009588 (Cirkle teal).
+  - Outgoing bubble: `rgb(245, 236, 214)` = #f5ecd6 (warm cream-gold).
+  - Unread badge: `rgb(0, 149, 136)` = #009588 (Cirkle teal).
+  - Sidebar header: Cirkle gradient (teal → steel → rose) + animated Cirkle orb logo (30s spin).
+  - Dark mode + Cirkle: send button `rgb(0, 186, 167)` = #00baa7 (teal-500, brighter for dark).
+  - No console errors.
+- Lint passes with 0 errors / 0 warnings.
+- Both services running via `setsid -f`.

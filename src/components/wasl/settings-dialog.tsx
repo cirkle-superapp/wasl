@@ -220,18 +220,18 @@ export function SettingsDialog({
                 className={cn(
                   'flex flex-col items-start gap-2 p-3 rounded-lg border-2 transition-all text-left',
                   colorTheme === 'cirkle'
-                    ? 'border-[var(--cirkle-gold)] bg-[var(--cirkle-gold)]/5'
+                    ? 'border-[#009588] bg-[#009588]/5'
                     : 'border-border hover:border-foreground/30'
                 )}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-[#c2a060]" />
+                  <span className="w-4 h-4 rounded-full bg-[#009588]" />
                   <span className="w-4 h-4 rounded-full bg-[#1a4a5a]" />
-                  <span className="w-4 h-4 rounded-full bg-[#fdfcf9] border border-border" />
+                  <span className="w-4 h-4 rounded-full bg-[#c2a060]" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold wasl-text-gradient-cirkle">Cirkle</div>
-                  <div className="text-[11px] text-muted-foreground">Gold · teal · cream</div>
+                  <div className="text-sm font-semibold" style={{ color: '#009588' }}>Cirkle</div>
+                  <div className="text-[11px] text-muted-foreground">Teal · gold · cream</div>
                 </div>
               </button>
             </div>

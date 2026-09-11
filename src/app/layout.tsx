@@ -43,8 +43,9 @@ export const metadata: Metadata = {
 };
 
 // Inline script to apply the saved color theme BEFORE hydration, preventing
-// a flash of the default theme when the user previously chose Cirkle.
-const colorThemeScript = `(function(){try{var t=localStorage.getItem('wasl-color-theme');if(t==='cirkle'){document.documentElement.setAttribute('data-theme','cirkle');}}catch(e){}})();`;
+// a flash of the default theme. Defaults to Cirkle (gold/teal/cream) when no
+// preference is stored, so the app loads with the Cirkle brand colors by default.
+const colorThemeScript = `(function(){try{var t=localStorage.getItem('wasl-color-theme');if(t==='wasl'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme','cirkle');}}catch(e){document.documentElement.setAttribute('data-theme','cirkle');}})();`;
 
 export default function RootLayout({
   children,

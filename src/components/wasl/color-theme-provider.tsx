@@ -9,26 +9,31 @@ type ColorThemeContextValue = {
   setColorTheme: (t: ColorTheme) => void
 }
 
+// Default to the Cirkle color theme (gold/teal/cream) — the brand palette
+// imported from github.com/fortleem/CIRKLE. Users can switch back to the
+// classic WhatsApp-green "Wasl" theme in Settings.
+const DEFAULT_THEME: ColorTheme = 'cirkle'
+
 const ColorThemeContext = createContext<ColorThemeContextValue>({
-  colorTheme: 'wasl',
+  colorTheme: DEFAULT_THEME,
   setColorTheme: () => {},
 })
 
 const STORAGE_KEY = 'wasl-color-theme'
 
 function readStoredTheme(): ColorTheme {
-  if (typeof window === 'undefined') return 'wasl'
+  if (typeof window === 'undefined') return DEFAULT_THEME
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
     if (stored === 'cirkle' || stored === 'wasl') return stored
   } catch {
     // ignore
   }
-  return 'wasl'
+  return DEFAULT_THEME
 }
 
 export function ColorThemeProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initializer — runs once on the client (SSR returns 'wasl', then the
+  // Lazy initializer — runs once on the client (SSR returns the default, then the
   // client picks up the stored value on the very first render, no flash and
   // no setState-in-effect lint error).
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(() =>
@@ -58,10 +63,10 @@ export function ColorThemeProvider({ children }: { children: React.ReactNode }) 
 
 function applyTheme(t: ColorTheme) {
   if (typeof document === 'undefined') return
-  if (t === 'cirkle') {
-    document.documentElement.setAttribute('data-theme', 'cirkle')
-  } else {
+  if (t === 'wasl') {
     document.documentElement.removeAttribute('data-theme')
+  } else {
+    document.documentElement.setAttribute('data-theme', 'cirkle')
   }
 }
 
