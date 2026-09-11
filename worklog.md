@@ -279,3 +279,43 @@ Stage Summary:
   - No console errors.
 - Lint passes with 0 errors / 0 warnings.
 - Both services running via `setsid -f`.
+
+---
+
+Task ID: 7
+Agent: main (phase-7, gold login button fix)
+Task: Fix two issues reported by the user: (1) "login isn't working" and (2) "login tab is in green not in gold as in Cirkle".
+
+Work Log:
+- Investigated "login isn't working" — tested all login flows with agent-browser:
+  - "Try the live demo" button → works (signs up demo user + navigates to chat UI).
+  - Manual signup (phone + name → Sign up) → works (creates account + logs in).
+  - Manual login (phone only → Log in, existing user) → works (logs in).
+  - Login with non-existent phone → correct error toast "No account found for this phone number. Please sign up."
+  - Conclusion: the login flow was already functional. The user's complaint was likely about the green button not visually matching the Cirkle gold brand, making it confusing.
+- Fetched the live Cirkle production CSS (cirkleapp.vercel.app) to extract the exact gold gradient:
+  - `--gradient-gold: linear-gradient(135deg, #d1b685 0%, #ae8842 100%)`
+  - `.bg-gold { background-color: hsl(39 45% 57%) }` = `#c3a060`
+  - Text gold `#c2a060`, dark gold `#9a7a3e`, light gold `#e5c98a`
+- Updated `src/components/wasl/auth-screen.tsx` so all auth buttons/links use the Cirkle gold palette when the Cirkle theme is active:
+  - **Submit button** (Sign up / Log in): `wasl-gradient-gold` (linear-gradient(135deg, #e5c98a, #9a7a3e)) with dark charcoal text `#1a1a14` — instead of the teal `--wasl-green`.
+  - **"Log in" / "Create an account" links**: gold `#c2a060` — instead of `--wasl-teal`/`--wasl-green`.
+  - **"Try the live demo" button**: gold outline (border `#c2a060/40`, text `#9a7a3e`, hover bg `#c2a060/10`).
+  - Used `cn()` + the `isCirkle` flag (from `useColorTheme`) to conditionally apply Cirkle vs Wasl classes.
+
+Stage Summary:
+- Login confirmed working in all scenarios (demo button, signup, login, error handling).
+- Auth screen buttons/links now use the Cirkle gold palette (matching cirkleapp.vercel.app):
+  - Submit button: gold gradient `linear-gradient(135deg, #e5c98a, #9a7a3e)` + charcoal text.
+  - Log in / Create an account links: `#c2a060` gold.
+  - Try the live demo button: gold outline `#9a7a3e` text + gold border.
+- Verified with agent-browser:
+  - Signup mode: submit button `linear-gradient(135deg, rgb(229,201,138), rgb(154,122,62))` (gold) ✓
+  - Login mode: submit button same gold gradient ✓
+  - "Log in" link: `rgb(194, 160, 96)` = #c2a060 (gold) ✓
+  - "Create an account" link: `rgb(194, 160, 96)` = #c2a060 (gold) ✓
+  - "Try the live demo" button: `rgb(154, 122, 62)` = #9a7a3e (dark gold) + gold border ✓
+  - Login flow works end-to-end (signup → logged in; login mode → logged in).
+  - No console errors.
+- Lint passes with 0 errors / 0 warnings.
+- Both services running via `setsid -f`.

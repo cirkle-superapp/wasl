@@ -178,7 +178,12 @@ export function AuthScreen() {
 
             <Button
               type="submit"
-              className="w-full bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white font-medium"
+              className={cn(
+                'w-full font-medium',
+                isCirkle
+                  ? 'wasl-gradient-gold hover:opacity-90 text-[#1a1a14]'
+                  : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'
+              )}
               disabled={loading}
             >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -193,7 +198,10 @@ export function AuthScreen() {
                 <button
                   type="button"
                   onClick={() => setMode('login')}
-                  className="text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] font-medium hover:underline"
+                  className={cn(
+                    'font-medium hover:underline',
+                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+                  )}
                 >
                   Log in
                 </button>
@@ -204,7 +212,10 @@ export function AuthScreen() {
                 <button
                   type="button"
                   onClick={() => setMode('signup')}
-                  className="text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] font-medium hover:underline"
+                  className={cn(
+                    'font-medium hover:underline',
+                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+                  )}
                 >
                   Create an account
                 </button>
@@ -220,7 +231,10 @@ export function AuthScreen() {
               type="button"
               variant="outline"
               size="sm"
-              className="w-full"
+              className={cn(
+                'w-full',
+                isCirkle && 'border-[#c2a060]/40 text-[#9a7a3e] hover:bg-[#c2a060]/10 hover:text-[#9a7a3e]'
+              )}
               disabled={loading}
               onClick={handleDemoLogin}
             >
