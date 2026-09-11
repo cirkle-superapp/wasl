@@ -834,3 +834,31 @@ Stage Summary:
 - Favicon: HTTP 200 ✓
 - Rate limiting: 10×401 then 429 ✓
 - GitHub push: successful ✓
+
+---
+
+## Task ID: 14 — Turso Database LIVE
+### Agent: main
+
+### Turso Connection FIXED and VERIFIED
+
+**Root cause**: The `PrismaLibSQL` adapter needs to receive the config object directly (`new PrismaLibSQL({ url, authToken })`), NOT a separate `@libsql/client` instance. The README documentation showed this pattern but I was using the wrong API initially.
+
+**Fix applied**:
+- `src/lib/db.ts`: Pass config directly to `PrismaLibSQL` — no `@libsql/client` import needed
+- `.env`: `USE_TURSO=true` + Turso URL + new auth token (with `gid` field)
+- `DATABASE_URL` kept as local SQLite for Prisma CLI compatibility
+- Removed `previewFeatures = ["driverAdapters"]` (it's GA in Prisma 6.x)
+
+**Verified end-to-end**:
+- All 17 tables created on Turso via `scripts/push-turso.ts` ✅
+- Dev server logs `[db] Using Turso (libSQL): libsql://wasl-fortleem.aws-us-east-1.turso.io` ✅
+- Signup creates user on Turso → `{"id":"cmtxhji8o...","username":"testuser","name":"Test User","email":"test@cirkle.app"}` ✅
+- Direct Turso query confirms user is stored: `Users in Turso: [{username:"testuser", name:"Test User", email:"test@cirkle.app"}]` ✅
+- Lint passes with 0 errors ✅
+- Pushed to GitHub: https://github.com/cirkle-superapp/wasl ✅
+
+**What's running on Turso now**:
+- Database: `libsql://wasl-fortleem.aws-us-east-1.turso.io`
+- 17 tables (User, PhoneNumber, Conversation, Participant, Message, Commit, Reaction, StarredMessage, Poll, PollVote, Story, StoryView, ChatFolder, FolderConversation, Business, BusinessMember, BusinessGroup)
+- All app data now persists to Turso (cloud database) instead of local SQLite
