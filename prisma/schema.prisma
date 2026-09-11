@@ -25,6 +25,8 @@ model User {
   sentMessages      Message[]      @relation("MessageSender")
   conversations     Participant[]
   createdConversations Conversation[] @relation("ConversationCreator")
+  createdCommits    Commit[]      @relation("CommitCreator")
+  countersignedCommits Commit[]   @relation("CommitCounterparty")
 }
 
 model Conversation {
@@ -40,6 +42,7 @@ model Conversation {
 
   participants Participant[]
   messages     Message[]
+  commits      Commit[]
 }
 
 model Participant {
@@ -60,13 +63,50 @@ model Message {
   conversationId String
   senderId       String
   content        String
-  type           String   @default("text") // text, image, system
+  type           String   @default("text") // text, image, system, commit
   status         String   @default("sent") // sent, delivered, read
   replyToId      String?
+  commitId       String?  // link to a Commit when type === 'commit'
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+/// Cirkle-inspired Commit (AI-verified agreement) anchored to a conversation.
+/// Simplified subset for Wasl: type, parties (creator + counterparty),
+/// amount + currency, deadline, conditions, fairness score, hash, and a
+/// two-party signature state machine (pending -> active -> completed|disputed).
+model Commit {
+  id              String   @id @default(cuid())
+  conversationId  String
+  creatorId       String
+  counterpartyId  String
+  type            String   @default("price") // price|work|service|rental|group_buy
+  title           String
+  description     String   @default("")
+  amount          Float   @default(0)
+  currency        String   @default("SAR")
+  deadline        String?
+  conditions      String   @default("[]") // JSON-encoded string[]
+  status          String   @default("pending") // pending|active|completed|disputed
+  fairnessScore   Int      @default(0) // 0-100
+  fairnessNote    String   @default("")
+  hash            String
+  creatorSigned   Boolean  @default(true)
+  counterpartySigned Boolean @default(false)
+  creatorSignedAt  DateTime?
+  counterpartySignedAt DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  creator      User         @relation("CommitCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  counterparty User         @relation("CommitCounterparty", fields: [counterpartyId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([counterpartyId])
 }

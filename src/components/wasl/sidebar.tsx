@@ -5,20 +5,18 @@ import {
   Search,
   Plus,
   Settings,
-  MessageCircle,
   Users,
   LogOut,
   Moon,
   Sun,
   MoreVertical,
-  Archive,
-  Bell,
   Trash2,
   Loader2,
   CheckCheck,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
+import { WaslLogo } from './wasl-logo'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -101,10 +99,8 @@ export function Sidebar({
     <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)]">
       {/* Header */}
       <div className="bg-[var(--wasl-teal)] text-white px-4 py-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
-            <MessageCircle className="w-5 h-5" />
-          </div>
+        <div className="flex items-center gap-2 min-w-0 text-white">
+          <WaslLogo size={36} animated monochrome />
           <div className="font-bold text-lg leading-none truncate">Wasl</div>
         </div>
         <div className="flex items-center gap-1">
@@ -200,7 +196,7 @@ export function Sidebar({
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground">
-            <MessageCircle className="w-12 h-12 mb-3 opacity-40" />
+            <WaslLogo size={56} animated className="mb-3 opacity-80" />
             <p className="text-sm">
               {search
                 ? 'No conversations match your search.'

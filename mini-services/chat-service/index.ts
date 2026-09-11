@@ -180,6 +180,23 @@ io.on('connection', (socket) => {
     }
   })
 
+  // Commit created/updated broadcast — Cirkle-inspired commitment feature.
+  // The REST API persists the commit; the socket just relays the change to
+  // everyone in the conversation room so cards update in real time.
+  socket.on(
+    'commit:updated',
+    (data: {
+      conversationId: string
+      commitId: string
+    }) => {
+      if (!data || !data.conversationId || !data.commitId) return
+      io.to(`conversation:${data.conversationId}`).emit('commit:updated', {
+        conversationId: data.conversationId,
+        commitId: data.commitId,
+      })
+    }
+  )
+
   socket.on('disconnect', () => {
     const userId = socketToUser.get(socket.id)
     socketToUser.delete(socket.id)

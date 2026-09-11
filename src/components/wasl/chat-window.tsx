@@ -14,8 +14,10 @@ import {
   Copy,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
+import { WaslLogo } from './wasl-logo'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
+import { NewCommitDialog } from './new-commit-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -53,7 +55,12 @@ export function ChatWindow({
     setShowProfilePanel,
     setReplyTo,
     replyTo,
+    upsertCommit,
+    commitsByConversation,
+    setCommits,
   } = useWaslStore()
+
+  const [commitOpen, setCommitOpen] = useState(false)
 
   const conversation = conversations.find((c) => c.id === activeConversationId)
   const messages = activeConversationId
@@ -134,6 +141,30 @@ export function ChatWindow({
     loadMessages()
   }, [loadMessages])
 
+  // ---- Load commits for the active conversation -------------------------------
+  useEffect(() => {
+    if (!activeConversationId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(
+          `/api/commits?conversationId=${activeConversationId}`,
+          { cache: 'no-store' }
+        )
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled && Array.isArray(data.commits)) {
+          setCommits(activeConversationId, data.commits)
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeConversationId, setCommits])
+
   // ---- Join conversation socket room on change -------------------------------
   useEffect(() => {
     if (!activeConversationId || !user?.id) return
@@ -183,14 +214,34 @@ export function ChatWindow({
       updateMessageStatus(activeConversationId, payload.messageIds, payload.status)
     }
 
+    // When another client updates a commit (sign/complete), re-fetch it.
+    async function onCommitUpdated(payload: {
+      conversationId: string
+      commitId: string
+    }) {
+      if (!payload || payload.conversationId !== activeConversationId || !payload.commitId) return
+      try {
+        const res = await fetch(`/api/commits/${payload.commitId}`, {
+          cache: 'no-store',
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.commit) upsertCommit(data.commit)
+      } catch {
+        // ignore
+      }
+    }
+
     socket.on('message:received', onMessageReceived)
     socket.on('message:status', onStatus)
+    socket.on('commit:updated', onCommitUpdated)
 
     return () => {
       socket.off('message:received', onMessageReceived)
       socket.off('message:status', onStatus)
+      socket.off('commit:updated', onCommitUpdated)
     }
-  }, [activeConversationId, user?.id, addMessage, updateMessageStatus])
+  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, upsertCommit])
 
   // ---- Auto-scroll to bottom when new messages arrive ------------------------
   useEffect(() => {
@@ -365,8 +416,9 @@ export function ChatWindow({
   if (!activeConversationId || !conversation) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6">
-        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-6 shadow-lg max-w-md">
-          <h2 className="text-xl font-semibold mb-1 text-foreground">
+        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4">
+          <WaslLogo size={72} animated />
+          <h2 className="text-xl font-semibold text-foreground">
             Welcome to Wasl
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -531,6 +583,17 @@ export function ChatWindow({
         onSend={handleSend}
         onTypingChange={onTypingChange}
         onSendImage={handleSendImage}
+        onOpenCommit={() => setCommitOpen(true)}
+        canCommit={!conversation.isGroup && !!otherUser}
+      />
+
+      {/* New Commit dialog (Cirkle-inspired) */}
+      <NewCommitDialog
+        open={commitOpen}
+        onOpenChange={setCommitOpen}
+        conversationId={activeConversationId}
+        counterpartyId={otherUser?.userId || null}
+        counterpartyName={otherUser?.name}
       />
     </div>
   )

@@ -10,12 +10,14 @@ import {
   Users,
   Star,
   Shield,
+  ShieldCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WaslAvatar } from './wasl-avatar'
-import { useWaslStore } from '@/lib/store'
+import { useWaslStore, type Commit } from '@/lib/store'
 import { formatLastSeen } from '@/lib/time'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const {
@@ -24,10 +26,14 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     user,
     onlineUserIds,
     setShowProfilePanel,
+    commitsByConversation,
   } = useWaslStore()
   const conversation =
     conversations.find((c) => c.id === activeConversationId) || null
   const [media, setMedia] = useState<string[]>([])
+  const commits: Commit[] = activeConversationId
+    ? commitsByConversation[activeConversationId] || []
+    : []
 
   useEffect(() => {
     async function loadMedia() {
@@ -194,6 +200,64 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
                   alt="shared"
                   className="w-full aspect-square object-cover rounded-md cursor-pointer"
                 />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Commits (Cirkle-inspired) */}
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" /> Commits
+            <span className="ml-auto text-[10px] normal-case tracking-normal">
+              {commits.length} agreement{commits.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {commits.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No commits yet. Tap the shield icon in the composer to create a
+              verified agreement.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {commits.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-lg border border-border bg-white/70 dark:bg-white/5 p-2.5 text-xs"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-base">{c.typeEmoji}</span>
+                      <span className="font-medium truncate">{c.title}</span>
+                    </div>
+                    <span
+                      className={cn(
+                        'wasl-commit-status-pill wasl-commit-status-' + c.status
+                      )}
+                    >
+                      {c.status === 'pending'
+                        ? 'Pending'
+                        : c.status === 'active'
+                        ? 'Active'
+                        : c.status === 'completed'
+                        ? 'Done'
+                        : 'Disputed'}
+                    </span>
+                  </div>
+                  {c.amount > 0 && (
+                    <div className="text-muted-foreground">
+                      {c.amount.toLocaleString()} {c.currency}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
+                    <ShieldCheck className="w-3 h-3 text-[var(--wasl-green)]" />
+                    {c.creatorSigned && c.counterpartySigned
+                      ? 'Both parties signed'
+                      : c.counterpartySigned
+                      ? 'Counterparty signed'
+                      : 'Awaiting counterparty signature'}
+                  </div>
+                </div>
               ))}
             </div>
           )}

@@ -17,10 +17,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Wasl — Simple. Secure. Connected.",
   description: "Wasl is a fast, simple and secure messaging app that connects you with the people who matter.",
-  keywords: ["Wasl", "chat", "messaging", "real-time", "WhatsApp-like"],
+  keywords: ["Wasl", "chat", "messaging", "real-time", "WhatsApp-like", "commit"],
   authors: [{ name: "Wasl" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/logo.svg", type: "image/svg+xml" },
+      { url: "/wasl-favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/wasl-favicon.svg", type: "image/svg+xml" }],
+  },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Wasl",
+    statusBarStyle: "default",
   },
   openGraph: {
     title: "Wasl",

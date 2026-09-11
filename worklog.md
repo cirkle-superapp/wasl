@@ -20,6 +20,9 @@ Building "Wasl" - a WhatsApp-like real-time chat application using Next.js 16, P
 ## Current Status (Phase 1 — COMPLETE)
 Phase 1 MVP is fully working and verified end-to-end with agent-browser.
 
+## Current Status (Phase 2 — COMPLETE)
+Phase 2 adds: the Cirkle-inspired **animated Wasl logo + favicon**, the **Commit feature** (AI-verified agreements imported from the Cirkle repo at github.com/fortleem/CIRKLE), and fixes the demo-login bug. All verified end-to-end with agent-browser.
+
 ## Completed
 - Prisma schema: `User`, `Conversation`, `Participant`, `Message` (with reply, status, type)
 - Socket.io mini service on port 3003:
@@ -78,12 +81,69 @@ Phase 1 MVP is fully working and verified end-to-end with agent-browser.
 3. **Voice messages**: mic button is currently disabled — implement MediaRecorder + upload.
 4. **Unread badge update after sending**: when a message is sent, the conversation row should bump its preview/last-message time (it does update locally; verify socket broadcast refreshes other clients).
 5. **Search within a conversation**: search button currently opens contact info; add in-chat message search.
-6. **Notifications**: desktop notifications when tab is in background.
-7. **PWA / installability** for mobile.
+6. **Notifications**: desktop notifications when tab is in the background.
+7. **PWA / installability** for mobile. (Manifest + icons are already wired up in Phase 2.)
 8. **Scroll-to-bottom button** when scrolled up in long chats.
 9. **Message reactions / starred messages / pin**.
 10. **Group admin actions** (add/remove members, change group photo).
 11. **End-to-end style polish**: more spacing refinements, hover effects, animations.
+12. **Commit escrow + jury/mediation + recurring + NFT mint**: the Cirkle commit feature has many more sub-features (escrow, jury voting, recurring schedules, NFT minting, templates). Phase 2 implemented the core (create/sign/complete + hash + fairness). Extend if needed.
+13. **Commit in group chats**: currently the composer commit button only shows for 1-on-1 chats. Extend to group commits with multi-party signatures.
+14. **AI auto-detect commit**: the Cirkle chat-commit sheet auto-detects commit type from message text. Add an "AI detect" button that pre-fills the form from the last N messages.
+
+---
+
+Task ID: 2
+Agent: main (phase-2)
+Task: Implement the Cirkle-inspired Commit feature in Wasl, add the animated Wasl logo + favicon (brand imported from github.com/fortleem/CIRKLE), and fix the demo-login bug.
+
+Work Log:
+- Cloned the Cirkle repo (github.com/fortleem/CIRKLE) and studied its brand + commit feature:
+  - `src/components/brand/circle-logo.tsx` (golden ring + quadrant icons, `animate-orb-float`)
+  - `src/app/api/commit/route.ts` (CommitType: price|work|service|rental|group_buy; fairness check; hash; escrow)
+  - `src/components/overlays/cirkle-commit.tsx` + `chat-commit.tsx` (commit-in-chat flow)
+- Created the Wasl animated logo:
+  - `src/components/wasl/wasl-logo.tsx` — React `WaslLogo` (whatsapp green→teal ring + chat bubble with 3 pulsing typing dots; `animated`, `withWordmark`, `monochrome` props) + `WaslLogoFavicon` static SVG.
+  - `public/wasl-favicon.svg` — static SVG favicon (green ring + chat bubble on dark bg).
+  - `public/logo.svg` — replaced the old Z.ai breathe logo with the animated Wasl SVG (breathe + dot pulse keyframes inline; respects `prefers-reduced-motion`).
+  - `src/app/manifest.ts` — PWA manifest (name, theme_color #075e54, icons, standalone display).
+  - `src/app/layout.tsx` — wired `icons` (svg+xml) + `manifest` + `appleWebApp` metadata; title "Wasl — Simple. Secure. Connected."
+  - CSS in `globals.css`: `wasl-logo-float`, `wasl-logo-breathe`, `wasl-logo-dot` keyframes + `wasl-text-gradient` wordmark + reduced-motion guard.
+- Replaced the static `MessageCircle` icon on the auth screen, sidebar header, sidebar empty state, and chat-window empty state with the animated `WaslLogo`.
+- Fixed the demo-login bug:
+  - `src/components/wasl/auth-screen.tsx` — extracted `authenticate()` so the "Try the live demo" button calls it directly with demo credentials + signup mode (instead of only pre-filling the form). Renamed button to "Try the live demo". The form submit and the demo button both call the same path, then `router.refresh()` swaps the server-rendered AuthScreen for ChatApp via the new session cookie.
+- Added the Cirkle-inspired Commit feature:
+  - Prisma: new `Commit` model (id, conversationId, creatorId, counterpartyId, type, title, description, amount, currency, deadline, conditions JSON, status, fairnessScore, fairnessNote, hash, creatorSigned, counterpartySigned, *At timestamps, completedAt) + `Message.commitId` link; back-relations on User + Conversation; pushed to DB.
+  - `src/lib/commit.ts` — `COMMIT_TYPES` (5 types w/ emoji), `COMMIT_CURRENCIES`, `genHash()` (64-char hex), `fairnessCheck()` (70-97 score + market range note), `serializeCommit()`.
+  - API routes:
+    - `POST /api/commits` — create + auto-sign by creator + post a `type='commit'` message in the conversation
+    - `GET /api/commits?conversationId=` — list commits for a conversation (members only)
+    - `GET /api/commits/[id]` — single commit
+    - `POST /api/commits/[id]/sign` — counterparty signs; transitions pending→active when both signed
+    - `POST /api/commits/[id]/complete` — either party marks active→completed
+  - `src/app/api/conversations/[id]/messages/route.ts` — GET + POST now return `commitId` so the frontend can render commit cards.
+  - Socket.io mini service: added `commit:updated` relay so other clients refresh commit cards in real time when a party signs/completes.
+  - Store: added `Commit` type, `commitsByConversation`, `setCommits`, `upsertCommit`.
+  - UI components:
+    - `src/components/wasl/new-commit-dialog.tsx` — type selector grid (5 emojis), title, description, amount+currency, deadline, conditions list, fairness teaser; broadcasts `message:send` + `commit:updated` after create.
+    - `src/components/wasl/commit-card.tsx` — renders inside the chat for `type='commit'` messages; shows emoji+title+type, status pill (pending/active/completed/disputed), amount/deadline/fairness chips, conditions checklist, two-party signature avatars with green check badges, fairness note, copyable hash, and contextual Sign/Mark-completed buttons; fetches its own commit on mount.
+    - `src/components/wasl/message-bubble.tsx` — renders `<CommitCard>` for `type='commit'` messages.
+    - `src/components/wasl/message-input.tsx` — added a `ShieldCheck` "Create a verified commit" button in the composer toolbar (only for 1-on-1 chats).
+    - `src/components/wasl/chat-window.tsx` — loads commits on conversation open, listens for `commit:updated` socket events, renders the NewCommitDialog.
+    - `src/components/wasl/contact-info-panel.tsx` — added a "Commits" section listing all agreements for the conversation with status pills.
+  - CSS in `globals.css`: `wasl-commit-card` (green gradient), `wasl-commit-status-{pending,active,completed,disputed}` pills.
+- Restarted both services (dev server needed to pick up the regenerated Prisma Client that includes the new `Commit` model).
+
+Stage Summary:
+- Animated Wasl logo + favicon wired into layout metadata + PWA manifest (all served as image/svg+xml, HTTP 200).
+- Demo-login bug fixed: one click on "Try the live demo" now signs up + navigates to the chat UI.
+- Cirkle Commit feature fully working end-to-end (verified with agent-browser as two different users):
+  - Demo User created a "Used MacBook Air M2 — 500 SAR" price commit → PENDING SIGNATURE card rendered in chat with hash 0x935d…765a70, fairness 76, both parties shown (creator signed).
+  - Contact info panel shows a "Commits · 1 agreement" section with the commit.
+  - Logged out, logged in as Amira (counterparty) → commit card shows "Sign commit" button → signed → status became ACTIVE → "Mark completed" button appeared → completed → status COMPLETED, "Agreement completed" message.
+  - All commit API routes returned 200 (create/list/sign/complete).
+  - Lint passes with 0 errors / 0 warnings.
+- Both services (dev server :3000, chat-service :3003) running via the `setsid -f` pattern.
 
 ## Cron Job
 A recurring `webDevReview` cron job runs every 15 minutes to keep improving the project.

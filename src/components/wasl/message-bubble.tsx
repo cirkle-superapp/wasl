@@ -4,6 +4,7 @@ import { Check, CheckCheck, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
+import { CommitCard } from './commit-card'
 
 export function MessageBubble({
   message,
@@ -24,6 +25,26 @@ export function MessageBubble({
       <div className="flex justify-center my-2">
         <div className="wasl-bubble-system text-xs px-3 py-1.5 rounded-lg shadow-sm">
           {message.content}
+        </div>
+      </div>
+    )
+  }
+
+  if (message.type === 'commit' && message.commitId) {
+    // Group + sender name for incoming group commits
+    return (
+      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+        <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
+          {isGroup && !mine && senderName && (
+            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+              {senderName}
+            </div>
+          )}
+          <CommitCard
+            commitId={message.commitId}
+            conversationId={message.conversationId}
+            createdAt={message.createdAt}
+          />
         </div>
       </div>
     )

@@ -27,10 +27,39 @@ export type ChatMessage = {
   conversationId: string
   senderId: string
   content: string
-  type: string // text | image | system
+  type: string // text | image | system | commit
   status: string // sent | delivered | read
   createdAt: string
   replyToId?: string | null
+  commitId?: string | null
+}
+
+// Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.
+export type Commit = {
+  id: string
+  conversationId: string
+  type: string
+  typeLabel: string
+  typeEmoji: string
+  title: string
+  description: string
+  amount: number
+  currency: string
+  deadline: string | null
+  conditions: string[]
+  status: string // pending | active | completed | disputed
+  fairnessScore: number
+  fairnessNote: string
+  hash: string
+  creator: { id: string; name: string; avatar: string | null; avatarColor: string | null; phone: string }
+  counterparty: { id: string; name: string; avatar: string | null; avatarColor: string | null; phone: string }
+  creatorSigned: boolean
+  counterpartySigned: boolean
+  creatorSignedAt: string | null
+  counterpartySignedAt: string | null
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type Conversation = {
@@ -83,6 +112,11 @@ type WaslState = {
 
   replyTo: ChatMessage | null
   setReplyTo: (m: ChatMessage | null) => void
+
+  // Commits
+  commitsByConversation: Record<string, Commit[]>
+  setCommits: (conversationId: string, commits: Commit[]) => void
+  upsertCommit: (c: Commit) => void
 }
 
 export const useWaslStore = create<WaslState>((set) => ({
@@ -209,4 +243,25 @@ export const useWaslStore = create<WaslState>((set) => ({
 
   replyTo: null,
   setReplyTo: (m) => set({ replyTo: m }),
+
+  commitsByConversation: {},
+  setCommits: (conversationId, commits) =>
+    set((state) => ({
+      commitsByConversation: {
+        ...state.commitsByConversation,
+        [conversationId]: commits,
+      },
+    })),
+  upsertCommit: (c) =>
+    set((state) => {
+      const existing = state.commitsByConversation[c.conversationId] || []
+      const idx = existing.findIndex((x) => x.id === c.id)
+      const next = idx === -1 ? [c, ...existing] : existing.map((x) => (x.id === c.id ? c : x))
+      return {
+        commitsByConversation: {
+          ...state.commitsByConversation,
+          [c.conversationId]: next,
+        },
+      }
+    }),
 }))

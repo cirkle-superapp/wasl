@@ -62,6 +62,7 @@ export async function GET(
         status: m.status,
         createdAt: m.createdAt,
         replyToId: m.replyToId,
+        commitId: m.commitId,
       })),
   })
 }
@@ -115,6 +116,7 @@ export async function POST(
     status: message.status,
     createdAt: message.createdAt,
     replyToId: message.replyToId,
+    commitId: message.commitId,
   })
 }
 

@@ -8,6 +8,7 @@ import {
   Mic,
   X,
   Reply,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -19,11 +20,15 @@ export function MessageInput({
   onSend,
   onTypingChange,
   onSendImage,
+  onOpenCommit,
+  canCommit,
 }: {
   conversationId: string
   onSend: (content: string, type?: string) => Promise<void>
   onTypingChange: (typing: boolean) => void
   onSendImage?: (dataUrl: string) => Promise<void>
+  onOpenCommit?: () => void
+  canCommit?: boolean
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -185,6 +190,18 @@ export function MessageInput({
           className="hidden"
           onChange={handleFileSelect}
         />
+
+        {/* Commit button — Cirkle-inspired verified agreements */}
+        {canCommit && onOpenCommit && (
+          <button
+            type="button"
+            onClick={onOpenCommit}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10 transition-colors shrink-0"
+            title="Create a verified commit"
+          >
+            <ShieldCheck className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5">

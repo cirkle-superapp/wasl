@@ -1,13 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Phone, User, MessageCircle } from 'lucide-react'
+import { Loader2, Phone, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
+import { WaslLogo } from './wasl-logo'
+
+const DEMO_PHONE = '+201001234567'
+const DEMO_NAME = 'Demo User'
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('signup')
@@ -22,55 +26,78 @@ export function AuthScreen() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('demo') === '1') {
-        setPhone('+201001234567')
-        setName('Demo User')
+        setPhone(DEMO_PHONE)
+        setName(DEMO_NAME)
       }
     }
   }, [])
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!phone.trim()) {
-      toast.error('Please enter your phone number')
-      return
-    }
-    if (mode === 'signup' && name.trim().length < 2) {
-      toast.error('Please enter your name (at least 2 characters)')
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/auth/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: phone.trim(),
-          name: name.trim(),
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data?.error || 'Something went wrong')
+  // Core submission logic — callable directly so the demo button can trigger
+  // a full signup + navigation in a single click.
+  const authenticate = useCallback(
+    async (
+      overridePhone?: string,
+      overrideName?: string,
+      overrideMode?: 'login' | 'signup'
+    ) => {
+      const p = (overridePhone ?? phone).trim()
+      const n = (overrideName ?? name).trim()
+      const m = overrideMode ?? mode
+      if (!p) {
+        toast.error('Please enter your phone number')
         return
       }
-      setUser(data)
-      toast.success(`Welcome to Wasl, ${data.name}!`)
-      router.refresh()
-    } catch (err) {
-      console.error(err)
-      toast.error('Network error')
-    } finally {
-      setLoading(false)
-    }
+      if (m === 'signup' && n.length < 2) {
+        toast.error('Please enter your name (at least 2 characters)')
+        return
+      }
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/auth/${m}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: p, name: n }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          toast.error(data?.error || 'Something went wrong')
+          return
+        }
+        setUser(data)
+        toast.success(`Welcome to Wasl, ${data.name}!`)
+        // Hard refresh so the server component re-reads the new session cookie
+        // and swaps the AuthScreen for the ChatApp.
+        router.refresh()
+      } catch (err) {
+        console.error(err)
+        toast.error('Network error')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [phone, name, mode, setUser, router]
+  )
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    void authenticate()
+  }
+
+  function handleDemoLogin() {
+    // One-click: pre-fill, switch to signup mode, and authenticate immediately.
+    setPhone(DEMO_PHONE)
+    setName(DEMO_NAME)
+    setMode('signup')
+    void authenticate(DEMO_PHONE, DEMO_NAME, 'signup')
   }
 
   return (
     <div className="min-h-screen w-full flex flex-col">
-      {/* Top hero banner */}
-      <div className="bg-[var(--wasl-teal)] text-white py-8 px-6">
-        <div className="max-w-md mx-auto text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/15 backdrop-blur">
-            <MessageCircle className="w-8 h-8 text-white" />
+      {/* Top hero banner with animated Wasl logo */}
+      <div className="bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)] text-white py-10 px-6">
+        <div className="max-w-md mx-auto text-center space-y-4">
+          <div className="inline-flex items-center justify-center">
+            <WaslLogo size={88} animated />
           </div>
           <h1 className="text-4xl font-bold tracking-tight">Wasl</h1>
           <p className="text-white/85 text-sm leading-relaxed">
@@ -169,7 +196,7 @@ export function AuthScreen() {
 
           <div className="pt-2 text-center">
             <p className="text-xs text-muted-foreground mb-2">
-              Tip: try the demo with one click
+              Tip: explore Wasl in one click
             </p>
             <Button
               type="button"
@@ -177,20 +204,17 @@ export function AuthScreen() {
               size="sm"
               className="w-full"
               disabled={loading}
-              onClick={() => {
-                setPhone('+201001234567')
-                setName('Demo User')
-                setMode('signup')
-              }}
+              onClick={handleDemoLogin}
             >
-              Use demo credentials
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Try the live demo
             </Button>
           </div>
         </div>
       </div>
 
       <footer className="bg-[var(--wasl-teal)] text-white/80 text-xs text-center py-3 px-6">
-        Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging
+        Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging &middot; Commit-verified agreements
       </footer>
     </div>
   )

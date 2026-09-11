@@ -1,0 +1,911 @@
+     1→// @ts-nocheck
+     2→"use client";
+     3→
+     4→/**
+     5→ * ChatCommitSheet — Commit-in-chat with AI auto-detection + email sending.
+     6→ * ============================================================================
+     7→ * Opens from the Wasl composer "Commit" button. Three-step flow:
+     8→ *
+     9→ *  1) AI auto-detect: take the last N messages (or the long-pressed
+    10→ *     selected message) and POST to /api/commit/detect. Show detected type
+    11→ *     badge + confidence + rationale + extracted fields. Editable "Commit
+    12→ *     Title" (auto-filled from first few words) + "Commit Description"
+    13→ *     (auto-filled with original text).
+    14→ *
+    15→ *  2) Email confirmation (optional): "Send formal confirmation email"
+    16→ *     checkbox. If checked:
+    17→ *       - For personal chats: show "Recipient email" input.
+    18→ *       - For institution chats: auto-detect company emails from
+    19→ *         /api/institutions?founderHandle=… and show dropdowns for both
+    20→ *         sender and receiver.
+    21→ *
+    22→ *  3) Send: if email checked, POST to /api/commit/send-email with the full
+    23→ *     payload (including isFromInstitution, senderEmail, receiverEmail).
+    24→ *     Show success toast. Dispatch `circle:cirkle-commit` to optionally open
+    25→ *     the Commit overlay.
+    26→ *
+    27→ * Mobile: full-width Sheet (side="bottom"). Desktop: max-w-lg (side="right").
+    28→ */
+    29→
+    30→import { useCallback, useEffect, useRef, useState } from "react";
+    31→import {
+    32→  Sheet,
+    33→  SheetContent,
+    34→  SheetHeader,
+    35→  SheetTitle,
+    36→  SheetDescription,
+    37→  SheetFooter,
+    38→} from "@/components/ui/sheet";
+    39→import { Button } from "@/components/ui/button";
+    40→import { Input } from "@/components/ui/input";
+    41→import { Label } from "@/components/ui/label";
+    42→import { Textarea } from "@/components/ui/textarea";
+    43→import { Switch } from "@/components/ui/switch";
+    44→import { Badge } from "@/components/ui/badge";
+    45→import { toast } from "sonner";
+    46→import {
+    47→  ShieldCheck,
+    48→  Gavel,
+    49→  Sparkles,
+    50→  Loader2,
+    51→  Send,
+    52→  Mail,
+    53→  CheckCircle2,
+    54→  AlertCircle,
+    55→  ChevronRight,
+    56→  Coins,
+    57→  Package,
+    58→  Users,
+    59→  Clock,
+    60→  FileText,
+    61→} from "lucide-react";
+    62→
+    63→// ─────────────────────────────────────────────────────────────────────────────
+    64→// Types — mirror /api/commit/detect response (see /lib/commit-detection.ts)
+    65→// ─────────────────────────────────────────────────────────────────────────────
+    66→
+    67→type CommitDetectedType = "price" | "commodity" | "agreement" | "all";
+    68→
+    69→interface CommitDetection {
+    70→  type: CommitDetectedType;
+    71→  detectedTypes: CommitDetectedType[];
+    72→  amount?: number;
+    73→  currency?: string;
+    74→  commodity?: string;
+    75→  quantity?: string;
+    76→  parties: string[];
+    77→  deadline?: string;
+    78→  keyTerms: string[];
+    79→  confidence: number;
+    80→  rationale: string;
+    81→}
+    82→
+    83→interface InstitutionEmail {
+    84→  id: string;
+    85→  name: string;
+    86→  handle: string;
+    87→  emails: string[];
+    88→  verificationStatus?: string;
+    89→}
+    90→
+    91→// ─────────────────────────────────────────────────────────────────────────────
+    92→// Constants
+    93→// ─────────────────────────────────────────────────────────────────────────────
+    94→
+    95→const MESSAGE_BATCH_FOR_DETECTION = 12;
+    96→
+    97→const TYPE_META: Record<
+    98→  CommitDetectedType,
+    99→  { label: string; className: string; emoji: string }
+   100→> = {
+   101→  price: {
+   102→    label: "Price",
+   103→    className:
+   104→      "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+   105→    emoji: "💰",
+   106→  },
+   107→  commodity: {
+   108→    label: "Commodity",
+   109→    className:
+   110→      "bg-amber-500/15 text-amber-300 border-amber-500/30",
+   111→    emoji: "📦",
+   112→  },
+   113→  agreement: {
+   114→    label: "Agreement",
+   115→    className:
+   116→      "bg-sky-500/15 text-sky-300 border-sky-500/30",
+   117→    emoji: "🤝",
+   118→  },
+   119→  all: {
+   120→    label: "All",
+   121→    className:
+   122→      "bg-purple-500/15 text-purple-300 border-purple-500/30",
+   123→    emoji: "✨",
+   124→  },
+   125→};
+   126→
+   127→// ─────────────────────────────────────────────────────────────────────────────
+   128→// Helpers
+   129→// ─────────────────────────────────────────────────────────────────────────────
+   130→
+   131→/** Build a single text blob from the last N messages (or a selected one). */
+   132→function buildCommitText(
+   133→  messages: Array<{ body: string; senderName?: string; timestamp?: string }>,
+   134→  selected?: { body: string; senderName?: string } | null,
+   135→): { text: string; senderName?: string; recipientName?: string } {
+   136→  if (selected && selected.body) {
+   137→    return {
+   138→      text: selected.body,
+   139→      senderName: selected.senderName,
+   140→    };
+   141→  }
+   142→  const last = messages.slice(-MESSAGE_BATCH_FOR_DETECTION);
+   143→  const text = last
+   144→    .map((m) => {
+   145→      const name = m.senderName ? `${m.senderName}: ` : "";
+   146→      return `${name}${m.body || ""}`;
+   147→    })
+   148→    .join("\n");
+   149→  // Sender = first message author; recipient = first DIFFERENT author.
+   150→  const senderName = last[0]?.senderName;
+   151→  let recipientName: string | undefined;
+   152→  for (const m of last) {
+   153→    if (m.senderName && m.senderName !== senderName) {
+   154→      recipientName = m.senderName;
+   155→      break;
+   156→    }
+   157→  }
+   158→  return { text, senderName, recipientName };
+   159→}
+   160→
+   161→/** Auto-fill the commit title from the first few words of the text. */
+   162→function deriveTitle(text: string): string {
+   163→  const clean = (text || "").trim().replace(/\s+/g, " ");
+   164→  if (!clean) return "Chat Commit";
+   165→  const words = clean.split(" ").slice(0, 6).join(" ");
+   166→  return words.length > 60 ? words.slice(0, 57) + "…" : words;
+   167→}
+   168→
+   169→// ─────────────────────────────────────────────────────────────────────────────
+   170→// Component
+   171→// ─────────────────────────────────────────────────────────────────────────────
+   172→
+   173→export interface ChatCommitMessage {
+   174→  id: string;
+   175→  body: string;
+   176→  senderName?: string;
+   177→  senderId?: string;
+   178→  timestamp?: string;
+   179→}
+   180→
+   181→interface ChatCommitSheetProps {
+   182→  open: boolean;
+   183→  onOpenChange: (v: boolean) => void;
+   184→  /** Conversation name (used for toast). */
+   185→  conversationName: string;
+   186→  /** Conversation type — drives email field rendering. */
+   187→  conversationType: "direct" | "group" | "channel";
+   188→  /** All loaded messages — we take the last N for detection. */
+   189→  messages: ChatCommitMessage[];
+   190→  /** If the user long-pressed a specific message, that message is committed
+   191→   * alone instead of the last N. */
+   192→  selectedMessage?: ChatCommitMessage | null;
+   193→  /** Current user's display name (sender). */
+   194→  meName: string;
+   195→  /** Current user's circle handle (e.g. "@yousef:circle.app") — used to fetch
+   196→   * their registered institutions. */
+   197→  meCircleId?: string;
+   198→  /** Current user's recovery email (default for sender email if no
+   199→   * institutions are registered). */
+   200→  meEmail?: string;
+   201→}
+   202→
+   203→export function ChatCommitSheet({
+   204→  open,
+   205→  onOpenChange,
+   206→  conversationName,
+   207→  conversationType,
+   208→  messages,
+   209→  selectedMessage,
+   210→  meName,
+   211→  meCircleId,
+   212→  meEmail,
+   213→}: ChatCommitSheetProps) {
+   214→  // ── Detection state ──
+   215→  const [detection, setDetection] = useState<CommitDetection | null>(null);
+   216→  const [detecting, setDetecting] = useState(false);
+   217→  const [detectError, setDetectError] = useState<string | null>(null);
+   218→
+   219→  // ── Editable fields ──
+   220→  const [commitTitle, setCommitTitle] = useState("");
+   221→  const [commitDescription, setCommitDescription] = useState("");
+   222→  const [sourceText, setSourceText] = useState("");
+   223→
+   224→  // ── Email confirmation state ──
+   225→  const [sendEmail, setSendEmail] = useState(false);
+   226→  const [recipientEmail, setRecipientEmail] = useState("");
+   227→  const [senderEmail, setSenderEmail] = useState("");
+   228→  const [institutions, setInstitutions] = useState<InstitutionEmail[]>([]);
+   229→  const [isFromInstitution, setIsFromInstitution] = useState(false);
+   230→  const [loadingInstitutions, setLoadingInstitutions] = useState(false);
+   231→
+   232→  // ── Send state ──
+   233→  const [sending, setSending] = useState(false);
+   234→  const [sent, setSent] = useState(false);
+   235→
+   236→  const detectSeqRef = useRef(0);
+   237→
+   238→  // ── Step 1: run detection on open ──
+   239→  const runDetection = useCallback(async () => {
+   240→    const seq = ++detectSeqRef.current;
+   241→    setDetecting(true);
+   242→    setDetectError(null);
+   243→    setSent(false);
+   244→
+   245→    const { text, senderName, recipientName } = buildCommitText(
+   246→      messages,
+   247→      selectedMessage,
+   248→    );
+   249→    setSourceText(text);
+   250→    setCommitTitle(deriveTitle(text));
+   251→    setCommitDescription(text.slice(0, 800));
+   252→
+   253→    if (!text.trim()) {
+   254→      setDetecting(false);
+   255→      setDetectError("No message content to analyze.");
+   256→      return;
+   257→    }
+   258→
+   259→    const controller = new AbortController();
+   260→    const timeout = setTimeout(() => controller.abort(), 8000);
+   261→
+   262→    try {
+   263→      const r = await fetch("/api/commit/detect", {
+   264→        method: "POST",
+   265→        headers: { "Content-Type": "application/json" },
+   266→        body: JSON.stringify({
+   267→          text,
+   268→          senderName: senderName ?? meName,
+   269→          recipientName,
+   270→        }),
+   271→        signal: controller.signal,
+   272→        cache: "no-store",
+   273→      });
+   274→
+   275→      if (seq !== detectSeqRef.current) return;
+   276→
+   277→      if (!r.ok) {
+   278→        const body = await r.json().catch(() => ({}));
+   279→        throw new Error(body?.error || `HTTP ${r.status}`);
+   280→      }
+   281→
+   282→      const json = (await r.json()) as CommitDetection;
+   283→      if (seq !== detectSeqRef.current) return;
+   284→      setDetection(json);
+   285→    } catch (err) {
+   286→      if (seq !== detectSeqRef.current) return;
+   287→      if ((err as Error).name === "AbortError") {
+   288→        setDetectError("Detection timed out. Please try again.");
+   289→      } else {
+   290→        setDetectError(
+   291→          (err as Error).message || "Failed to analyze the conversation.",
+   292→        );
+   293→      }
+   294→    } finally {
+   295→      clearTimeout(timeout);
+   296→      if (seq === detectSeqRef.current) setDetecting(false);
+   297→    }
+   298→  }, [messages, selectedMessage, meName]);
+   299→
+   300→  // Trigger detection when the sheet opens.
+   301→  useEffect(() => {
+   302→    if (!open) return;
+   303→    void runDetection();
+   304→  }, [open, runDetection]);
+   305→
+   306→  // Reset all state when the sheet closes.
+   307→  const handleClose = useCallback(
+   308→    (next: boolean) => {
+   309→      if (next) return;
+   310→      onOpenChange(false);
+   311→      // Defer reset so the close animation doesn't flash empty content.
+   312→      setTimeout(() => {
+   313→        setDetection(null);
+   314→        setDetectError(null);
+   315→        setCommitTitle("");
+   316→        setCommitDescription("");
+   317→        setSendEmail(false);
+   318→        setRecipientEmail("");
+   319→        setSenderEmail("");
+   320→        setIsFromInstitution(false);
+   321→        setSent(false);
+   322→      }, 300);
+   323→    },
+   324→    [onOpenChange],
+   325→  );
+   326→
+   327→  // ── Fetch my registered institutions (for sender email dropdown) ──
+   328→  useEffect(() => {
+   329→    if (!open || !sendEmail || !meCircleId) return;
+   330→    let cancelled = false;
+   331→    setLoadingInstitutions(true);
+   332→    const controller = new AbortController();
+   333→    const timeout = setTimeout(() => controller.abort(), 8000);
+   334→
+   335→    (async () => {
+   336→      try {
+   337→        const r = await fetch(
+   338→          `/api/institutions?founderHandle=${encodeURIComponent(meCircleId)}`,
+   339→          { signal: controller.signal, cache: "no-store" },
+   340→        );
+   341→        if (cancelled) return;
+   342→        if (!r.ok) return;
+   343→        const json = await r.json();
+   344→        if (cancelled) return;
+   345→        const list: InstitutionEmail[] = (json?.institutions ?? []).filter(
+   346→          (i: InstitutionEmail) =>
+   347→            Array.isArray(i.emails) && i.emails.length > 0,
+   348→        );
+   349→        setInstitutions(list);
+   350→        // Default sender email: first institution's first email (if any),
+   351→        // otherwise the user's recovery email.
+   352→        if (list.length > 0) {
+   353→          const firstEmail = list[0].emails[0];
+   354→          setSenderEmail(firstEmail);
+   355→          setIsFromInstitution(true);
+   356→        } else if (meEmail) {
+   357→          setSenderEmail(meEmail);
+   358→        }
+   359→      } catch {
+   360→        /* no-op — institutions are optional */
+   361→      } finally {
+   362→        clearTimeout(timeout);
+   363→        if (!cancelled) setLoadingInstitutions(false);
+   364→      }
+   365→    })();
+   366→
+   367→    return () => {
+   368→      cancelled = true;
+   369→      controller.abort();
+   370→    };
+   371→  }, [open, sendEmail, meCircleId, meEmail]);
+   372→
+   373→  // ── Step 3: send ──
+   374→  const handleSend = useCallback(async () => {
+   375→    if (!detection) return;
+   376→    if (!commitTitle.trim()) {
+   377→      toast.error("Please add a commit title");
+   378→      return;
+   379→    }
+   380→    if (sendEmail && !recipientEmail.trim()) {
+   381→      toast.error("Please enter a recipient email");
+   382→      return;
+   383→    }
+   384→    if (sendEmail && !senderEmail.trim()) {
+   385→      toast.error("Please enter a sender email");
+   386→      return;
+   387→    }
+   388→
+   389→    setSending(true);
+   390→
+   391→    // Always dispatch the commit event so the Commit overlay opens (local
+   392→    // confirmation step). This makes the commit visible in the Commit list.
+   393→    const parties = (detection.parties ?? []).map((name, i) => ({
+   394→      name: name || (i === 0 ? meName : conversationName),
+   395→      role: i === 0 ? "initiator" : "counterparty",
+   396→    }));
+   397→    // Ensure at least 2 parties (sender + recipient).
+   398→    if (parties.length < 2) {
+   399→      parties.length = 0;
+   400→      parties.push({ name: meName, role: "initiator" });
+   401→      parties.push({ name: conversationName, role: "counterparty" });
+   402→    }
+   403→
+   404→    // If email is checked, call /api/commit/send-email.
+   405→    if (sendEmail) {
+   406→      const controller = new AbortController();
+   407→      const timeout = setTimeout(() => controller.abort(), 8000);
+   408→      try {
+   409→        const r = await fetch("/api/commit/send-email", {
+   410→          method: "POST",
+   411→          headers: { "Content-Type": "application/json" },
+   412→          body: JSON.stringify({
+   413→            to: recipientEmail,
+   414→            toName: conversationName,
+   415→            commitTitle: commitTitle.trim(),
+   416→            commitDescription: commitDescription.trim() || sourceText,
+   417→            commitType: detection.type,
+   418→            parties,
+   419→            amount: detection.amount,
+   420→            currency: detection.currency,
+   421→            deadline: detection.deadline,
+   422→            conditions: detection.keyTerms,
+   423→            isFromInstitution,
+   424→            senderEmail,
+   425→            receiverEmail: recipientEmail,
+   426→          }),
+   427→          signal: controller.signal,
+   428→          cache: "no-store",
+   429→        });
+   430→
+   431→        clearTimeout(timeout);
+   432→
+   433→        if (!r.ok) {
+   434→          const body = await r.json().catch(() => ({}));
+   435→          throw new Error(body?.error || `HTTP ${r.status}`);
+   436→        }
+   437→
+   438→        const result = await r.json();
+   439→        toast.success("Commit created!", {
+   440→          description: `Email sent to ${recipientEmail}`,
+   441→          action: {
+   442→            label: "View",
+   443→            onClick: () =>
+   444→              window.dispatchEvent(
+   445→                new CustomEvent("circle:cirkle-commit"),
+   446→              ),
+   447→          },
+   448→        });
+   449→        setSent(true);
+   450→        // Open the Commit overlay as a follow-up.
+   451→        window.dispatchEvent(new CustomEvent("circle:cirkle-commit"));
+   452→      } catch (err) {
+   453→        clearTimeout(timeout);
+   454→        if ((err as Error).name === "AbortError") {
+   455→          toast.error("Email send timed out. Please try again.");
+   456→        } else {
+   457→          toast.error("Failed to send commit email", {
+   458→            description: (err as Error).message,
+   459→          });
+   460→        }
+   461→        setSending(false);
+   462→        return;
+   463→      }
+   464→    } else {
+   465→      // No email — just confirm locally + open the Commit overlay.
+   466→      toast.success("Commit created!", {
+   467→        description: commitTitle.trim(),
+   468→        action: {
+   469→          label: "View",
+   470→          onClick: () =>
+   471→            window.dispatchEvent(new CustomEvent("circle:cirkle-commit")),
+   472→        },
+   473→      });
+   474→      setSent(true);
+   475→      window.dispatchEvent(new CustomEvent("circle:cirkle-commit"));
+   476→    }
+   477→
+   478→    setSending(false);
+   479→  }, [
+   480→    detection,
+   481→    commitTitle,
+   482→    commitDescription,
+   483→    sourceText,
+   484→    sendEmail,
+   485→    recipientEmail,
+   486→    senderEmail,
+   487→    isFromInstitution,
+   488→    meName,
+   489→    conversationName,
+   490→  ]);
+   491→
+   492→  // ── Render ──
+   493→  const typeMeta = detection ? TYPE_META[detection.type] : null;
+   494→  const isGroupChat = conversationType === "group" || conversationType === "channel";
+   495→
+   496→  return (
+   497→    <Sheet open={open} onOpenChange={handleClose}>
+   498→      <SheetContent
+   499→        side="right"
+   500→        className="w-full sm:max-w-lg flex flex-col"
+   501→        aria-label="Create commit"
+   502→        role="dialog"
+   503→      >
+   504→        <SheetHeader>
+   505→          <SheetTitle className="font-display text-2xl flex items-center gap-2">
+   506→            <Gavel className="w-5 h-5 text-secondary" />
+   507→            Create Commit
+   508→          </SheetTitle>
+   509→          <SheetDescription>
+   510→            AI will analyze the conversation and draft a formal commitment.
+   511→          </SheetDescription>
+   512→        </SheetHeader>
+   513→
+   514→        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+   515→          {/* Source preview */}
+   516→          <section>
+   517→            <Label className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">
+   518→              {selectedMessage ? "Selected message" : `Last ${Math.min(
+   519→                MESSAGE_BATCH_FOR_DETECTION,
+   520→                messages.length,
+   521→              )} messages`}
+   522→            </Label>
+   523→            <div className="glass rounded-xl p-3 text-xs text-muted-foreground max-h-24 overflow-y-auto whitespace-pre-wrap break-words">
+   524→              {sourceText || "—"}
+   525→            </div>
+   526→          </section>
+   527→
+   528→          {/* Step 1: Detection */}
+   529→          {detecting && (
+   530→            <div className="flex flex-col items-center justify-center py-10 text-center">
+   531→              <Loader2 className="w-8 h-8 text-secondary animate-spin mb-3" />
+   532→              <p className="text-sm font-medium">
+   533→                AI is analyzing the conversation…
+   534→              </p>
+   535→              <p className="text-[11px] text-muted-foreground mt-1">
+   536→                Detecting commit type, parties, and key terms
+   537→              </p>
+   538→            </div>
+   539→          )}
+   540→
+   541→          {!detecting && detectError && (
+   542→            <div className="flex flex-col items-center justify-center py-10 text-center">
+   543→              <div className="w-14 h-14 rounded-full bg-accent/15 flex items-center justify-center mb-3">
+   544→                <AlertCircle className="w-6 h-6 text-accent" />
+   545→              </div>
+   546→              <p className="text-sm font-medium">{detectError}</p>
+   547→              <Button
+   548→                variant="outline"
+   549→                size="sm"
+   550→                onClick={() => void runDetection()}
+   551→                className="mt-3 h-8"
+   552→              >
+   553→                Retry detection
+   554→              </Button>
+   555→            </div>
+   556→          )}
+   557→
+   558→          {!detecting && !detectError && detection && typeMeta && (
+   559→            <>
+   560→              {/* Detection result */}
+   561→              <section className="space-y-3">
+   562→                <div className="flex items-center gap-2 flex-wrap">
+   563→                  <Badge className={`${typeMeta.className} text-xs gap-1 px-2 py-1`}>
+   564→                    <span>{typeMeta.emoji}</span>
+   565→                    {typeMeta.label}
+   566→                  </Badge>
+   567→                  <span className="text-xs text-muted-foreground">
+   568→                    {Math.round(detection.confidence * 100)}% confidence
+   569→                  </span>
+   570→                </div>
+   571→
+   572→                {detection.rationale && (
+   573→                  <div className="glass rounded-xl p-3 text-xs leading-relaxed">
+   574→                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1">
+   575→                      <Sparkles className="w-3 h-3 text-secondary" />
+   576→                      AI rationale
+   577→                    </div>
+   578→                    {detection.rationale}
+   579→                  </div>
+   580→                )}
+   581→
+   582→                {/* Extracted fields grid */}
+   583→                <div className="grid grid-cols-2 gap-2">
+   584→                  {typeof detection.amount === "number" && (
+   585→                    <ExtractedField
+   586→                      icon={<Coins className="w-3.5 h-3.5" />}
+   587→                      label="Amount"
+   588→                      value={`${detection.amount.toLocaleString()} ${
+   589→                        detection.currency || ""
+   590→                      }`.trim()}
+   591→                      accent="emerald"
+   592→                    />
+   593→                  )}
+   594→                  {detection.commodity && (
+   595→                    <ExtractedField
+   596→                      icon={<Package className="w-3.5 h-3.5" />}
+   597→                      label="Commodity"
+   598→                      value={detection.commodity}
+   599→                      accent="amber"
+   600→                    />
+   601→                  )}
+   602→                  {detection.quantity && (
+   603→                    <ExtractedField
+   604→                      icon={<Package className="w-3.5 h-3.5" />}
+   605→                      label="Quantity"
+   606→                      value={detection.quantity}
+   607→                      accent="amber"
+   608→                    />
+   609→                  )}
+   610→                  {detection.deadline && (
+   611→                    <ExtractedField
+   612→                      icon={<Clock className="w-3.5 h-3.5" />}
+   613→                      label="Deadline"
+   614→                      value={detection.deadline}
+   615→                      accent="rose"
+   616→                    />
+   617→                  )}
+   618→                </div>
+   619→
+   620→                {/* Parties */}
+   621→                {detection.parties.length > 0 && (
+   622→                  <div className="glass rounded-xl p-3">
+   623→                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1">
+   624→                      <Users className="w-3 h-3" />
+   625→                      Parties
+   626→                    </div>
+   627→                    <div className="flex flex-wrap gap-1.5">
+   628→                      {detection.parties.map((p, i) => (
+   629→                        <Badge
+   630→                          key={i}
+   631→                          variant="outline"
+   632→                          className="text-xs"
+   633→                        >
+   634→                          {p}
+   635→                        </Badge>
+   636→                      ))}
+   637→                    </div>
+   638→                  </div>
+   639→                )}
+   640→
+   641→                {/* Key terms */}
+   642→                {detection.keyTerms.length > 0 && (
+   643→                  <div className="glass rounded-xl p-3">
+   644→                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1">
+   645→                      <FileText className="w-3 h-3" />
+   646→                      Key terms
+   647→                    </div>
+   648→                    <ul className="space-y-1">
+   649→                      {detection.keyTerms.map((term, i) => (
+   650→                        <li
+   651→                          key={i}
+   652→                          className="text-xs text-foreground/85 flex items-start gap-1.5"
+   653→                        >
+   654→                          <span className="w-1 h-1 rounded-full bg-secondary mt-1.5 shrink-0" />
+   655→                          <span>{term}</span>
+   656→                        </li>
+   657→                      ))}
+   658→                    </ul>
+   659→                  </div>
+   660→                )}
+   661→              </section>
+   662→
+   663→              {/* Editable commit fields */}
+   664→              <section className="space-y-3">
+   665→                <h4 className="text-xs uppercase tracking-widest text-muted-foreground">
+   666→                  Commit details
+   667→                </h4>
+   668→                <div className="space-y-1.5">
+   669→                  <Label htmlFor="commit-title">Commit title</Label>
+   670→                  <Input
+   671→                    id="commit-title"
+   672→                    value={commitTitle}
+   673→                    onChange={(e) => setCommitTitle(e.target.value)}
+   674→                    placeholder="e.g. Laptop sale agreement"
+   675→                    maxLength={120}
+   676→                  />
+   677→                </div>
+   678→                <div className="space-y-1.5">
+   679→                  <Label htmlFor="commit-desc">Commit description</Label>
+   680→                  <Textarea
+   681→                    id="commit-desc"
+   682→                    value={commitDescription}
+   683→                    onChange={(e) => setCommitDescription(e.target.value)}
+   684→                    placeholder="Describe the agreement terms…"
+   685→                    rows={4}
+   686→                  />
+   687→                </div>
+   688→              </section>
+   689→
+   690→              {/* Step 2: Email confirmation */}
+   691→              <section className="space-y-3">
+   692→                <div className="flex items-center justify-between gap-3 glass rounded-xl p-3">
+   693→                  <div className="flex items-start gap-2 flex-1 min-w-0">
+   694→                    <Mail className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
+   695→                    <div className="min-w-0">
+   696→                      <div className="text-sm font-medium">
+   697→                        Send formal confirmation email
+   698→                      </div>
+   699→                      <div className="text-[11px] text-muted-foreground">
+   700→                        Optional — Cirkle Brain AI will draft a formal email.
+   701→                      </div>
+   702→                    </div>
+   703→                  </div>
+   704→                  <Switch
+   705→                    checked={sendEmail}
+   706→                    onCheckedChange={setSendEmail}
+   707→                    aria-label="Send formal confirmation email"
+   708→                  />
+   709→                </div>
+   710→
+   711→                {sendEmail && (
+   712→                  <div className="space-y-3 pl-1">
+   713→                    {/* Sender email */}
+   714→                    <div className="space-y-1.5">
+   715→                      <Label htmlFor="sender-email">
+   716→                        Sender email
+   717→                        {isFromInstitution && (
+   718→                          <Badge
+   719→                            variant="outline"
+   720→                            className="ml-2 text-[10px] h-4 px-1"
+   721→                          >
+   722→                            Institution
+   723→                          </Badge>
+   724→                        )}
+   725→                      </Label>
+   726→                      {institutions.length > 0 ? (
+   727→                        <select
+   728→                          id="sender-email"
+   729→                          value={senderEmail}
+   730→                          onChange={(e) => {
+   731→                            setSenderEmail(e.target.value);
+   732→                            // If the chosen email belongs to an institution,
+   733→                            // mark isFromInstitution = true.
+   734→                            const belongs = institutions.some((inst) =>
+   735→                              inst.emails.includes(e.target.value),
+   736→                            );
+   737→                            setIsFromInstitution(belongs);
+   738→                          }}
+   739→                          className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+   740→                        >
+   741→                          {institutions.flatMap((inst) =>
+   742→                            inst.emails.map((email) => (
+   743→                              <option key={email} value={email}>
+   744→                                {email} · {inst.name}
+   745→                              </option>
+   746→                            )),
+   747→                          )}
+   748→                          {meEmail &&
+   749→                            !institutions.some((inst) =>
+   750→                              inst.emails.includes(meEmail),
+   751→                            ) && (
+   752→                              <option value={meEmail}>
+   753→                                {meEmail} · (personal)
+   754→                              </option>
+   755→                            )}
+   756→                        </select>
+   757→                      ) : (
+   758→                        <Input
+   759→                          id="sender-email"
+   760→                          type="email"
+   761→                          value={senderEmail}
+   762→                          onChange={(e) => {
+   763→                            setSenderEmail(e.target.value);
+   764→                            setIsFromInstitution(false);
+   765→                          }}
+   766→                          placeholder="your@email.com"
+   767→                        />
+   768→                      )}
+   769→                      {loadingInstitutions && (
+   770→                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+   771→                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+   772→                          Loading your institutions…
+   773→                        </div>
+   774→                      )}
+   775→                    </div>
+   776→
+   777→                    {/* Recipient email */}
+   778→                    <div className="space-y-1.5">
+   779→                      <Label htmlFor="recipient-email">
+   780→                        Recipient email
+   781→                      </Label>
+   782→                      <Input
+   783→                        id="recipient-email"
+   784→                        type="email"
+   785→                        value={recipientEmail}
+   786→                        onChange={(e) =>
+   787→                          setRecipientEmail(e.target.value)
+   788→                        }
+   789→                        placeholder={
+   790→                          isGroupChat
+   791→                            ? "recipient@company.com"
+   792→                            : "recipient@email.com"
+   793→                        }
+   794→                      />
+   795→                      <p className="text-[10px] text-muted-foreground">
+   796→                        A formal confirmation will be sent to this address.
+   797→                      </p>
+   798→                    </div>
+   799→                  </div>
+   800→                )}
+   801→              </section>
+   802→
+   803→              {/* Success state */}
+   804→              {sent && (
+   805→                <div className="flex flex-col items-center justify-center py-8 text-center glass rounded-2xl">
+   806→                  <CheckCircle2 className="w-10 h-10 text-emerald-500 mb-2" />
+   807→                  <p className="text-sm font-medium">
+   808→                    {sendEmail
+   809→                      ? "Commit created! Email sent."
+   810→                      : "Commit created!"}
+   811→                  </p>
+   812→                  {sendEmail && recipientEmail && (
+   813→                    <p className="text-[11px] text-muted-foreground mt-1">
+   814→                      Confirmation sent to {recipientEmail}
+   815→                    </p>
+   816→                  )}
+   817→                  <Button
+   818→                    variant="outline"
+   819→                    size="sm"
+   820→                    onClick={() =>
+   821→                      window.dispatchEvent(
+   822→                        new CustomEvent("circle:cirkle-commit"),
+   823→                      )
+   824→                    }
+   825→                    className="mt-3 h-8 gap-1"
+   826→                  >
+   827→                    Open Commit overlay
+   828→                    <ChevronRight className="w-3.5 h-3.5" />
+   829→                  </Button>
+   830→                </div>
+   831→              )}
+   832→            </>
+   833→          )}
+   834→        </div>
+   835→
+   836→        <SheetFooter className="border-t border-border pt-3">
+   837→          <div className="flex gap-2 w-full">
+   838→            <Button
+   839→              variant="ghost"
+   840→              onClick={() => handleClose(false)}
+   841→              className="flex-1"
+   842→              disabled={sending}
+   843→            >
+   844→              {sent ? "Close" : "Cancel"}
+   845→            </Button>
+   846→            {!sent && detection && (
+   847→              <Button
+   848→                onClick={handleSend}
+   849→                disabled={sending || !commitTitle.trim()}
+   850→                className="flex-1 gap-1.5"
+   851→              >
+   852→                {sending ? (
+   853→                  <>
+   854→                    <Loader2 className="w-4 h-4 animate-spin" />
+   855→                    Sending…
+   856→                  </>
+   857→                ) : (
+   858→                  <>
+   859→                    <Send className="w-4 h-4" />
+   860→                    {sendEmail ? "Send Commit" : "Create Commit"}
+   861→                  </>
+   862→                )}
+   863→              </Button>
+   864→            )}
+   865→          </div>
+   866→        </SheetFooter>
+   867→      </SheetContent>
+   868→    </Sheet>
+   869→  );
+   870→}
+   871→
+   872→// ─────────────────────────────────────────────────────────────────────────────
+   873→// Sub-components
+   874→// ─────────────────────────────────────────────────────────────────────────────
+   875→
+   876→function ExtractedField({
+   877→  icon,
+   878→  label,
+   879→  value,
+   880→  accent,
+   881→}: {
+   882→  icon: React.ReactNode;
+   883→  label: string;
+   884→  value: string;
+   885→  accent: "emerald" | "amber" | "rose" | "secondary";
+   886→}) {
+   887→  const accentMap: Record<string, string> = {
+   888→    emerald: "text-emerald-300",
+   889→    amber: "text-amber-300",
+   890→    rose: "text-rose-300",
+   891→    secondary: "text-secondary",
+   892→  };
+   893→  return (
+   894→    <div className="glass rounded-xl p-2.5">
+   895→      <div
+   896→        className={`text-[10px] uppercase tracking-widest flex items-center gap-1 ${
+   897→          accentMap[accent] ?? "text-muted-foreground"
+   898→        }`}
+   899→      >
+   900→        {icon}
+   901→        {label}
+   902→      </div>
+   903→      <div className="text-sm font-medium mt-0.5 truncate" title={value}>
+   904→        {value}
+   905→      </div>
+   906→    </div>
+   907→  );
+   908→}
+   909→
+   910→export default ChatCommitSheet;
+   911→
