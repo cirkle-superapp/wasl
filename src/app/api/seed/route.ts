@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
               username,
               password: hashedPassword,
               name,
+              email: `${username}@cirkle.app`,
               phone,
               avatarColor: pickAvatarColor(phone),
               about: [

@@ -500,3 +500,60 @@ Stage Summary:
   - No console errors, no 500s ✓
 - Lint passes with 0 errors / 0 warnings.
 - Both services running via `setsid -f`.
+
+---
+
+Task ID: 11
+Agent: main (phase-11, unified Cirkle auth)
+Task: Change authentication to accept Cirkle email address OR phone number OR username with live verification that auto-generates a Cirkle username (user chooses based on availability, no duplicates).
+
+Work Log:
+- **Schema**: Added `email` (unique, nullable) to the User model. Force-reset the DB.
+- **Username availability API** (`GET /api/auth/check-username?u=...`):
+  - Validates format (lowercase, numbers, underscores, 3+ chars)
+  - Checks uniqueness against the DB
+  - Returns `{ available, message, suggestions[] }` with up to 4 auto-generated suggestions (appends _1, _2, _99, _007, etc.)
+- **Signup API rewrite** (`POST /api/auth/signup`):
+  - Accepts `identifier` (email or phone), `password`, `name`, `username`
+  - Auto-detects identifier type (email if `@`, phone if digits with `+`, else username)
+  - Resolves email/phone from the identifier
+  - If no username provided, auto-generates from the name (e.g. "Ahmad Ali" → "ahmad_ali")
+  - Validates username format + uniqueness; returns suggestions if taken
+  - Checks email + phone uniqueness
+  - Creates user with bcrypt-hashed password
+- **Login API rewrite** (`POST /api/auth/login`):
+  - Accepts `identifier` (email / phone / username) + `password`
+  - Auto-detects the type and looks up the user by email, phone, or username
+  - Phone matching handles formatting variations (digits-only fallback)
+  - bcrypt password verification
+- **Auth screen rebuilt**:
+  - **Signup mode**: name, Cirkle username (with live availability check), email/phone (optional), password
+  - Username auto-generates from name until the user edits it ("Auto-suggested from your name. Tap to edit.")
+  - Live availability: green "Available" check or red "Taken" X with clickable suggestion chips
+  - Suggestions appear as gold/green pill buttons — click to use
+  - **Login mode**: single "Email, phone, or username" field + password
+  - Input icon dynamically switches (Mail / Phone / AtSign) based on what the user typed
+  - "Try the live demo" tries login first; if demo doesn't exist, signs up
+  - Cirkle theme: gold gradient submit button + gold links
+- **Updated all dependent APIs** to include `email`:
+  - `lib/auth.ts` SessionUser type + getSession select
+  - `profile` PATCH — returns email
+  - `auth/me` — returns email
+  - `seed` — creates demo users with `email: username@cirkle.app`
+  - `store.ts` CurrentUser type + page.tsx — include email
+
+Stage Summary:
+- Authentication now accepts Cirkle email OR phone OR username for login
+- Signup auto-generates a Cirkle username from the name with live availability checking
+- Username suggestions appear instantly when the chosen name is taken (clickable chips)
+- All verified end-to-end with agent-browser:
+  - Signup: typed "Ahmad Ali" → username auto-suggested "ahmad_ali" → showed "Available" ✓
+  - Typed "demo" (taken) → showed "Taken" + suggestions "demo1, demo2, demo3, demo_" ✓
+  - Clicked suggestion "demo1" → filled username → signup succeeded ✓
+  - Login with username "demo1" → logged in ✓
+  - Login with email "kayla@cirkle.app" → logged in ✓
+  - Login with phone "+201001234567" → API returned 200 ✓
+  - Demo login button → logged in ✓
+  - No console errors, no 500s ✓
+- Lint passes with 0 errors / 0 warnings.
+- Both services running via `setsid -f`.

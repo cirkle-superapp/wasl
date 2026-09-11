@@ -12,10 +12,12 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  // Username-based authentication
+  // Cirkle username — unique, chosen by the user with live availability check.
   username  String   @unique
   password  String
   name      String
+  // Email (Cirkle email) — used as an alternate login identifier.
+  email     String?  @unique
   // The "active" phone number — used as the display number for this account.
   // A user can have multiple phone numbers and switch between them.
   phone     String?

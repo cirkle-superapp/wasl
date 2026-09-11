@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, User, Lock, Phone } from 'lucide-react'
+import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { useColorTheme } from './color-theme-provider'
@@ -17,62 +17,143 @@ const DEMO_PASSWORD = 'demo123'
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('signup')
-  const [username, setUsername] = useState('')
+  // Unified identifier for login: email / phone / username
+  const [identifier, setIdentifier] = useState('')
+  // Signup fields
+  const [signupIdentifier, setSignupIdentifier] = useState('') // email or phone
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [username, setUsername] = useState('')
+  const [usernameTouched, setUsernameTouched] = useState(false)
+  const [usernameStatus, setUsernameStatus] = useState<{
+    checking: boolean
+    available: boolean | null
+    message: string
+    suggestions: string[]
+  }>({ checking: false, available: null, message: '', suggestions: [] })
   const [loading, setLoading] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
+  const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Core submission logic
+  // Live username availability check (debounced)
+  useEffect(() => {
+    if (mode !== 'signup') return
+    if (!usernameTouched) return
+    const u = username.trim().toLowerCase()
+    if (!u) {
+      setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
+      return
+    }
+    if (usernameTimer.current) clearTimeout(usernameTimer.current)
+    setUsernameStatus((s) => ({ ...s, checking: true }))
+    usernameTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/check-username?u=${encodeURIComponent(u)}`)
+        const data = await res.json()
+        setUsernameStatus({
+          checking: false,
+          available: data.available,
+          message: data.message || '',
+          suggestions: data.suggestions || [],
+        })
+      } catch {
+        setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
+      }
+    }, 350)
+    return () => {
+      if (usernameTimer.current) clearTimeout(usernameTimer.current)
+    }
+  }, [username, usernameTouched, mode])
+
+  // Auto-generate a username from the name (live, until the user edits it)
+  useEffect(() => {
+    if (mode !== 'signup') return
+    if (usernameTouched) return
+    const auto = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 15)
+    if (auto && auto !== username) {
+      setUsername(auto)
+    }
+  }, [name, usernameTouched, mode, username])
+
   const authenticate = useCallback(
     async (
-      overrideUsername?: string,
+      overrideMode?: 'login' | 'signup',
+      overrideIdentifier?: string,
       overridePassword?: string,
       overrideName?: string,
-      overridePhone?: string,
-      overrideMode?: 'login' | 'signup'
+      overrideUsername?: string,
+      overrideSignupId?: string
     ) => {
-      const u = (overrideUsername ?? username).trim().toLowerCase()
-      const p = overridePassword ?? password
-      const n = (overrideName ?? name).trim()
-      const ph = (overridePhone ?? phone).trim() || undefined
       const m = overrideMode ?? mode
-      if (!u) {
-        toast.error('Please enter a username')
-        return
-      }
-      if (!p) {
-        toast.error('Please enter a password')
-        return
-      }
-      if (m === 'signup' && n.length < 2) {
-        toast.error('Please enter your name (at least 2 characters)')
-        return
-      }
+      const p = overridePassword ?? password
       setLoading(true)
       try {
-        const res = await fetch(`/api/auth/${m}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: u,
-            password: p,
-            name: n || undefined,
-            phone: ph,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          toast.error(data?.error || 'Something went wrong')
-          return
+        if (m === 'login') {
+          const id = overrideIdentifier ?? identifier
+          if (!id.trim()) {
+            toast.error('Please enter your email, phone, or username')
+            return
+          }
+          if (!p) {
+            toast.error('Please enter your password')
+            return
+          }
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: id, password: p }),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            toast.error(data?.error || 'Login failed')
+            return
+          }
+          setUser(data)
+          toast.success(`Welcome to Wasl, ${data.name}!`)
+          router.refresh()
+        } else {
+          // signup
+          const n = (overrideName ?? name).trim()
+          const u = (overrideUsername ?? username).trim().toLowerCase()
+          const sid = overrideSignupId ?? signupIdentifier
+          if (!n || n.length < 2) {
+            toast.error('Please enter your name (at least 2 characters)')
+            return
+          }
+          if (!u || u.length < 3) {
+            toast.error('Please choose a Cirkle username (at least 3 characters)')
+            return
+          }
+          if (!p || p.length < 6) {
+            toast.error('Password must be at least 6 characters')
+            return
+          }
+          const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identifier: sid || undefined,
+              password: p,
+              name: n,
+              username: u,
+            }),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            if (data.suggestions?.length) {
+              toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` })
+            } else {
+              toast.error(data?.error || 'Sign up failed')
+            }
+            return
+          }
+          setUser(data)
+          toast.success(`Welcome to Wasl, ${data.name}!`)
+          router.refresh()
         }
-        setUser(data)
-        toast.success(`Welcome to Wasl, ${data.name}!`)
-        router.refresh()
       } catch (err) {
         console.error(err)
         toast.error('Network error')
@@ -80,7 +161,7 @@ export function AuthScreen() {
         setLoading(false)
       }
     },
-    [username, password, name, phone, mode, setUser, router]
+    [mode, identifier, password, name, username, signupIdentifier, setUser, router]
   )
 
   function submit(e: React.FormEvent) {
@@ -89,17 +170,16 @@ export function AuthScreen() {
   }
 
   async function handleDemoLogin() {
-    setUsername(DEMO_USERNAME)
+    setIdentifier(DEMO_USERNAME)
     setPassword(DEMO_PASSWORD)
     setMode('login')
-    // Try login first; if the demo user doesn't exist yet (fresh DB), sign up.
     setLoading(true)
     try {
-      // Attempt login
+      // Try login first
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: DEMO_USERNAME, password: DEMO_PASSWORD }),
+        body: JSON.stringify({ identifier: DEMO_USERNAME, password: DEMO_PASSWORD }),
       })
       if (loginRes.ok) {
         const data = await loginRes.json()
@@ -108,15 +188,15 @@ export function AuthScreen() {
         router.refresh()
         return
       }
-      // Login failed → try signup (creates the demo account)
+      // Sign up the demo account
       const signupRes = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: DEMO_USERNAME,
+          identifier: '+201001234567',
           password: DEMO_PASSWORD,
           name: 'Demo User',
-          phone: '+201001234567',
+          username: DEMO_USERNAME,
         }),
       })
       const data = await signupRes.json()
@@ -134,6 +214,22 @@ export function AuthScreen() {
       setLoading(false)
     }
   }
+
+  // Detect identifier type for the login input icon
+  const loginIdType = identifier.includes('@')
+    ? 'email'
+    : /^\+?[\d\s-]+$/.test(identifier) && identifier.replace(/[\s-]/g, '').length >= 8
+    ? 'phone'
+    : 'username'
+  const LoginIcon = loginIdType === 'email' ? Mail : loginIdType === 'phone' ? Phone : AtSign
+
+  // Detect signup identifier type for the icon
+  const signupIdType = signupIdentifier.includes('@')
+    ? 'email'
+    : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8
+    ? 'phone'
+    : 'username'
+  const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
 
   return (
     <div className="min-h-screen w-full flex flex-col">
@@ -160,7 +256,7 @@ export function AuthScreen() {
           </h1>
           <p className="text-white/85 text-sm leading-relaxed">
             Simple. Secure. Connected.<br />
-            Send and receive messages that stay between you and the people who matter.
+            Sign in with your Cirkle email, phone number, or username.
           </p>
         </div>
       </div>
@@ -174,50 +270,54 @@ export function AuthScreen() {
             </h2>
             <p className="text-sm text-muted-foreground">
               {mode === 'signup'
-                ? 'Sign up with a username and password to start messaging on Wasl.'
-                : 'Log in with your username and password.'}
+                ? 'Sign up with your Cirkle email or phone. We will auto-suggest a username.'
+                : 'Log in with your email, phone number, or username.'}
             </p>
           </div>
 
           <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. ahmad_ali"
-                  className="pl-9"
-                  autoComplete="username"
-                  disabled={loading}
-                  autoCapitalize="none"
-                  spellCheck={false}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="pl-9"
-                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            {mode === 'signup' && (
+            {mode === 'login' ? (
               <>
+                {/* Login: unified identifier */}
+                <div className="space-y-2">
+                  <Label htmlFor="identifier">Email, phone, or username</Label>
+                  <div className="relative">
+                    <LoginIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="identifier"
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="you@cirkle.app, +20..., or @username"
+                      className="pl-9"
+                      autoComplete="username"
+                      disabled={loading}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your password"
+                      className="pl-9"
+                      autoComplete="current-password"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Signup: name */}
                 <div className="space-y-2">
                   <Label htmlFor="name">Your name</Label>
                   <div className="relative">
@@ -235,24 +335,106 @@ export function AuthScreen() {
                   </div>
                 </div>
 
+                {/* Signup: Cirkle username with live availability */}
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone number (optional)</Label>
+                  <Label htmlFor="username" className="flex items-center gap-1.5">
+                    Cirkle username
+                    {usernameStatus.checking && (
+                      <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                    )}
+                    {usernameStatus.available === true && (
+                      <span className="flex items-center gap-0.5 text-[var(--wasl-green)] text-xs">
+                        <Check className="w-3 h-3" /> Available
+                      </span>
+                    )}
+                    {usernameStatus.available === false && (
+                      <span className="flex items-center gap-0.5 text-destructive text-xs">
+                        <X className="w-3 h-3" /> Taken
+                      </span>
+                    )}
+                  </Label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      id="phone"
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+20 100 123 4567"
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+                        setUsernameTouched(true)
+                      }}
+                      placeholder="ahmad_ali"
                       className="pl-9"
-                      autoComplete="tel"
                       disabled={loading}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                  </div>
+                  {usernameStatus.available === false && usernameStatus.suggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Try:
+                      </span>
+                      {usernameStatus.suggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setUsername(s)
+                            setUsernameTouched(true)
+                          }}
+                          className="text-xs px-2 py-0.5 rounded-full bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/25 transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!usernameTouched && name.trim() && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Auto-suggested from your name. Tap to edit.
+                    </p>
+                  )}
+                </div>
+
+                {/* Signup: email or phone (optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="signup-id">Cirkle email or phone (optional)</Label>
+                  <div className="relative">
+                    <SignupIdIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="signup-id"
+                      type="text"
+                      value={signupIdentifier}
+                      onChange={(e) => setSignupIdentifier(e.target.value)}
+                      placeholder="you@cirkle.app or +20 100 123 4567"
+                      className="pl-9"
+                      disabled={loading}
+                      autoCapitalize="none"
+                      spellCheck={false}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    You can add more phone numbers later and switch between them.
+                    Add an email or phone so you can log in with it later. You can add more in Settings.
                   </p>
+                </div>
+
+                {/* Signup: password */}
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      className="pl-9"
+                      autoComplete="new-password"
+                      disabled={loading}
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -265,7 +447,7 @@ export function AuthScreen() {
                   ? 'wasl-gradient-gold hover:opacity-90 text-[#1a1a14]'
                   : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'
               )}
-              disabled={loading}
+              disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
             >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {mode === 'signup' ? 'Sign up' : 'Log in'}

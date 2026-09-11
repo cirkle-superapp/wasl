@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest) {
     select: {
       id: true,
       username: true,
+      email: true,
       phone: true,
       name: true,
       avatar: true,

@@ -16,6 +16,7 @@ export default async function Page() {
         id: session.id,
         username: session.username,
         name: session.name,
+        email: session.email,
         phone: session.phone,
         avatar: session.avatar,
         avatarColor: session.avatarColor,
