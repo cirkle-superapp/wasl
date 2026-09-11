@@ -197,6 +197,20 @@ io.on('connection', (socket) => {
     }
   )
 
+  // Message reaction / star / delete broadcast — relays a "message changed"
+  // signal to everyone in the conversation room so other clients refetch the
+  // single message and update reactions / starred / deletion state.
+  socket.on(
+    'message:reacted',
+    (data: { conversationId: string; messageId: string }) => {
+      if (!data || !data.conversationId || !data.messageId) return
+      io.to(`conversation:${data.conversationId}`).emit('message:reacted', {
+        conversationId: data.conversationId,
+        messageId: data.messageId,
+      })
+    }
+  )
+
   socket.on('disconnect', () => {
     const userId = socketToUser.get(socket.id)
     socketToUser.delete(socket.id)

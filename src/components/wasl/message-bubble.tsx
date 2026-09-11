@@ -1,24 +1,65 @@
 'use client'
 
-import { Check, CheckCheck, Clock } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import {
+  Check,
+  CheckCheck,
+  Clock,
+  Reply,
+  Star,
+  Copy,
+  Trash2,
+  SmilePlus,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
-import { useWaslStore, type ChatMessage } from '@/lib/store'
-import { CommitCard } from './commit-card'
+import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
 export function MessageBubble({
   message,
   senderName,
   isGroup,
   replyTo,
+  onReact,
+  onReply,
+  onStar,
+  onCopy,
+  onDelete,
+  starred,
+  reactions,
+  currentUserId,
 }: {
   message: ChatMessage
   senderName?: string
   isGroup: boolean
   replyTo?: ChatMessage | null
+  onReact?: (emoji: string) => void
+  onReply?: () => void
+  onStar?: () => void
+  onCopy?: () => void
+  onDelete?: () => void
+  starred?: boolean
+  reactions?: Reaction[]
+  currentUserId?: string
 }) {
   const me = useWaslStore((s) => s.user)
   const mine = message.senderId === me?.id
+  const [showReactions, setShowReactions] = useState(false)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!showReactions) return
+    function onClick(e: MouseEvent) {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setShowReactions(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showReactions])
 
   if (message.type === 'system') {
     return (
@@ -31,7 +72,6 @@ export function MessageBubble({
   }
 
   if (message.type === 'commit' && message.commitId) {
-    // Group + sender name for incoming group commits
     return (
       <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
@@ -40,64 +80,192 @@ export function MessageBubble({
               {senderName}
             </div>
           )}
-          <CommitCard
-            commitId={message.commitId}
-            conversationId={message.conversationId}
-            createdAt={message.createdAt}
-          />
+          <CommitMessageWrapper message={message} mine={mine} />
         </div>
       </div>
     )
   }
 
+  // Group reactions by emoji for the pill display
+  const grouped = groupReactions(reactions || [])
+  const myReaction = (reactions || []).find((r) => r.userId === currentUserId)?.emoji
+
   return (
     <div
       className={cn(
-        'flex w-full wasl-animate-in',
+        'flex w-full wasl-animate-in group/msg',
         mine ? 'justify-end' : 'justify-start'
       )}
     >
-      <div
-        className={cn(
-          'max-w-[78%] sm:max-w-[65%] md:max-w-[60%] px-2.5 py-1.5 shadow-sm relative',
-          mine ? 'wasl-bubble-out' : 'wasl-bubble-in'
-        )}
-      >
-        {isGroup && !mine && senderName && (
-          <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
-            {senderName}
+      <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
+        {/* Hover toolbar — appears on hover (desktop) */}
+        <div
+          ref={toolbarRef}
+          className={cn(
+            'wasl-toolbar absolute top-0 z-20 flex items-center gap-0.5 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-md border border-border px-0.5 py-0.5 transition-opacity',
+            mine ? 'left-0 -translate-x-full -ml-1' : 'right-0 translate-x-full -mr-1',
+            'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100'
+          )}
+        >
+          <ToolbarButton title="React" onClick={() => setShowReactions((v) => !v)}>
+            <SmilePlus className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton title="Reply" onClick={() => { onReply?.(); setShowReactions(false) }}>
+            <Reply className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton title={starred ? 'Unstar' : 'Star'} onClick={() => onStar?.()}>
+            <Star className={cn('w-4 h-4', starred && 'fill-amber-400 text-amber-400')} />
+          </ToolbarButton>
+          <ToolbarButton title="Copy" onClick={() => { onCopy?.(); setShowReactions(false) }}>
+            <Copy className="w-4 h-4" />
+          </ToolbarButton>
+          {mine && (
+            <ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>
+              <Trash2 className="w-4 h-4" />
+            </ToolbarButton>
+          )}
+        </div>
+
+        {/* Quick reaction popover */}
+        {showReactions && (
+          <div
+            className={cn(
+              'absolute -top-11 z-30 flex items-center gap-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-lg border border-border px-1.5 py-1',
+              mine ? 'right-0' : 'left-0'
+            )}
+          >
+            {QUICK_REACTIONS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => { onReact?.(e); setShowReactions(false) }}
+                className="text-lg w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-transform hover:scale-125"
+              >
+                {e}
+              </button>
+            ))}
           </div>
         )}
-        {replyTo && (
-          <div className="border-l-2 border-[var(--wasl-green)] pl-2 mb-1 opacity-70 text-sm bg-black/5 dark:bg-white/5 rounded py-0.5 px-1">
-            <div className="text-xs font-medium">
-              {replyTo.senderId === me?.id
-                ? 'You'
-                : 'Replied to'}
+
+        {/* The bubble */}
+        <div
+          className={cn(
+            'px-2.5 py-1.5 shadow-sm relative',
+            mine ? 'wasl-bubble-out' : 'wasl-bubble-in'
+          )}
+        >
+          {isGroup && !mine && senderName && (
+            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+              {senderName}
             </div>
-            <div className="truncate">{replyTo.content}</div>
-          </div>
-        )}
-        {message.type === 'image' ? (
-          <div className="rounded-lg overflow-hidden max-w-xs">
-            { }
-            <img src={message.content} alt="sent" className="w-full h-auto" />
-            <div className="text-[10px] text-right text-foreground/60 mt-0.5">
-              {formatChatTimestamp(message.createdAt)}
-              {mine && <StatusTicks status={message.status} className="ml-1" />}
+          )}
+          {replyTo && (
+            <div className="border-l-2 border-[var(--wasl-green)] pl-2 mb-1 opacity-70 text-sm bg-black/5 dark:bg-white/5 rounded py-0.5 px-1">
+              <div className="text-xs font-medium">
+                {replyTo.senderId === me?.id ? 'You' : 'Replied to'}
+              </div>
+              <div className="truncate">{replyTo.content}</div>
             </div>
-          </div>
-        ) : (
-          <div className="text-sm leading-relaxed break-words whitespace-pre-wrap pr-1">
-            {message.content}
-            <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
-              {formatChatTimestamp(message.createdAt)}
-              {mine && <StatusTicks status={message.status} />}
-            </span>
+          )}
+          {message.type === 'image' ? (
+            <div className="rounded-lg overflow-hidden max-w-xs">
+              <img src={message.content} alt="sent" className="w-full h-auto" />
+              <div className="text-[10px] text-right text-foreground/60 mt-0.5">
+                {formatChatTimestamp(message.createdAt)}
+                {mine && <StatusTicks status={message.status} className="ml-1" />}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm leading-relaxed break-words whitespace-pre-wrap pr-1">
+              {message.content}
+              <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
+                {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                {formatChatTimestamp(message.createdAt)}
+                {mine && <StatusTicks status={message.status} />}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Reactions pill row */}
+        {grouped.length > 0 && (
+          <div className={cn('flex flex-wrap gap-1 mt-0.5', mine ? 'justify-end' : 'justify-start')}>
+            {grouped.map((g) => {
+              const mineReacted = g.users.includes(currentUserId || '')
+              return (
+                <button
+                  key={g.emoji}
+                  type="button"
+                  onClick={() => onReact?.(g.emoji)}
+                  className={cn(
+                    'wasl-reaction-pill inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors',
+                    mineReacted
+                      ? 'bg-[var(--wasl-green)]/15 border-[var(--wasl-green)]/50 text-foreground'
+                      : 'bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-foreground hover:bg-muted'
+                  )}
+                  title={g.users.length + ' reaction' + (g.users.length === 1 ? '' : 's')}
+                >
+                  <span>{g.emoji}</span>
+                  <span className="text-[10px] font-medium">{g.count}</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+// Wrapper that lazy-loads the CommitCard so the heavy commit data only fetches
+// when a commit message is rendered. Keeps this file focused on the bubble.
+function CommitMessageWrapper({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  const [CommitCard, setCommitCard] = useState<any>(null)
+  useEffect(() => {
+    import('./commit-card').then((m) => setCommitCard(() => m.CommitCard))
+  }, [])
+  if (!CommitCard) {
+    return (
+      <div className="wasl-commit-card p-4 text-xs text-muted-foreground">
+        Loading commit…
+      </div>
+    )
+  }
+  return (
+    <CommitCard
+      commitId={message.commitId!}
+      conversationId={message.conversationId}
+      createdAt={message.createdAt}
+    />
+  )
+}
+
+function ToolbarButton({
+  title,
+  onClick,
+  children,
+  danger,
+}: {
+  title: string
+  onClick: () => void
+  children: React.ReactNode
+  danger?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={cn(
+        'w-7 h-7 rounded-full flex items-center justify-center transition-colors',
+        danger
+          ? 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      )}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -120,4 +288,18 @@ function StatusTicks({
     )
   }
   return <Clock className={cn('w-3.5 h-3.5 inline', className)} />
+}
+
+function groupReactions(reactions: Reaction[]) {
+  const map = new Map<string, { emoji: string; count: number; users: string[] }>()
+  for (const r of reactions) {
+    const ex = map.get(r.emoji)
+    if (ex) {
+      ex.count++
+      ex.users.push(r.userId)
+    } else {
+      map.set(r.emoji, { emoji: r.emoji, count: 1, users: [r.userId] })
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count)
 }

@@ -12,6 +12,7 @@ import {
   Users,
   Reply as ReplyIcon,
   Copy,
+  ChevronDown,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -58,9 +59,14 @@ export function ChatWindow({
     upsertCommit,
     commitsByConversation,
     setCommits,
+    toggleReaction,
+    setStarred,
+    removeMessage,
   } = useWaslStore()
 
   const [commitOpen, setCommitOpen] = useState(false)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [botReplying, setBotReplying] = useState(false)
 
   const conversation = conversations.find((c) => c.id === activeConversationId)
   const messages = activeConversationId
@@ -232,16 +238,45 @@ export function ChatWindow({
       }
     }
 
+    // When another client reacts to / stars / deletes a message, refetch it.
+    async function onMessageReacted(payload: {
+      conversationId: string
+      messageId: string
+    }) {
+      if (!payload || payload.conversationId !== activeConversationId || !payload.messageId) return
+      try {
+        const res = await fetch(`/api/messages/${payload.messageId}`, {
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          // 404 means the message was deleted — remove it locally.
+          if (res.status === 404) {
+            removeMessage(activeConversationId, payload.messageId)
+          }
+          return
+        }
+        const data = await res.json()
+        if (data.message) {
+          // Replace the message in-place with the updated one (reactions/star).
+          useWaslStore.getState().updateMessage(activeConversationId, payload.messageId, data.message)
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     socket.on('message:received', onMessageReceived)
     socket.on('message:status', onStatus)
     socket.on('commit:updated', onCommitUpdated)
+    socket.on('message:reacted', onMessageReacted)
 
     return () => {
       socket.off('message:received', onMessageReceived)
       socket.off('message:status', onStatus)
       socket.off('commit:updated', onCommitUpdated)
+      socket.off('message:reacted', onMessageReacted)
     }
-  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, upsertCommit])
+  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, upsertCommit, removeMessage])
 
   // ---- Auto-scroll to bottom when new messages arrive ------------------------
   useEffect(() => {
@@ -268,10 +303,19 @@ export function ChatWindow({
     if (!el) return
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     wasNearBottomRef.current = distFromBottom < 80
+    setShowScrollBtn(distFromBottom > 240)
     // Load more when near top
     if (el.scrollTop < 40 && hasMore && !loadingMore && !loading) {
       void loadMore()
     }
+  }
+
+  function scrollToBottom() {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    wasNearBottomRef.current = true
+    setShowScrollBtn(false)
   }
 
   // ---- Load older messages ---------------------------------------------------
@@ -347,8 +391,144 @@ export function ChatWindow({
         })
       }
       wasNearBottomRef.current = true
+
+      // ---- Demo companion bot: if this is a 1-on-1 chat with a demo user,
+      // simulate a typing indicator + contextual reply after a short delay.
+      if (
+        type === 'text' &&
+        conversation &&
+        !conversation.isGroup &&
+        otherUser &&
+        otherUser.phone.startsWith('+20100')
+      ) {
+        const conversationId = activeConversationId
+        const userId = user.id
+        // Show typing
+        setTimeout(() => {
+          getSocket().emit('typing:start', {
+            conversationId,
+            userId: otherUser.userId,
+            name: otherUser.name,
+          })
+        }, 600)
+        setBotReplying(true)
+        const delay = 1200 + Math.min(content.length * 30, 1800)
+        setTimeout(async () => {
+          getSocket().emit('typing:stop', {
+            conversationId,
+            userId: otherUser.userId,
+          })
+          try {
+            const botRes = await fetch(
+              `/api/conversations/${conversationId}/bot-reply`,
+              { method: 'POST' }
+            )
+            if (!botRes.ok) return
+            const data = await botRes.json()
+            if (data.message && !messageIdsRef.current.has(data.message.id)) {
+              messageIdsRef.current.add(data.message.id)
+              addMessage(conversationId, data.message)
+              getSocket().emit('message:send', {
+                conversationId,
+                message: data.message,
+              })
+              if (conversation) {
+                upsertConversation({
+                  ...conversation,
+                  lastMessage: data.message,
+                  updatedAt: data.message.createdAt,
+                })
+              }
+            }
+          } catch (e) {
+            console.error(e)
+          } finally {
+            setBotReplying(false)
+          }
+        }, delay)
+      }
     },
-    [activeConversationId, user?.id, replyTo, addMessage, setReplyTo, conversation, upsertConversation]
+    [activeConversationId, user?.id, replyTo, addMessage, setReplyTo, conversation, upsertConversation, otherUser]
+  )
+
+  // ---- Message actions: react / star / copy / delete ------------------------
+  const handleReact = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!activeConversationId || !user?.id) return
+      // Optimistic toggle
+      const msgs = messagesByConversation[activeConversationId] || []
+      const existing = msgs
+        .find((m) => m.id === messageId)
+        ?.reactions?.find((r) => r.userId === user.id)
+      // If the user already reacted with the same emoji → remove; else set.
+      if (existing && existing.emoji === emoji) {
+        toggleReaction(activeConversationId, messageId, null)
+      } else {
+        toggleReaction(activeConversationId, messageId, {
+          id: existing?.id,
+          userId: user.id,
+          emoji,
+        })
+      }
+      try {
+        await fetch(`/api/messages/${messageId}/reactions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji }),
+        })
+        getSocket().emit('message:reacted', {
+          conversationId: activeConversationId,
+          messageId,
+        })
+      } catch (e) {
+        console.error(e)
+      }
+    },
+    [activeConversationId, user?.id, messagesByConversation, toggleReaction]
+  )
+
+  const handleStar = useCallback(
+    async (messageId: string) => {
+      if (!activeConversationId) return
+      const msgs = messagesByConversation[activeConversationId] || []
+      const currentlyStarred = msgs.find((m) => m.id === messageId)?.starred
+      setStarred(activeConversationId, messageId, !currentlyStarred)
+      try {
+        await fetch(`/api/messages/${messageId}/star`, { method: 'POST' })
+      } catch (e) {
+        console.error(e)
+      }
+    },
+    [activeConversationId, messagesByConversation, setStarred]
+  )
+
+  const handleCopyMessage = useCallback(async (m: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(m.content)
+      toast.success('Copied to clipboard')
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }, [])
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!activeConversationId) return
+      if (!confirm('Delete this message? This cannot be undone.')) return
+      removeMessage(activeConversationId, messageId)
+      try {
+        await fetch(`/api/messages/${messageId}`, { method: 'DELETE' })
+        getSocket().emit('message:reacted', {
+          conversationId: activeConversationId,
+          messageId,
+        })
+        toast.success('Message deleted')
+      } catch (e) {
+        console.error(e)
+        toast.error('Failed to delete')
+      }
+    },
+    [activeConversationId, removeMessage]
   )
 
   const handleSendImage = useCallback(
@@ -549,12 +729,15 @@ export function ChatWindow({
                       senderName={senderName}
                       isGroup={conversation.isGroup}
                       replyTo={replyToMsg}
+                      onReact={(emoji) => handleReact(m.id, emoji)}
+                      onReply={() => setReplyTo(m)}
+                      onStar={() => handleStar(m.id)}
+                      onCopy={() => handleCopyMessage(m)}
+                      onDelete={() => handleDeleteMessage(m.id)}
+                      starred={m.starred}
+                      reactions={m.reactions}
+                      currentUserId={user?.id}
                     />
-                    {!m.type.startsWith('system') && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity text-right text-[10px] text-muted-foreground pr-1 hidden sm:block">
-                        {formatChatTimestamp(m.createdAt)}
-                      </div>
-                    )}
                   </div>
                 </div>
               )
@@ -574,6 +757,19 @@ export function ChatWindow({
             )}
             <div ref={bottomRef} />
           </>
+        )}
+
+        {/* Scroll-to-bottom button */}
+        {showScrollBtn && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="wasl-scroll-btn sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border border-border flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-colors z-10"
+            title="Scroll to latest"
+            aria-label="Scroll to latest"
+          >
+            <ChevronDown className="w-5 h-5" />
+          </button>
         )}
       </div>
 

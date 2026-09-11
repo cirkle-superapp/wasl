@@ -34,6 +34,11 @@ export async function GET(
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
+    include: {
+      reactions: {
+        select: { id: true, userId: true, emoji: true },
+      },
+    },
   })
 
   // Mark as read: update my lastReadAt and any messages sent by others as read
@@ -50,6 +55,13 @@ export async function GET(
     data: { status: 'read' },
   })
 
+  // Fetch the user's starred message IDs in this conversation
+  const starredRows = await db.starredMessage.findMany({
+    where: { userId: session.id, message: { conversationId: id } },
+    select: { messageId: true },
+  })
+  const starredIds = new Set(starredRows.map((s) => s.messageId))
+
   return NextResponse.json({
     messages: messages
       .reverse()
@@ -63,6 +75,12 @@ export async function GET(
         createdAt: m.createdAt,
         replyToId: m.replyToId,
         commitId: m.commitId,
+        starred: starredIds.has(m.id),
+        reactions: m.reactions.map((r) => ({
+          id: r.id,
+          userId: r.userId,
+          emoji: r.emoji,
+        })),
       })),
   })
 }

@@ -147,3 +147,48 @@ Stage Summary:
 
 ## Cron Job
 A recurring `webDevReview` cron job runs every 15 minutes to keep improving the project.
+
+---
+
+Task ID: 3
+Agent: main (phase-3, cron webDevReview)
+Task: QA the current state with agent-browser, fix bugs found, and add new WhatsApp-style features (reactions, starred messages, message delete, scroll-to-bottom, demo companion bot).
+
+Work Log:
+- Performed full QA with agent-browser: verified auth, demo login, conversations, commit card, dark mode, mobile responsive, new chat dialog, user search, group chat. Found 2 bugs.
+- **Bug fix #1 — duplicate timestamp per message**: every message rendered the timestamp twice (once inside the bubble, once in a hover-only div below the bubble). Removed the redundant below-bubble hover timestamp from `chat-window.tsx`; the in-bubble timestamp (with status ticks + star icon) is the single source of truth. Verified: 5 messages at 03:11 PM now show 5 timestamps (was 10).
+- **Bug fix #2 — presence not cleared on logout/tab-close**: `navigator.sendBeacon('/api/profile', JSON.stringify({online:false}))` sends with `Content-Type: text/plain;charset=UTF-8`, but the route handler does `await req.json()` which throws, so the `online:false` never persisted. Fixed in `chat-app.tsx` by using a `Blob` with `type: 'application/json'`. Also updated `sidebar.tsx` `handleLogout` to explicitly `fetch('/api/profile', {method:'POST', body: JSON.stringify({online:false}), keepalive:true})` BEFORE clearing the session cookie. Verified: Amira now shows "last seen today at 03:45 PM" instead of the stale "online".
+- **New feature — message reactions** (WhatsApp signature):
+  - Prisma `Reaction` model (messageId, userId, emoji; unique per user per message → toggle).
+  - `POST /api/messages/[id]/reactions` — toggle (add/update/remove).
+  - `GET /api/messages/[id]` — single message with reactions + starred status (for cross-client refresh).
+  - `GET /api/conversations/[id]/messages` now includes `reactions[]` + `starred` per message.
+  - Store: `toggleReaction`, `Reaction` type.
+  - `message-bubble.tsx`: hover toolbar with 6 quick reactions (👍❤️😂😮😢🙏); reactions render as grouped pills below the bubble (click to toggle your own); optimistic updates.
+- **New feature — starred/pinned messages**:
+  - Prisma `StarredMessage` model (messageId, userId; personal stars).
+  - `POST /api/messages/[id]/star` — toggle.
+  - `message-bubble.tsx`: star button in toolbar; a filled amber star shows inside the bubble for starred messages.
+- **New feature — message delete** (own messages only):
+  - `DELETE /api/messages/[id]` — sender-only; cascades reactions + stars; also deletes linked Commit for commit-type messages.
+  - `message-bubble.tsx`: trash button (only on own messages); confirm dialog; optimistic removal.
+- **New feature — scroll-to-bottom button**: appears when the user scrolls >240px from the bottom; smooth-scrolls to latest on click; auto-hides after click. Animated entrance.
+- **New feature — demo companion bot**: `POST /api/conversations/[id]/bot-reply` generates a contextual rule-based reply (greetings, questions, thanks, price/commit references, emoji-only, etc.) from the demo counterparty. Only fires for 1-on-1 chats where the other party's phone starts with `+20100`. Client (`chat-window.tsx` `handleSend`): after sending a text message to a demo user, emits `typing:start` after 600ms, then after 1.2–3s calls the bot-reply endpoint, adds the reply, broadcasts it via socket, and updates the sidebar preview. Verified: sent "Hey Amira, how are you?" → bot replied "Hey! Good to hear from you 😊 How's your day going?"
+- **Cross-client sync**: added `message:reacted` socket relay in the chat-service. When a client reacts/stars/deletes, it emits `message:reacted`; other clients in the conversation room receive it and refetch the single message (or remove it on 404). Added `updateMessage` store action.
+- **Styling polish** (`globals.css`): `wasl-toolbar` scale-in animation, `wasl-reaction-pill` pop-in, `wasl-scroll-btn` slide-up, message bubble hover lift (box-shadow), `wasl-star-icon` drop-shadow. Respects reduced-motion.
+- Restarted dev server (needed for the new Prisma Client with Reaction + StarredMessage models). Restarted chat-service (picked up `message:reacted` relay via `bun --hot`).
+
+Stage Summary:
+- Both QA bugs fixed (duplicate timestamp + stale online status).
+- 5 new features added: message reactions, starred messages, message delete, scroll-to-bottom button, demo companion bot.
+- Cross-client real-time sync for reactions/star/delete via `message:reacted` socket event.
+- All verified end-to-end with agent-browser:
+  - Reactions: ❤️ reaction pill appeared on bot reply, persisted after refresh.
+  - Star: amber star icon appeared inside the bubble.
+  - Delete: own message deleted with toast confirmation.
+  - Scroll-to-bottom: appeared on scroll up, disappeared after click.
+  - Bot: contextual reply after sending to a demo user.
+  - Dark mode + mobile still work.
+  - No browser console errors, no 500s in dev log.
+- Lint passes with 0 errors / 0 warnings.
+- Both services (dev :3000, chat-service :3003) running via `setsid -f`.

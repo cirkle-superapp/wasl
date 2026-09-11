@@ -363,3 +363,44 @@
   background: rgba(239, 68, 68, 0.25);
   color: #f87171;
 }
+
+/* ---- Message hover toolbar + reactions ----------------------------------- */
+/* Subtle scale-in for the hover toolbar */
+@keyframes wasl-toolbar-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.group\/msg:hover .wasl-toolbar,
+.group\/msg:focus-within .wasl-toolbar {
+  animation: wasl-toolbar-in 0.12s ease-out;
+}
+
+/* Reaction pill pop-in */
+@keyframes wasl-reaction-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.wasl-reaction-pill {
+  animation: wasl-reaction-pop 0.2s ease-out;
+}
+
+/* Star icon inside a starred message bubble */
+.wasl-star-icon {
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+}
+
+/* Scroll-to-bottom button float */
+@keyframes wasl-scroll-btn-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wasl-scroll-btn {
+  animation: wasl-scroll-btn-in 0.18s ease-out;
+}
+
+/* Improved message bubble hover lift */
+.group\/msg:hover > div > .wasl-bubble-out,
+.group\/msg:hover > div > .wasl-bubble-in {
+  box-shadow: 0 2px 8px rgba(11, 20, 26, 0.12);
+}

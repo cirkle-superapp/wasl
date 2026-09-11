@@ -22,6 +22,12 @@ export type Participant = {
   about: string
 }
 
+export type Reaction = {
+  id: string
+  userId: string
+  emoji: string
+}
+
 export type ChatMessage = {
   id: string
   conversationId: string
@@ -32,6 +38,8 @@ export type ChatMessage = {
   createdAt: string
   replyToId?: string | null
   commitId?: string | null
+  starred?: boolean
+  reactions?: Reaction[]
 }
 
 // Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.
@@ -117,6 +125,24 @@ type WaslState = {
   commitsByConversation: Record<string, Commit[]>
   setCommits: (conversationId: string, commits: Commit[]) => void
   upsertCommit: (c: Commit) => void
+
+  // Message actions: reactions, star, delete
+  toggleReaction: (
+    conversationId: string,
+    messageId: string,
+    reaction: { id?: string; userId: string; emoji: string } | null
+  ) => void
+  setStarred: (
+    conversationId: string,
+    messageId: string,
+    starred: boolean
+  ) => void
+  removeMessage: (conversationId: string, messageId: string) => void
+  updateMessage: (
+    conversationId: string,
+    messageId: string,
+    patch: Partial<ChatMessage>
+  ) => void
 }
 
 export const useWaslStore = create<WaslState>((set) => ({
@@ -264,4 +290,68 @@ export const useWaslStore = create<WaslState>((set) => ({
         },
       }
     }),
+
+  toggleReaction: (conversationId, messageId, reaction) =>
+    set((state) => {
+      const msgs = state.messagesByConversation[conversationId] || []
+      const next = msgs.map((m) => {
+        if (m.id !== messageId) return m
+        const existing = m.reactions || []
+        // Remove any existing reaction by this user, then add the new one.
+        const filtered = existing.filter((r) => r.userId !== reaction?.userId)
+        const updated = reaction
+          ? [...filtered, { id: reaction.id || cryptoId(), userId: reaction.userId, emoji: reaction.emoji }]
+          : filtered
+        return { ...m, reactions: updated }
+      })
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: next,
+        },
+      }
+    }),
+
+  setStarred: (conversationId, messageId, starred) =>
+    set((state) => {
+      const msgs = state.messagesByConversation[conversationId] || []
+      const next = msgs.map((m) =>
+        m.id === messageId ? { ...m, starred } : m
+      )
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: next,
+        },
+      }
+    }),
+
+  removeMessage: (conversationId, messageId) =>
+    set((state) => {
+      const msgs = state.messagesByConversation[conversationId] || []
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: msgs.filter((m) => m.id !== messageId),
+        },
+      }
+    }),
+
+  updateMessage: (conversationId, messageId, patch) =>
+    set((state) => {
+      const msgs = state.messagesByConversation[conversationId] || []
+      const next = msgs.map((m) =>
+        m.id === messageId ? { ...m, ...patch } : m
+      )
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: next,
+        },
+      }
+    }),
 }))
+
+function cryptoId(): string {
+  return 'r_' + Math.random().toString(36).slice(2, 10)
+}

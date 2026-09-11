@@ -81,6 +81,16 @@ export function Sidebar({
   })
 
   async function handleLogout() {
+    // Mark offline BEFORE clearing the session cookie (so /api/profile can
+    // still identify the user).
+    try {
+      await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ online: false }),
+        keepalive: true,
+      })
+    } catch {}
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/'
   }

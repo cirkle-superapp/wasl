@@ -69,12 +69,17 @@ export function ChatApp({ user }: { user: any }) {
     }
   }, [])
 
-  // Mark offline on tab close
+  // Mark offline on tab close — use a Blob with explicit application/json
+  // content-type so the Next.js route handler's req.json() can parse the body.
+  // (navigator.sendBeacon defaults to text/plain;charset=UTF-8 which makes
+  // req.json() throw, so the offline signal was never persisted.)
   useEffect(() => {
     beforeUnloadHandler.current = () => {
-      // Best-effort signal to backend
       try {
-        navigator.sendBeacon('/api/profile', JSON.stringify({ online: false }))
+        const blob = new Blob([JSON.stringify({ online: false })], {
+          type: 'application/json',
+        })
+        navigator.sendBeacon('/api/profile', blob)
       } catch {}
     }
     const handler = () => beforeUnloadHandler.current?.()
