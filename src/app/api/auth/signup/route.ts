@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { setSession } from '@/lib/auth'
 import { pickAvatarColor } from '@/lib/avatar'
+import { rateLimit, getClientIP } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 
 export const runtime = 'nodejs'
@@ -50,6 +51,17 @@ async function generateSuggestions(base: string): Promise<string[]> {
 // - name: display name
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 signups per IP per 60s
+    const ip = getClientIP(req)
+    const rl = rateLimit(`signup:${ip}`, 5, 60_000)
+    if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000)
+      return NextResponse.json(
+        { error: `Too many signups. Try again in ${retryAfter}s.` },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
+    }
+
     const body = await req.json()
     const { identifier, password, name, username, phone, email } = body || {}
     const safePassword = typeof password === 'string' ? password : ''

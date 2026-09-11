@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { setSession } from '@/lib/auth'
+import { rateLimit, getClientIP } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 
 export const runtime = 'nodejs'
@@ -18,6 +19,20 @@ function detectIdentifierType(value: string): 'email' | 'phone' | 'username' {
 // identifier can be an email, phone number, or username.
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 10 login attempts per IP per 60s (brute-force protection)
+    const ip = getClientIP(req)
+    const rl = rateLimit(`login:${ip}`, 10, 60_000)
+    if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000)
+      return NextResponse.json(
+        { error: `Too many login attempts. Try again in ${retryAfter}s.` },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(retryAfter) },
+        }
+      )
+    }
+
     const body = await req.json()
     const { identifier, password } = body || {}
     const safeIdentifier = typeof identifier === 'string' ? identifier.trim() : ''
