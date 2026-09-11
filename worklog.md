@@ -862,3 +862,70 @@ Stage Summary:
 - Database: `libsql://wasl-fortleem.aws-us-east-1.turso.io`
 - 17 tables (User, PhoneNumber, Conversation, Participant, Message, Commit, Reaction, StarredMessage, Poll, PollVote, Story, StoryView, ChatFolder, FolderConversation, Business, BusinessMember, BusinessGroup)
 - All app data now persists to Turso (cloud database) instead of local SQLite
+
+---
+
+## Task ID: 15 — Backup, Harden, Connect GitHub+Turso+Vercel, Fix Preview
+### Agent: main
+
+### 1. Integrity Check — NOTHING DELETED ✅
+- **27 components** — all verified present (auth-screen, chat-app, sidebar, chat-window, message-bubble, commit-card, poll-card, story-bar, business-*, verify-person, phone-numbers, wasl-logo, cirkle-mark, color-theme-provider, etc.)
+- **38 API routes** — all verified present. Found and RESTORED the missing `/api/upload` route (was accidentally removed during a previous session)
+- **17 Prisma models** — all in sync with the database
+- **9 lib files** — all present (auth, db, socket, store, time, avatar, commit, rate-limit, upload)
+- **Mini-service** — chat-service on port 3003 running
+- **Public files** — logo.svg, wasl-favicon.svg, cirkle-favicon.svg, sw.js all present
+
+### 2. Backup ✅
+- Git committed and pushed all state to GitHub
+- Turso database has all 17 tables with data
+- Local SQLite backup maintained as fallback
+
+### 3. Hardening ✅
+- `.env` in `.gitignore` (not committed to GitHub)
+- Rate limiting on auth routes (login: 10/min, signup: 5/min)
+- Password hashing with bcrypt (10 rounds)
+- Socket.io CORS restricted to `ALLOWED_ORIGINS`
+- Security headers in `vercel.json` (X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy)
+- `.env.example` for reference
+
+### 4. Three Services Connected ✅
+
+**GitHub**: https://github.com/cirkle-superapp/wasl
+- All code pushed to `main` branch
+- `.env` excluded from git
+- Upload route restored and committed
+
+**Turso**: libsql://wasl-fortleem.aws-us-east-1.turso.io
+- All 17 tables present and synced
+- Working token configured in `.env`
+- Verified: signup creates user on Turso, API returns user data
+- USE_TURSO=true in `.env`
+
+**Vercel**: https://cirkle-wasl.vercel.app
+- Deployed from GitHub `main` branch
+- State: READY
+- All env vars configured (TURSO_AUTH_TOKEN, TURSO_DATABASE_URL, USE_TURSO, ALLOWED_ORIGINS, etc.)
+- Verified: HTTP 200, auth API returns `{"user":null}`, page title "Wasl — Simple. Secure. Connected."
+
+**Connection flow**:
+- GitHub push → Vercel auto-deploys from `main` branch
+- Vercel → Turso via env vars (USE_TURSO=true, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
+- Local dev → Turso via `.env` (USE_TURSO=true)
+- All three services share the same Turso database
+
+### 5. Preview Fixed ✅
+- Dev server (port 3000): HTTP 200
+- Chat service (port 3003): running
+- Demo login: works (creates user on Turso, session active)
+- Auth screen: username/email/phone with live availability
+- No console errors
+- Vercel production: HTTP 200
+
+### Fixes Applied
+1. Restored missing `/api/upload/route.ts` (file upload API for business verification documents)
+2. Added `vercel.json` with security headers
+3. Updated `.env` with Vercel domain in `ALLOWED_ORIGINS`
+4. Updated Turso token on Vercel (via API: deleted old sensitive var, recreated as encrypted)
+5. Deployed to Vercel production (dpl_7Aak4QX2WeRAiJiijp5scpGaYkDo → READY)
+6. Verified all 38 routes, 27 components, 17 models are intact
