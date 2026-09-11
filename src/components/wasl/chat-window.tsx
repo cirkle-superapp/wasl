@@ -19,6 +19,8 @@ import { WaslLogo } from './wasl-logo'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
 import { NewCommitDialog } from './new-commit-dialog'
+import { NewPollDialog } from './new-poll-dialog'
+import { ChatSearchDialog } from './chat-search-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -65,6 +67,8 @@ export function ChatWindow({
   } = useWaslStore()
 
   const [commitOpen, setCommitOpen] = useState(false)
+  const [pollOpen, setPollOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [botReplying, setBotReplying] = useState(false)
 
@@ -658,7 +662,7 @@ export function ChatWindow({
           <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Voice call is not available in this demo')}>
             <Phone className="w-5 h-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={onOpenInfo}>
+          <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
             <Search className="w-5 h-5" />
           </Button>
           <DropdownMenu>
@@ -781,6 +785,7 @@ export function ChatWindow({
         onSendImage={handleSendImage}
         onOpenCommit={() => setCommitOpen(true)}
         canCommit={!conversation.isGroup && !!otherUser}
+        onOpenPoll={() => setPollOpen(true)}
       />
 
       {/* New Commit dialog (Cirkle-inspired) */}
@@ -790,6 +795,23 @@ export function ChatWindow({
         conversationId={activeConversationId}
         counterpartyId={otherUser?.userId || null}
         counterpartyName={otherUser?.name}
+      />
+
+      {/* New Poll dialog (Cirkle-inspired chat-poll) */}
+      <NewPollDialog
+        open={pollOpen}
+        onOpenChange={setPollOpen}
+        conversationId={activeConversationId}
+      />
+
+      {/* In-chat search dialog */}
+      <ChatSearchDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        conversationId={activeConversationId}
+        conversationName={conversation.name}
+        conversationAvatar={conversation.avatar}
+        conversationAvatarColor={conversation.avatarColor}
       />
     </div>
   )

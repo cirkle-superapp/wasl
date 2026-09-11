@@ -9,6 +9,8 @@ import {
   X,
   Reply,
   ShieldCheck,
+  BarChart3,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -22,6 +24,7 @@ export function MessageInput({
   onSendImage,
   onOpenCommit,
   canCommit,
+  onOpenPoll,
 }: {
   conversationId: string
   onSend: (content: string, type?: string) => Promise<void>
@@ -29,12 +32,18 @@ export function MessageInput({
   onSendImage?: (dataUrl: string) => Promise<void>
   onOpenCommit?: () => void
   canCommit?: boolean
+  onOpenPoll?: () => void
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [sending, setSending] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [recordSeconds, setRecordSeconds] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingChange = useRef<boolean>(false)
   const replyTo = useWaslStore((s) => s.replyTo)
@@ -46,8 +55,90 @@ export function MessageInput({
     setValue('')
     setEmojiOpen(false)
     setReplyTo(null)
+    cancelRecording()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }, [conversationId, setReplyTo])
+
+  // ---- Voice recording --------------------------------------------------
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('Voice recording is not supported in this browser')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mime = MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4'
+      const mr = new MediaRecorder(stream, { mimeType: mime })
+      recordedChunksRef.current = []
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data)
+      }
+      mr.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: mime })
+        // Cap at ~1.5MB to fit in the DB content column
+        if (blob.size > 1.5 * 1024 * 1024) {
+          toast.error('Voice message too long (max ~1.5MB)')
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        const reader = new FileReader()
+        reader.onload = async () => {
+          await onSend(reader.result as string, 'voice')
+        }
+        reader.readAsDataURL(blob)
+        stream.getTracks().forEach((t) => t.stop())
+      }
+      mr.start()
+      mediaRecorderRef.current = mr
+      setRecording(true)
+      setRecordSeconds(0)
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((s) => {
+          if (s >= 180) {
+            stopRecording()
+            return s
+          }
+          return s + 1
+        })
+      }, 1000)
+    } catch (e) {
+      console.error(e)
+      toast.error('Microphone access denied')
+    }
+  }
+
+  function stopRecording() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    setRecording(false)
+  }
+
+  function cancelRecording() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      // Replace onstop to prevent sending
+      mediaRecorderRef.current.onstop = () => {
+        if (mediaRecorderRef.current?.stream) {
+          mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop())
+        }
+      }
+      mediaRecorderRef.current.stop()
+    }
+    mediaRecorderRef.current = null
+    recordedChunksRef.current = []
+    setRecording(false)
+    setRecordSeconds(0)
+  }
 
   // Auto-resize textarea
   useEffect(() => {
@@ -203,39 +294,80 @@ export function MessageInput({
           </button>
         )}
 
+        {/* Poll button — Cirkle-inspired chat polls */}
+        {onOpenPoll && (
+          <button
+            type="button"
+            onClick={onOpenPoll}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10 transition-colors shrink-0"
+            title="Create a poll"
+          >
+            <BarChart3 className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder="Type a message"
-            className="w-full resize-none bg-transparent outline-none text-sm leading-relaxed max-h-36 wasl-scroll py-1"
-            disabled={sending}
-          />
+          {recording ? (
+            <div className="flex items-center gap-2 py-1.5">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-medium text-red-500">Recording…</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')}
+              </span>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={cancelRecording}
+                className="p-1.5 rounded-full text-muted-foreground hover:bg-muted hover:text-destructive"
+                title="Cancel recording"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="p-1.5 rounded-full bg-[var(--wasl-green)] text-white hover:bg-[var(--wasl-green-dark)]"
+                title="Send voice message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={handleChange}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Type a message"
+              className="w-full resize-none bg-transparent outline-none text-sm leading-relaxed max-h-36 wasl-scroll py-1"
+              disabled={sending}
+            />
+          )}
         </div>
 
         {/* Send / Mic button */}
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={sending || !value.trim()}
-          className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-white',
-            value.trim()
-              ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)]'
-              : 'bg-gray-400'
-          )}
-          title={value.trim() ? 'Send' : 'Mic (coming soon)'}
-        >
-          {value.trim() ? (
-            <Send className="w-5 h-5" />
-          ) : (
-            <Mic className="w-5 h-5" />
-          )}
-        </button>
+        {recording ? null : (
+          <button
+            type="button"
+            onClick={value.trim() ? handleSend : startRecording}
+            disabled={sending}
+            className={cn(
+              'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-white',
+              value.trim()
+                ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)]'
+                : 'bg-gray-400 hover:bg-gray-500'
+            )}
+            title={value.trim() ? 'Send' : 'Record voice message'}
+          >
+            {value.trim() ? (
+              <Send className="w-5 h-5" />
+            ) : (
+              <Mic className="w-5 h-5" />
+            )}
+          </button>
+        )}
       </div>
     </div>
   )

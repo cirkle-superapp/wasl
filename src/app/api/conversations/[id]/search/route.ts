@@ -1,0 +1,66 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
+
+export const runtime = 'nodejs'
+
+// GET /api/conversations/[id]/search?q=...
+// Search messages within a conversation by content.
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const { id } = await params
+  const membership = await db.participant.findUnique({
+    where: {
+      conversationId_userId: { conversationId: id, userId: session.id },
+    },
+  })
+  if (!membership) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  const { searchParams } = new URL(req.url)
+  const q = (searchParams.get('q') || '').trim()
+  if (!q) {
+    return NextResponse.json({ results: [] })
+  }
+  const messages = await db.message.findMany({
+    where: {
+      conversationId: id,
+      content: { contains: q },
+      type: { not: 'system' },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    include: {
+      reactions: { select: { id: true, userId: true, emoji: true } },
+    },
+  })
+  const starredRows = await db.starredMessage.findMany({
+    where: { userId: session.id, message: { conversationId: id } },
+    select: { messageId: true },
+  })
+  const starredIds = new Set(starredRows.map((s) => s.messageId))
+  return NextResponse.json({
+    results: messages.map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      content: m.content,
+      type: m.type,
+      status: m.status,
+      createdAt: m.createdAt,
+      commitId: m.commitId,
+      starred: starredIds.has(m.id),
+      reactions: m.reactions.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        emoji: r.emoji,
+      })),
+    })),
+  })
+}

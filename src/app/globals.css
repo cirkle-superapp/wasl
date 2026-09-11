@@ -496,6 +496,35 @@
   );
   border-color: color-mix(in oklab, var(--wasl-green) 45%, transparent);
 }
+
+/* ---- Poll card styles --------------------------------------------------- */
+.wasl-poll-card {
+  background: color-mix(in oklab, var(--wasl-green) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 35%, transparent);
+  border-radius: 0.75rem;
+}
+.dark .wasl-poll-card {
+  background: color-mix(in oklab, var(--wasl-green) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-green) 40%, transparent);
+}
+
+/* ---- Story bar styles --------------------------------------------------- */
+.wasl-story-ring {
+  background: conic-gradient(
+    from 0deg,
+    var(--wasl-green),
+    var(--cirkle-gold, #c2a060),
+    var(--wasl-green)
+  );
+  padding: 2px;
+  border-radius: 9999px;
+}
+.wasl-story-ring-viewed {
+  background: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+  padding: 2px;
+  border-radius: 9999px;
+}
+
 .wasl-commit-status-pill {
   font-size: 0.65rem;
   font-weight: 600;

@@ -43,6 +43,7 @@ model Conversation {
   participants Participant[]
   messages     Message[]
   commits      Commit[]
+  polls        Poll[]
 }
 
 model Participant {
@@ -138,4 +139,89 @@ model StarredMessage {
 
   @@unique([messageId, userId])
   @@index([userId])
+}
+
+/// Chat poll — Cirkle-inspired chat-poll feature. A poll is posted as a
+/// special message (type='poll'); members vote on options.
+model Poll {
+  id             String   @id @default(cuid())
+  conversationId String
+  question       String
+  options        String   @default("[]") // JSON-encoded [{id,text}]
+  multiChoice    Boolean  @default(false)
+  anonymous      Boolean  @default(false)
+  createdBy      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  votes        PollVote[]
+
+  @@index([conversationId, createdAt])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId, optionId])
+  @@index([pollId])
+}
+
+/// Status / Story — ephemeral 24h image/text status shown in a story bar
+/// above the chat list. Cirkle-inspired story-status feature.
+model Story {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   @default("text") // text | image
+  content   String   // text content OR image data URL
+  bgColor   String?  // background color for text stories
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, createdAt])
+}
+
+/// Story view — tracks which user has seen which story.
+model StoryView {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  viewedAt  DateTime @default(now())
+
+  @@unique([storyId, userId])
+  @@index([storyId])
+}
+
+/// Chat folder — user-defined folders to organize conversations.
+/// Cirkle-inspired chat-folders feature.
+model ChatFolder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String?
+  icon      String?
+  createdAt DateTime @default(now())
+
+  conversations FolderConversation[]
+
+  @@unique([userId, name])
+}
+
+/// Folder-conversation membership.
+model FolderConversation {
+  id             String   @id @default(cuid())
+  folderId       String
+  conversationId String
+  addedAt        DateTime @default(now())
+
+  folder       ChatFolder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, conversationId])
+  @@index([folderId])
 }

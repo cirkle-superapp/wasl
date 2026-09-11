@@ -17,6 +17,7 @@ import {
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
+import { StoryBar } from './story-bar'
 import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -208,6 +209,7 @@ export function Sidebar({
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto wasl-scroll bg-[var(--wasl-sidebar-bg)]">
+        <StoryBar />
         {loading && conversations.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading chats...

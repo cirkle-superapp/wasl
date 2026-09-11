@@ -10,6 +10,8 @@ import {
   Copy,
   Trash2,
   SmilePlus,
+  Play,
+  Pause,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -81,6 +83,45 @@ export function MessageBubble({
             </div>
           )}
           <CommitMessageWrapper message={message} mine={mine} />
+        </div>
+      </div>
+    )
+  }
+
+  if (message.type === 'poll' && message.commitId) {
+    return (
+      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+        <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
+          {isGroup && !mine && senderName && (
+            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+              {senderName}
+            </div>
+          )}
+          <PollMessageWrapper
+            pollId={message.commitId}
+            conversationId={message.conversationId}
+            createdAt={message.createdAt}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  if (message.type === 'voice' && message.content.startsWith('data:audio')) {
+    return (
+      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+        <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out' : 'wasl-bubble-in')}>
+          {isGroup && !mine && senderName && (
+            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+              {senderName}
+            </div>
+          )}
+          <VoiceMessagePlayer
+            src={message.content}
+            mine={mine}
+            status={message.status}
+            createdAt={message.createdAt}
+          />
         </div>
       </div>
     )
@@ -237,6 +278,138 @@ function CommitMessageWrapper({ message, mine }: { message: ChatMessage; mine: b
       conversationId={message.conversationId}
       createdAt={message.createdAt}
     />
+  )
+}
+
+// Lazy-loaded poll card wrapper (mirrors CommitMessageWrapper).
+function PollMessageWrapper({
+  pollId,
+  conversationId,
+  createdAt,
+}: {
+  pollId: string
+  conversationId: string
+  createdAt: string
+}) {
+  const [PollCard, setPollCard] = useState<any>(null)
+  useEffect(() => {
+    import('./poll-card').then((m) => setPollCard(() => m.PollCard))
+  }, [])
+  if (!PollCard) {
+    return (
+      <div className="wasl-poll-card p-4 text-xs text-muted-foreground">
+        Loading poll…
+      </div>
+    )
+  }
+  return (
+    <PollCard
+      pollId={pollId}
+      conversationId={conversationId}
+      createdAt={createdAt}
+    />
+  )
+}
+
+// Voice message playback bubble with a simple play/pause + waveform.
+function VoiceMessagePlayer({
+  src,
+  mine,
+  status,
+  createdAt,
+}: {
+  src: string
+  mine: boolean
+  status: string
+  createdAt: string
+}) {
+  const [playing, setPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  function toggle() {
+    if (!audioRef.current) {
+      audioRef.current = new Audio(src)
+      audioRef.current.addEventListener('loadedmetadata', () => {
+        setDuration(audioRef.current?.duration || 0)
+      })
+      audioRef.current.addEventListener('timeupdate', () => {
+        setProgress(audioRef.current?.currentTime || 0)
+      })
+      audioRef.current.addEventListener('ended', () => {
+        setPlaying(false)
+        setProgress(0)
+      })
+    }
+    if (playing) {
+      audioRef.current.pause()
+      setPlaying(false)
+    } else {
+      audioRef.current.play()
+      setPlaying(true)
+    }
+  }
+
+  function formatTime(sec: number) {
+    if (!sec || Number.isNaN(sec)) return '0:00'
+    const m = Math.floor(sec / 60)
+    const s = Math.floor(sec % 60)
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
+
+  const pct = duration > 0 ? (progress / duration) * 100 : 0
+  // Deterministic pseudo-waveform bars
+  const bars = Array.from({ length: 28 }, (_, i) => {
+    const h = 30 + Math.sin(i * 1.3 + src.length) * 20 + Math.cos(i * 2.1) * 15
+    return Math.max(10, Math.min(100, Math.abs(h)))
+  })
+
+  return (
+    <div className="flex items-center gap-2 min-w-[200px]">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-9 h-9 rounded-full bg-[var(--wasl-green)] text-white flex items-center justify-center shrink-0 hover:opacity-90"
+      >
+        {playing ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4 ml-0.5" />
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-0.5 h-8">
+          {bars.map((h, i) => {
+            const barProgress = (i / bars.length) * 100
+            const active = barProgress < pct
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'w-0.5 rounded-full transition-colors',
+                  active
+                    ? 'bg-[var(--wasl-green)]'
+                    : mine
+                    ? 'bg-foreground/30'
+                    : 'bg-foreground/20'
+                )}
+                style={{ height: `${h}%` }}
+              />
+            )
+          })}
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-[10px] text-foreground/60">
+            {formatTime(playing ? progress : duration)}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[10px] text-foreground/50">
+            {formatChatTimestamp(createdAt)}
+            {mine && <StatusTicks status={status} />}
+          </span>
+        </div>
+      </div>
+    </div>
   )
 }
 
