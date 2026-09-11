@@ -50,6 +50,14 @@
   --color-wasl-bubble-in: var(--wasl-bubble-in);
   --color-wasl-chat-bg: var(--wasl-chat-bg);
   --color-wasl-sidebar-bg: var(--wasl-sidebar-bg);
+
+  /* Cirkle brand tokens (gold / teal / rose / steel / charcoal / cream) */
+  --color-cirkle-gold: var(--cirkle-gold);
+  --color-cirkle-teal: var(--cirkle-teal);
+  --color-cirkle-rose: var(--cirkle-rose);
+  --color-cirkle-steel: var(--cirkle-steel);
+  --color-cirkle-charcoal: var(--cirkle-charcoal);
+  --color-cirkle-cream: var(--cirkle-cream);
 }
 
 :root {
@@ -95,6 +103,20 @@
   --wasl-bubble-in: #ffffff;  /* white for incoming bubbles */
   --wasl-chat-bg: #efeae2;    /* cream chat background */
   --wasl-sidebar-bg: #ffffff;
+
+  /* Cirkle brand tokens — constant across themes (gold / teal / rose / steel / charcoal / cream).
+     Imported from github.com/fortleem/CIRKLE. These are the Cirkle signature
+     hex values; the [data-theme="cirkle"] selector below swaps the Wasl
+     signature palette to use them. */
+  --cirkle-gold: #c2a060;
+  --cirkle-gold-light: #e5c98a;
+  --cirkle-gold-dark: #9a7a3e;
+  --cirkle-teal: #1a4a5a;
+  --cirkle-teal-light: #2a6a7a;
+  --cirkle-rose: #c25a6e;
+  --cirkle-steel: #4a6b88;
+  --cirkle-charcoal: #1a1a14;
+  --cirkle-cream: #fdfcf9;
 }
 
 .dark {
@@ -139,6 +161,114 @@
   --wasl-bubble-in: #1f2c34;
   --wasl-chat-bg: #0b141a;
   --wasl-sidebar-bg: #111b21;
+}
+
+/* ==========================================================================
+   Cirkle theme — swaps the Wasl signature palette to Cirkle's gold/teal/cream.
+   Activated via `data-theme="cirkle"` on <html>. The Cirkle brand tokens
+   (--cirkle-*) above stay constant; this block only re-maps the Wasl
+   semantic variables (--wasl-*) so all existing components pick up the new
+   colors automatically. Light mode (default, no .dark).
+   ========================================================================== */
+[data-theme="cirkle"] {
+  /* Map Wasl semantic colors to Cirkle brand */
+  --wasl-green: var(--cirkle-gold);
+  --wasl-green-dark: var(--cirkle-gold-dark);
+  --wasl-teal: var(--cirkle-teal);
+  --wasl-teal-dark: #123843;
+  --wasl-bubble-out: #f5ecd6;        /* warm cream-gold for outgoing bubbles */
+  --wasl-bubble-in: #ffffff;         /* white for incoming bubbles */
+  --wasl-chat-bg: #f0ebe0;           /* cream chat background (Cirkle cream-tinted) */
+  --wasl-sidebar-bg: #fdfcf9;        /* Cirkle cream surface */
+
+  /* Override shadcn tokens to harmonize with Cirkle */
+  --primary: oklch(0.62 0.08 70);            /* gold */
+  --primary-foreground: oklch(0.18 0.02 70); /* charcoal */
+  --ring: oklch(0.62 0.08 70);
+  --accent: oklch(0.65 0.12 350);           /* rose */
+  --accent-foreground: oklch(0.98 0.01 40); /* cream */
+  --sidebar: oklch(0.98 0.01 40);
+  --sidebar-foreground: oklch(0.20 0.02 70);
+  --sidebar-primary: oklch(0.40 0.06 200);  /* teal */
+  --sidebar-primary-foreground: oklch(0.98 0.01 40);
+  --sidebar-accent: oklch(0.95 0.02 40);
+  --sidebar-accent-foreground: oklch(0.20 0.02 70);
+  --sidebar-border: oklch(0.90 0.02 40);
+  --sidebar-ring: oklch(0.62 0.08 70);
+}
+
+/* Cirkle dark mode — charcoal background + gold accents (Cirkle app style) */
+.dark[data-theme="cirkle"] {
+  --wasl-green: var(--cirkle-gold);
+  --wasl-green-dark: var(--cirkle-gold-dark);
+  --wasl-teal: var(--cirkle-teal-light);
+  --wasl-teal-dark: var(--cirkle-teal);
+  --wasl-bubble-out: #2a2418;          /* dark warm gold for outgoing */
+  --wasl-bubble-in: #1f1a14;           /* dark cream/charcoal for incoming */
+  --wasl-chat-bg: #0f0d0a;             /* near-black cream */
+  --wasl-sidebar-bg: #1a1a14;          /* Cirkle charcoal */
+
+  --background: oklch(0.10 0.005 70);
+  --foreground: oklch(0.95 0.02 40);
+  --card: oklch(0.14 0.01 70);
+  --card-foreground: oklch(0.95 0.02 40);
+  --popover: oklch(0.14 0.01 70);
+  --popover-foreground: oklch(0.95 0.02 40);
+  --primary: oklch(0.68 0.10 70);            /* gold */
+  --primary-foreground: oklch(0.14 0.01 70);
+  --secondary: oklch(0.20 0.01 70);
+  --secondary-foreground: oklch(0.95 0.02 40);
+  --muted: oklch(0.18 0.01 70);
+  --muted-foreground: oklch(0.70 0.03 40);
+  --accent: oklch(0.62 0.12 350);             /* rose */
+  --accent-foreground: oklch(0.98 0.01 40);
+  --destructive: oklch(0.65 0.22 25);
+  --border: oklch(0.22 0.01 70);
+  --input: oklch(0.22 0.01 70);
+  --ring: oklch(0.68 0.10 70);
+  --sidebar: oklch(0.12 0.005 70);
+  --sidebar-foreground: oklch(0.95 0.02 40);
+  --sidebar-primary: oklch(0.68 0.10 70);
+  --sidebar-primary-foreground: oklch(0.14 0.01 70);
+  --sidebar-accent: oklch(0.18 0.01 70);
+  --sidebar-accent-foreground: oklch(0.95 0.02 40);
+  --sidebar-border: oklch(0.22 0.01 70);
+  --sidebar-ring: oklch(0.68 0.10 70);
+}
+
+/* Cirkle signature gradients (available in both themes) */
+.wasl-gradient-hero-cirkle {
+  background: linear-gradient(135deg, #1a4a5a 0%, #4a6b88 50%, #c25a6e 100%);
+}
+.wasl-gradient-gold {
+  background: linear-gradient(135deg, #e5c98a 0%, #9a7a3e 100%);
+}
+.wasl-gradient-aurora-cirkle {
+  background-image:
+    radial-gradient(ellipse at top left, rgba(194, 90, 110, 0.25), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(26, 74, 90, 0.30), transparent 55%),
+    radial-gradient(ellipse at center, rgba(194, 160, 96, 0.15), transparent 60%);
+}
+.wasl-text-gradient-cirkle {
+  background: linear-gradient(135deg, #e5c98a, #9a7a3e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Glass morphism (Cirkle-inspired) */
+.wasl-glass {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+[data-theme="cirkle"] .wasl-glass {
+  background-color: rgba(253, 252, 249, 0.55);
+  border: 1px solid rgba(194, 160, 96, 0.25);
+}
+.dark[data-theme="cirkle"] .wasl-glass {
+  background-color: rgba(26, 26, 20, 0.55);
+  border: 1px solid rgba(194, 160, 96, 0.20);
 }
 
 @layer base {
@@ -304,24 +434,63 @@
   color: transparent;
 }
 
+/* ---- Cirkle animated orb logo (imported from Cirkle's circle-mark) -------- */
+/* Slow rotation of the three interlocking rings (30s linear) */
+.wasl-cirkle-spin {
+  animation: wasl-cirkle-spin 30s linear infinite;
+  transform-origin: center;
+}
+@keyframes wasl-cirkle-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* Pulse glow — a soft gold halo that expands and fades (2.5s) */
+.wasl-cirkle-pulse-glow {
+  animation: wasl-cirkle-pulse-glow 2.5s ease-in-out infinite;
+}
+@keyframes wasl-cirkle-pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(194, 160, 96, 0.5)); }
+  50% { filter: drop-shadow(0 0 12px rgba(194, 160, 96, 0.35)); }
+}
+/* Splash entrance — scale + blur in (from Cirkle splash) */
+.wasl-cirkle-splash-in {
+  animation: wasl-cirkle-splash-in 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wasl-cirkle-splash-in {
+  from { transform: scale(0.4); opacity: 0; filter: blur(30px); }
+  to { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .wasl-logo-float,
   .wasl-logo-breathe,
-  .wasl-logo-dot {
+  .wasl-logo-dot,
+  .wasl-cirkle-spin,
+  .wasl-cirkle-pulse-glow,
+  .wasl-cirkle-splash-in {
     animation: none !important;
   }
 }
 
 /* ---- Commit card styles -------------------------------------------------- */
 .wasl-commit-card {
-  background: linear-gradient(135deg, rgba(37, 211, 102, 0.08), rgba(7, 94, 84, 0.08));
-  border: 1px solid rgba(37, 211, 102, 0.35);
+  /* Use theme-aware green/teal via color-mix so the card recolors in Cirkle */
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--wasl-green) 12%, transparent),
+    color-mix(in oklab, var(--wasl-teal) 12%, transparent)
+  );
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 40%, transparent);
   border-radius: 0.75rem;
 }
 .dark .wasl-commit-card {
-  background: linear-gradient(135deg, rgba(37, 211, 102, 0.12), rgba(7, 94, 84, 0.18));
-  border-color: rgba(37, 211, 102, 0.4);
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--wasl-green) 18%, transparent),
+    color-mix(in oklab, var(--wasl-teal) 22%, transparent)
+  );
+  border-color: color-mix(in oklab, var(--wasl-green) 45%, transparent);
 }
 .wasl-commit-status-pill {
   font-size: 0.65rem;
@@ -340,12 +509,12 @@
   color: #fbbf24;
 }
 .wasl-commit-status-active {
-  background: rgba(37, 211, 102, 0.15);
-  color: #047857;
+  background: color-mix(in oklab, var(--wasl-green) 18%, transparent);
+  color: color-mix(in oklab, var(--wasl-green) 75%, #000 25%);
 }
 .dark .wasl-commit-status-active {
-  background: rgba(37, 211, 102, 0.25);
-  color: #4ade80;
+  background: color-mix(in oklab, var(--wasl-green) 28%, transparent);
+  color: color-mix(in oklab, var(--wasl-green) 60%, #fff 40%);
 }
 .wasl-commit-status-completed {
   background: rgba(59, 130, 246, 0.15);

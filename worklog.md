@@ -192,3 +192,50 @@ Stage Summary:
   - No browser console errors, no 500s in dev log.
 - Lint passes with 0 errors / 0 warnings.
 - Both services (dev :3000, chat-service :3003) running via `setsid -f`.
+
+---
+
+Task ID: 5
+Agent: main (phase-5, Cirkle animated logo import)
+Task: Import the animated logo from Cirkle (github.com/fortleem/CIRKLE) into Wasl. The Cirkle animated logo is the `CircleMark` — three interlocking golden rings rotating slowly around a center dot. Integrate it so it renders when the Cirkle color theme is active.
+
+Work Log:
+- Studied Cirkle's animated logo components:
+  - `src/components/brand/circle-mark.tsx` — the animated orb: three interlocking rings (gold→rose→teal gradient) + center dot, with a 30s linear rotation (`animate-orb-float` / `orbFloat`).
+  - `src/components/brand/circle-logo.tsx` — the static quadrant mark (golden ring + 4 deep-teal icons).
+  - `src/app/globals.css` — `@keyframes orbFloat`, `pulseGlow`, `spin-slow` animations.
+  - `src/components/splash.tsx` — the splash entrance (scale 0.4 → 1 + blur 30px → 0 over 1.1s).
+- Added Cirkle orb animations to `globals.css`:
+  - `wasl-cirkle-spin` — 30s linear rotation (from Cirkle's `orbFloat`).
+  - `wasl-cirkle-pulse-glow` — 2.5s gold halo drop-shadow pulse (from Cirkle's `pulseGlow`).
+  - `wasl-cirkle-splash-in` — 1.1s scale+blur entrance (from Cirkle's splash).
+  - All respect `prefers-reduced-motion`.
+- Created `src/components/wasl/cirkle-mark.tsx`:
+  - `CirkleMark` — the imported animated Cirkle orb (three interlocking rings with gold→rose→teal gradient + pulsing center dot). Unique gradient id per instance to avoid collisions. Props: `size`, `animated`, `splash`, `className`.
+  - `CirkleMarkFavicon` — static (non-animated) version for PWA/favicon use.
+- Created `public/cirkle-favicon.svg` — the Cirkle orb favicon (dark bg + gold/rose/teal rings).
+- Updated `src/app/layout.tsx` to add `/cirkle-favicon.svg` as an alternate icon.
+- Updated `src/components/wasl/wasl-logo.tsx`:
+  - When the Cirkle color theme is active (`useCirkle && !monochrome`), `WaslLogo` now renders `<CirkleMark>` (the animated rotating orb) instead of the Wasl chat-bubble-in-ring SVG. The wordmark uses the Cirkle gold gradient text.
+  - When monochrome (sidebar header on dark background), keeps the white currentColor version.
+- Updated `src/components/wasl/auth-screen.tsx`:
+  - Auth hero uses `wasl-gradient-hero-cirkle` (gold→teal→rose) when Cirkle theme is active, else the Wasl teal gradient.
+  - Logo wrapper gets `wasl-cirkle-splash-in` entrance animation in Cirkle theme.
+  - "Wasl" wordmark uses `wasl-text-gradient-cirkle` (gold gradient) in Cirkle theme.
+- Updated `src/components/wasl/sidebar.tsx`:
+  - Sidebar header uses `wasl-gradient-hero-cirkle` background + non-monochrome (colored Cirkle orb) logo when Cirkle theme is active; falls back to `bg-[var(--wasl-teal)]` + monochrome logo for Wasl theme.
+- Updated `globals.css` commit-card + commit-status-active styles to use `color-mix(in oklab, var(--wasl-green) ...)` so they recolor to gold in the Cirkle theme (previously hardcoded green).
+
+Stage Summary:
+- Cirkle animated logo (three-ring rotating orb) imported from github.com/fortleem/CIRKLE and fully integrated.
+- When the Cirkle color theme is active, the logo on the auth hero, sidebar header, and chat empty state renders the animated Cirkle orb (30s rotation + 2.5s gold pulse-glow) instead of the Wasl chat-bubble design.
+- The auth hero gets the Cirkle gradient (gold→teal→rose) and the logo plays a splash entrance animation (scale+blur in).
+- A Cirkle favicon SVG (`/cirkle-favicon.svg`) is served and wired as an alternate icon.
+- All verified end-to-end with agent-browser:
+  - Cirkle theme: auth logo is `aria-label="Cirkle mark"`, viewBox `0 0 100 100`, 4 circles, with `wasl-cirkle-spin` animation (30s). Hero uses `wasl-gradient-hero-cirkle`.
+  - Sidebar header in Cirkle theme: `wasl-gradient-hero-cirkle` background + colored Cirkle orb logo (non-monochrome).
+  - Switching back to Wasl theme: logo reverts to `Wasl logo` (viewBox 64x64, chat-bubble design), header reverts to `bg-[var(--wasl-teal)]`.
+  - Cirkle + dark mode works: animated orb on charcoal background, no console errors.
+  - All three favicons serve HTTP 200 (logo.svg, wasl-favicon.svg, cirkle-favicon.svg).
+- Lint passes with 0 errors / 0 warnings.
+- Both services (dev :3000, chat-service :3003) running via `setsid -f`.

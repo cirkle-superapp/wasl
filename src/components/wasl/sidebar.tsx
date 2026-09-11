@@ -17,6 +17,7 @@ import {
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
+import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +53,8 @@ export function Sidebar({
   const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
   const [loading, setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
+  const { colorTheme } = useColorTheme()
+  const isCirkle = colorTheme === 'cirkle'
 
   async function loadConversations() {
     setLoading(true)
@@ -108,9 +111,14 @@ export function Sidebar({
   return (
     <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)]">
       {/* Header */}
-      <div className="bg-[var(--wasl-teal)] text-white px-4 py-3 flex items-center justify-between gap-2">
+      <div
+        className={cn(
+          'text-white px-4 py-3 flex items-center justify-between gap-2',
+          isCirkle ? 'wasl-gradient-hero-cirkle' : 'bg-[var(--wasl-teal)]'
+        )}
+      >
         <div className="flex items-center gap-2 min-w-0 text-white">
-          <WaslLogo size={36} animated monochrome />
+          <WaslLogo size={36} animated monochrome={!isCirkle} />
           <div className="font-bold text-lg leading-none truncate">Wasl</div>
         </div>
         <div className="flex items-center gap-1">

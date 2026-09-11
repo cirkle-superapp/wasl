@@ -9,6 +9,8 @@ import { Loader2, Phone, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { WaslLogo } from './wasl-logo'
+import { useColorTheme } from './color-theme-provider'
+import { cn } from '@/lib/utils'
 
 const DEMO_PHONE = '+201001234567'
 const DEMO_NAME = 'Demo User'
@@ -20,6 +22,8 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
+  const { colorTheme } = useColorTheme()
+  const isCirkle = colorTheme === 'cirkle'
 
   // Quick prefill helper for demo: ?demo=1
   useEffect(() => {
@@ -94,12 +98,26 @@ export function AuthScreen() {
   return (
     <div className="min-h-screen w-full flex flex-col">
       {/* Top hero banner with animated Wasl logo */}
-      <div className="bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)] text-white py-10 px-6">
+      <div
+        className={cn(
+          'text-white py-10 px-6',
+          isCirkle
+            ? 'wasl-gradient-hero-cirkle'
+            : 'bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)]'
+        )}
+      >
         <div className="max-w-md mx-auto text-center space-y-4">
-          <div className="inline-flex items-center justify-center">
+          <div className={cn('inline-flex items-center justify-center', isCirkle && 'wasl-cirkle-splash-in')}>
             <WaslLogo size={88} animated />
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Wasl</h1>
+          <h1
+            className={cn(
+              'text-4xl font-bold tracking-tight',
+              isCirkle && 'wasl-text-gradient-cirkle'
+            )}
+          >
+            Wasl
+          </h1>
           <p className="text-white/85 text-sm leading-relaxed">
             Simple. Secure. Connected.<br />
             Send and receive messages that stay between you and the people who matter.

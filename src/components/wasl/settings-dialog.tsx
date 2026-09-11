@@ -12,11 +12,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw } from 'lucide-react'
+import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw, Palette } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
+import { useColorTheme } from './color-theme-provider'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
+import { cn } from '@/lib/utils'
 
 export function SettingsDialog({
   open,
@@ -27,6 +29,7 @@ export function SettingsDialog({
 }) {
   const { user, setUser } = useWaslStore()
   const { theme, setTheme } = useTheme()
+  const { colorTheme, setColorTheme } = useColorTheme()
   const [name, setName] = useState(user?.name || '')
   const [about, setAbout] = useState(user?.about || '')
   const [saving, setSaving] = useState(false)
@@ -178,6 +181,59 @@ export function SettingsDialog({
               >
                 <Moon className="w-4 h-4 mr-2" /> Dark
               </Button>
+            </div>
+          </div>
+
+          {/* Color theme — Cirkle palette integration */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Palette className="w-4 h-4" /> Color theme
+            </Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Choose the signature accent palette. Cirkle uses a premium
+              gold / teal / cream system inspired by دواير.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setColorTheme('wasl')}
+                className={cn(
+                  'flex flex-col items-start gap-2 p-3 rounded-lg border-2 transition-all text-left',
+                  colorTheme === 'wasl'
+                    ? 'border-[var(--wasl-green)] bg-[var(--wasl-green)]/5'
+                    : 'border-border hover:border-foreground/30'
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-[#25d366]" />
+                  <span className="w-4 h-4 rounded-full bg-[#075e54]" />
+                  <span className="w-4 h-4 rounded-full bg-[#d9fdd3] border border-border" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">Wasl</div>
+                  <div className="text-[11px] text-muted-foreground">WhatsApp green</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setColorTheme('cirkle')}
+                className={cn(
+                  'flex flex-col items-start gap-2 p-3 rounded-lg border-2 transition-all text-left',
+                  colorTheme === 'cirkle'
+                    ? 'border-[var(--cirkle-gold)] bg-[var(--cirkle-gold)]/5'
+                    : 'border-border hover:border-foreground/30'
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-[#c2a060]" />
+                  <span className="w-4 h-4 rounded-full bg-[#1a4a5a]" />
+                  <span className="w-4 h-4 rounded-full bg-[#fdfcf9] border border-border" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold wasl-text-gradient-cirkle">Cirkle</div>
+                  <div className="text-[11px] text-muted-foreground">Gold · teal · cream</div>
+                </div>
+              </button>
             </div>
           </div>
 

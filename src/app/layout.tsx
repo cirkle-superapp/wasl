@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/wasl/theme-provider";
+import { ColorThemeProvider } from "@/components/wasl/color-theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,6 +24,7 @@ export const metadata: Metadata = {
     icon: [
       { url: "/logo.svg", type: "image/svg+xml" },
       { url: "/wasl-favicon.svg", type: "image/svg+xml" },
+      { url: "/cirkle-favicon.svg", type: "image/svg+xml" },
     ],
     apple: [{ url: "/wasl-favicon.svg", type: "image/svg+xml" }],
   },
@@ -40,6 +42,10 @@ export const metadata: Metadata = {
   },
 };
 
+// Inline script to apply the saved color theme BEFORE hydration, preventing
+// a flash of the default theme when the user previously chose Cirkle.
+const colorThemeScript = `(function(){try{var t=localStorage.getItem('wasl-color-theme');if(t==='cirkle'){document.documentElement.setAttribute('data-theme','cirkle');}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -47,6 +53,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
@@ -56,8 +65,10 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          {children}
-          <Toaster position="top-center" richColors />
+          <ColorThemeProvider>
+            {children}
+            <Toaster position="top-center" richColors />
+          </ColorThemeProvider>
         </ThemeProvider>
       </body>
     </html>
