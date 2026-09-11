@@ -12,10 +12,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw, Palette } from 'lucide-react'
+import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw, Palette, ShieldCheck, Building2, Search } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
 import { useColorTheme } from './color-theme-provider'
+import { VerifyPersonDialog } from './verify-person-dialog'
+import { BusinessRegisterDialog } from './business-register-dialog'
+import { BusinessDashboardDialog } from './business-dashboard-dialog'
+import { BusinessSearchDialog } from './business-search-dialog'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -33,6 +37,24 @@ export function SettingsDialog({
   const [name, setName] = useState(user?.name || '')
   const [about, setAbout] = useState(user?.about || '')
   const [saving, setSaving] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
+  const [bizRegisterOpen, setBizRegisterOpen] = useState(false)
+  const [bizSearchOpen, setBizSearchOpen] = useState(false)
+  const [myBusinesses, setMyBusinesses] = useState<any[]>([])
+  const [activeBizId, setActiveBizId] = useState<string | null>(null)
+  const [bizDashOpen, setBizDashOpen] = useState(false)
+
+  // Load my businesses when the dialog opens
+  useEffect(() => {
+    if (open) {
+      fetch('/api/business', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => {
+          setMyBusinesses(d.businesses || [])
+        })
+        .catch(() => {})
+    }
+  }, [open])
 
   useEffect(() => {
     if (open) {
@@ -260,6 +282,110 @@ export function SettingsDialog({
             </Button>
           </div>
 
+          {/* Business accounts section */}
+          <div className="pt-2 border-t border-border space-y-2">
+            <Label className="flex items-center gap-2">
+              <Building2 className="w-4 h-4" /> Business
+            </Label>
+            {/* Identity verification status */}
+            <div
+              className={cn(
+                'flex items-center gap-2 rounded-lg p-2.5 text-xs',
+                user?.verified
+                  ? 'bg-[var(--wasl-green)]/10 border border-[var(--wasl-green)]/30'
+                  : 'bg-amber-500/10 border border-amber-500/30'
+              )}
+            >
+              <ShieldCheck
+                className={cn(
+                  'w-4 h-4 shrink-0',
+                  user?.verified ? 'text-[var(--wasl-green)]' : 'text-amber-500'
+                )}
+              />
+              <div className="flex-1">
+                <div className="font-medium">
+                  {user?.verified ? 'Identity verified' : 'Identity not verified'}
+                </div>
+                <p className="text-muted-foreground">
+                  {user?.verified
+                    ? 'You can register a business.'
+                    : 'Verify your identity to unlock business registration.'}
+                </p>
+              </div>
+              {!user?.verified && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setVerifyOpen(true)}
+                >
+                  Verify
+                </Button>
+              )}
+            </div>
+
+            {/* My businesses */}
+            {myBusinesses.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase text-muted-foreground font-semibold">
+                  My businesses
+                </div>
+                {myBusinesses.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      setActiveBizId(b.id)
+                      setBizDashOpen(true)
+                    }}
+                    className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-muted/60 text-left transition-colors"
+                  >
+                    <WaslAvatar
+                      name={b.name}
+                      src={b.avatarPath}
+                      color={b.avatarColor}
+                      size={28}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate flex items-center gap-1">
+                        {b.name}
+                        {b.verified && (
+                          <ShieldCheck className="w-3 h-3 text-[var(--wasl-green)] shrink-0" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {b.members?.length || 0} member{b.members?.length === 1 ? '' : 's'} · {b.groups?.length || 0} group{b.groups?.length === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              {user?.verified && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setBizRegisterOpen(true)}
+                >
+                  <Building2 className="w-4 h-4 mr-1" /> Register business
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => setBizSearchOpen(true)}
+              >
+                <Search className="w-4 h-4 mr-1" /> Business search
+              </Button>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
@@ -280,6 +406,30 @@ export function SettingsDialog({
           </div>
         </div>
       </DialogContent>
+
+      {/* Business dialogs */}
+      <VerifyPersonDialog
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        onVerified={() => {
+          // Refresh the user object so the verified badge appears
+          if (user) setUser({ ...user, verified: true })
+        }}
+      />
+      <BusinessRegisterDialog
+        open={bizRegisterOpen}
+        onOpenChange={setBizRegisterOpen}
+        onRegistered={(id) => {
+          setActiveBizId(id)
+          setBizDashOpen(true)
+        }}
+      />
+      <BusinessDashboardDialog
+        open={bizDashOpen}
+        onOpenChange={setBizDashOpen}
+        businessId={activeBizId}
+      />
+      <BusinessSearchDialog open={bizSearchOpen} onOpenChange={setBizSearchOpen} />
     </Dialog>
   )
 }

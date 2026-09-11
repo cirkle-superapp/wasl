@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -32,9 +33,10 @@ export function CirkleMark({
   splash?: boolean
   className?: string
 }) {
-  // Unique gradient id per instance to avoid collisions when multiple marks
-  // are on the same page (sidebar header + chat empty state).
-  const gradId = `cirkle-grad-${Math.random().toString(36).slice(2, 8)}`
+  // Stable unique id via useId() — avoids hydration mismatches that
+  // Math.random() would cause (different value on server vs client).
+  const reactId = useId()
+  const gradId = `cirkle-grad-${reactId.replace(/[:]/g, '')}`
   return (
     <svg
       width={size}

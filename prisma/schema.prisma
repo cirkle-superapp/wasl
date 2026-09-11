@@ -18,6 +18,11 @@ model User {
   avatar    String?
   avatarColor String?
   online    Boolean  @default(false)
+  // Person verification — a user must be verified before they can register a
+  // business. Stores the path to the uploaded ID document.
+  verified       Boolean  @default(false)
+  idDocPath      String?
+  verifiedAt     DateTime?
   lastSeen  DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -27,6 +32,11 @@ model User {
   createdConversations Conversation[] @relation("ConversationCreator")
   createdCommits    Commit[]      @relation("CommitCreator")
   countersignedCommits Commit[]   @relation("CommitCounterparty")
+  stories          Story[]
+  folders          ChatFolder[]
+  // Business
+  ownedBusinesses   Business[]     @relation("BusinessOwner")
+  businessMemberships BusinessMember[]
 }
 
 model Conversation {
@@ -184,6 +194,8 @@ model Story {
   createdAt DateTime @default(now())
   expiresAt DateTime
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, createdAt])
 }
 
@@ -208,6 +220,7 @@ model ChatFolder {
   icon      String?
   createdAt DateTime @default(now())
 
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversations FolderConversation[]
 
   @@unique([userId, name])
@@ -224,4 +237,81 @@ model FolderConversation {
 
   @@unique([folderId, conversationId])
   @@index([folderId])
+}
+
+// ==========================================================================
+// Business accounts — Cirkle-inspired business feature.
+// A verified person can register a business. The business must be verified
+// (upload company registration + tax number + ID of someone on the
+// registration). Once verified, the owner can create public/private groups
+// and invite members. A business can have a hidden phone number that only
+// surfaces via the business search.
+// ==========================================================================
+
+model Business {
+  id              String   @id @default(cuid())
+  name            String
+  ownerId         String
+  // Public search handle (unique). Users find the business by this name.
+  description     String   @default("")
+  avatarPath      String?
+  avatarColor     String?
+  category        String?  // e.g. "Technology", "Food", "Customer Service"
+  // Verification
+  registrationDocPath String?  // company registration document
+  taxDocPath          String?  // tax number document
+  idDocPath           String?  // ID of someone on the registration
+  status          String   @default("pending") // pending | approved | rejected
+  rejectionReason String?
+  verifiedAt      DateTime?
+  // A hidden phone number that only surfaces via business search.
+  hiddenPhone     String?
+  hidePhone       Boolean  @default(false)
+  verified        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner   User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members BusinessMember[]
+  groups  BusinessGroup[]
+
+  @@index([ownerId])
+}
+
+/// Membership in a business. The owner is an admin by default; the owner can
+/// promote other members to admin. Only admins/owner can invite people.
+model BusinessMember {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String
+  role        String   @default("member") // member | admin
+  invitedBy   String?
+  joinedAt    DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+}
+
+/// A group owned by a business. Can be public (anyone can find + join via
+/// business search) or private (invite-only, doesn't appear in search).
+/// Maps to a Conversation with `isGroup=true`; we link via conversationId.
+model BusinessGroup {
+  id             String   @id @default(cuid())
+  businessId     String
+  conversationId String
+  name           String
+  description    String   @default("")
+  visibility     String   @default("private") // public | private
+  category       String?  // e.g. "Customer Service", "Orders", "Employees"
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([visibility])
 }

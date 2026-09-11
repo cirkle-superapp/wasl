@@ -10,6 +10,7 @@ export type SessionUser = {
   avatar: string | null
   avatarColor: string | null
   about: string
+  verified: boolean
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -25,6 +26,7 @@ export async function getSession(): Promise<SessionUser | null> {
       avatar: true,
       avatarColor: true,
       about: true,
+      verified: true,
     },
   })
   return user ?? null

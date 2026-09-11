@@ -19,6 +19,7 @@ export default async function Page() {
         avatar: session.avatar,
         avatarColor: session.avatarColor,
         about: session.about,
+        verified: session.verified,
       }}
     />
   )

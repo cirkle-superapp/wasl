@@ -9,6 +9,7 @@ export type CurrentUser = {
   avatar: string | null
   avatarColor: string | null
   about: string
+  verified?: boolean
 }
 
 export type Participant = {

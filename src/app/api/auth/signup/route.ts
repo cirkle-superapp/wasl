@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       avatar: user.avatar,
       avatarColor: user.avatarColor,
       about: user.about,
+      verified: user.verified,
     })
   } catch (err) {
     console.error('[auth/signup] error', err)
