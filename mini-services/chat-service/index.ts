@@ -6,7 +6,7 @@ const io = new Server(httpServer, {
   // DO NOT change the path, it is used by Caddy to forward the request to the correct port
   path: '/',
   cors: {
-    origin: '*',
+    origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
     methods: ['GET', 'POST'],
   },
   pingTimeout: 60000,

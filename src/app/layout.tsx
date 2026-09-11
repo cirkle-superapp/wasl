@@ -47,6 +47,9 @@ export const metadata: Metadata = {
 // preference is stored, so the app loads with the Cirkle brand colors by default.
 const colorThemeScript = `(function(){try{var t=localStorage.getItem('wasl-color-theme');if(t==='wasl'){document.documentElement.removeAttribute('data-theme');}else{document.documentElement.setAttribute('data-theme','cirkle');}}catch(e){document.documentElement.setAttribute('data-theme','cirkle');}})();`;
 
+// Register the PWA service worker + request notification permission
+const swScript = `(function(){if('serviceWorker'in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}if('Notification'in window&&Notification.permission==='default'){window.addEventListener('load',function(){setTimeout(function(){Notification.requestPermission().catch(function(){});},3000);});}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,6 +59,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}

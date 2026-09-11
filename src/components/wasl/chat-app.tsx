@@ -137,6 +137,27 @@ export function ChatApp({ user }: { user: any }) {
       }
     }) {
       if (!payload || !payload.conversationId) return
+      // Desktop notification when tab is not focused + message from someone else
+      if (payload.lastMessage && payload.lastMessage.senderId !== user.id) {
+        if (typeof document !== 'undefined' && document.hidden) {
+          try {
+            if (Notification.permission === 'granted') {
+              const conv = useWaslStore.getState().conversations.find(
+                (c) => c.id === payload.conversationId
+              )
+              const senderName =
+                conv?.participants.find(
+                  (p) => p.userId === payload.lastMessage.senderId
+                )?.name || 'Someone'
+              new Notification(`${senderName} on Wasl`, {
+                body: payload.lastMessage.content.slice(0, 100),
+                icon: '/wasl-favicon.svg',
+                tag: payload.conversationId,
+              })
+            }
+          } catch {}
+        }
+      }
       // Refresh just this conversation to get last message + unread count
       fetch(`/api/conversations`, { cache: 'no-store' })
         .then((r) => r.json())
