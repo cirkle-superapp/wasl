@@ -17,6 +17,7 @@ import {
   Lock,
   ListChecks,
   Wand2,
+  Timer,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -553,6 +554,64 @@ export function ChatWindow({
     [activeConversationId, removeMessage]
   )
 
+  // ---- Edit message --------------------------------------------------------
+  const handleEditMessage = useCallback(
+    async (m: ChatMessage) => {
+      const newContent = prompt('Edit your message:', m.content)
+      if (!newContent || newContent.trim() === m.content) return
+      try {
+        const res = await fetch(`/api/messages/${m.id}/edit`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: newContent.trim() }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => null)
+          toast.error(err?.error || 'Failed to edit')
+          return
+        }
+        // Update locally
+        useWaslStore.getState().updateMessage(activeConversationId, m.id, { content: newContent.trim() })
+        getSocket().emit('message:reacted', { conversationId: activeConversationId, messageId: m.id })
+        toast.success('Message edited')
+      } catch {
+        toast.error('Failed to edit')
+      }
+    },
+    [activeConversationId]
+  )
+
+  // ---- Forward message -----------------------------------------------------
+  const handleForwardMessage = useCallback(
+    async (m: ChatMessage) => {
+      const target = prompt('Enter conversation ID to forward to (or type a name):')
+      if (!target) return
+      // Try to find a conversation by name
+      const conv = useWaslStore.getState().conversations.find(
+        (c) => c.name.toLowerCase().includes(target.toLowerCase())
+      )
+      if (!conv) {
+        toast.error('Conversation not found')
+        return
+      }
+      try {
+        const res = await fetch(`/api/messages/${m.id}/forward`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetConversationId: conv.id }),
+        })
+        if (res.ok) {
+          toast.success(`Forwarded to ${conv.name}`)
+        } else {
+          toast.error('Failed to forward')
+        }
+      } catch {
+        toast.error('Network error')
+      }
+    },
+    []
+  )
+
   const handleSendImage = useCallback(
     async (dataUrl: string) => {
       await handleSend(dataUrl, 'image')
@@ -713,6 +772,18 @@ export function ChatWindow({
               <DropdownMenuItem onClick={() => setAppLockOpen(true)}>
                 <Lock className="w-4 h-4 mr-2" /> App lock
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={async () => {
+                const setting = await fetch(`/api/disappearing?conversationId=${activeConversationId}`).then(r => r.json())
+                const enabled = !setting.setting?.enabled
+                await fetch('/api/disappearing', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conversationId: activeConversationId, enabled, duration: 86400 }),
+                })
+                toast.success(enabled ? 'Disappearing messages ON (24h)' : 'Disappearing messages OFF')
+              }}>
+                <Timer className="w-4 h-4 mr-2" /> Disappearing messages
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                 <Trash2 className="w-4 h-4 mr-2" /> Delete chat
               </DropdownMenuItem>
@@ -768,6 +839,8 @@ export function ChatWindow({
                       onStar={() => handleStar(m.id)}
                       onCopy={() => handleCopyMessage(m)}
                       onDelete={() => handleDeleteMessage(m.id)}
+                      onEdit={() => handleEditMessage(m)}
+                      onForward={() => handleForwardMessage(m)}
                       starred={m.starred}
                       reactions={m.reactions}
                       currentUserId={user?.id}

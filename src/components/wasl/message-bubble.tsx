@@ -12,6 +12,8 @@ import {
   SmilePlus,
   Play,
   Pause,
+  Pencil,
+  Forward,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -29,6 +31,8 @@ export function MessageBubble({
   onStar,
   onCopy,
   onDelete,
+  onEdit,
+  onForward,
   starred,
   reactions,
   currentUserId,
@@ -42,6 +46,8 @@ export function MessageBubble({
   onStar?: () => void
   onCopy?: () => void
   onDelete?: () => void
+  onEdit?: () => void
+  onForward?: () => void
   starred?: boolean
   reactions?: Reaction[]
   currentUserId?: string
@@ -160,6 +166,16 @@ export function MessageBubble({
           <ToolbarButton title="Copy" onClick={() => { onCopy?.(); setShowReactions(false) }}>
             <Copy className="w-4 h-4" />
           </ToolbarButton>
+          {mine && message.type === 'text' && onEdit && (
+            <ToolbarButton title="Edit" onClick={() => onEdit()}>
+              <Pencil className="w-4 h-4" />
+            </ToolbarButton>
+          )}
+          {onForward && (
+            <ToolbarButton title="Forward" onClick={() => onForward()}>
+              <Forward className="w-4 h-4" />
+            </ToolbarButton>
+          )}
           {mine && (
             <ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>
               <Trash2 className="w-4 h-4" />

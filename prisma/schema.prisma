@@ -498,3 +498,12 @@ model ReceiptSplitParticipant {
 
   @@unique([splitId, userId])
 }
+
+/// Disappearing message settings per conversation (Cirkle-inspired privacy)
+model DisappearingSetting {
+  id             String   @id @default(cuid())
+  conversationId String   @unique
+  enabled        Boolean  @default(false)
+  duration       Int      @default(86400) // seconds (86400 = 24h, 604800 = 7d, 7776000 = 90d)
+  updatedAt      DateTime @updatedAt
+}
