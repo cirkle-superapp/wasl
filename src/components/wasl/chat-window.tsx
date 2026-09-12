@@ -437,13 +437,16 @@ export function ChatWindow({
       ) {
         const conversationId = activeConversationId
         const userId = user.id
-        // Show typing
+        // Show typing — the socket.io server broadcasts typing:update to all
+        // clients EXCEPT the sender, so we also set it locally to ensure the
+        // current user sees the typing indicator in the chat window and sidebar.
         setTimeout(() => {
           getSocket().emit('typing:start', {
             conversationId,
             userId: otherUser.userId,
             name: otherUser.name,
           })
+          useWaslStore.getState().setTyping(conversationId, otherUser.userId, true)
         }, 600)
         setBotReplying(true)
         const delay = 1200 + Math.min(content.length * 30, 1800)
@@ -452,6 +455,7 @@ export function ChatWindow({
             conversationId,
             userId: otherUser.userId,
           })
+          useWaslStore.getState().setTyping(conversationId, otherUser.userId, false)
           try {
             const botRes = await fetch(
               `/api/conversations/${conversationId}/bot-reply`,
@@ -766,15 +770,21 @@ export function ChatWindow({
   )
 
   // ---- Mark messages read on initial load -----------------------------------
+  // Capture the initial unread count BEFORE clearing it — used to show the
+  // "Unread messages" separator between the last read message and the first
+  // unread message. The separator stays as a visual marker even after the
+  // messages are marked as read.
+  const initialUnreadRef = useRef<number>(0)
   useEffect(() => {
     if (!activeConversationId || !conversation) return
+    initialUnreadRef.current = conversation.unreadCount || 0
     // The GET messages endpoint already marks as read on the server.
     // We just need to update the sidebar unread count for this conversation.
     upsertConversation({
       ...conversation,
       unreadCount: 0,
     })
-     
+
   }, [activeConversationId])
 
   // ---- Delete conversation ---------------------------------------------------
@@ -801,8 +811,8 @@ export function ChatWindow({
 
   if (!activeConversationId || !conversation) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6">
-        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4">
+      <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6 overflow-y-auto wasl-scroll">
+        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
           <WaslLogo size={72} animated />
           <h2 className="text-xl font-semibold text-foreground">
             Welcome to Wasl
@@ -810,6 +820,40 @@ export function ChatWindow({
           <p className="text-sm text-muted-foreground">
             Select a conversation to start chatting, or tap the + button to create a new chat.
           </p>
+          {/* Feature hint cards */}
+          <div className="grid grid-cols-2 gap-2 w-full mt-2">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+              <Lock className="w-4 h-4 text-[var(--wasl-green)] mb-1" />
+              <div className="text-[11px] font-medium text-foreground">Protected messages</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">Lock icon in composer</div>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+              <Paperclip className="w-4 h-4 text-[var(--wasl-teal)] mb-1" />
+              <div className="text-[11px] font-medium text-foreground">Drag & drop</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">Images up to 1.5MB</div>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+              <Sparkles className="w-4 h-4 text-amber-500 mb-1" />
+              <div className="text-[11px] font-medium text-foreground">AI summary</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">In chat menu</div>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+              <Search className="w-4 h-4 text-sky-500 mb-1" />
+              <div className="text-[11px] font-medium text-foreground">Search</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">Ctrl+K palette</div>
+            </div>
+          </div>
+          {/* Keyboard shortcut hint */}
+          <div className="flex items-center gap-2 mt-3 text-[11px] text-muted-foreground">
+            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">Ctrl</kbd>
+            <span>+</span>
+            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">K</kbd>
+            <span>to search ·</span>
+            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">Ctrl</kbd>
+            <span>+</span>
+            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">/</kbd>
+            <span>for shortcuts</span>
+          </div>
         </div>
       </div>
     )
@@ -1011,6 +1055,14 @@ export function ChatWindow({
               const replyToMsg = m.replyToId
                 ? messages.find((mm) => mm.id === m.replyToId)
                 : null
+              // Compute the index of the first unread message. The separator
+              // appears before that message (only if there are unread messages
+              // and they're not the very first message in the visible batch).
+              const unreadBoundary = messages.length - (initialUnreadRef.current || 0)
+              const showUnreadSeparator =
+                initialUnreadRef.current > 0 &&
+                idx === unreadBoundary &&
+                unreadBoundary > 0
               return (
                 <div key={m.id}>
                   {showDate && (
@@ -1018,6 +1070,15 @@ export function ChatWindow({
                       <div className="wasl-date-pill text-xs px-3 py-1 rounded-lg font-medium">
                         {date}
                       </div>
+                    </div>
+                  )}
+                  {showUnreadSeparator && (
+                    <div className="wasl-unread-separator flex items-center gap-3 my-3 select-none">
+                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--wasl-green)] px-2">
+                        Unread messages
+                      </span>
+                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
                     </div>
                   )}
                   <div className="group mb-1.5">

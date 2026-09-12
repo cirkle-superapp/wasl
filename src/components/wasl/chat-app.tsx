@@ -8,6 +8,7 @@ import { ChatWindow } from './chat-window'
 import { ContactInfoPanel } from './contact-info-panel'
 import { NewChatDialog } from './new-chat-dialog'
 import { SettingsDialog } from './settings-dialog'
+import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 import type { ChatMessage, Conversation } from '@/lib/store'
 
 export function ChatApp({ user }: { user: any }) {
@@ -104,25 +105,66 @@ export function ChatApp({ user }: { user: any }) {
     if (!user?.id) return
     const socket = connectSocket(user.id)
 
-    // Track socket connection state for the chat-header indicator
+    // Track socket connection state for the chat-header indicator.
+    // We use a 3-second grace period before showing 'reconnecting' — this
+    // prevents the "Reconnecting…" pill from flashing on every page load
+    // during the initial socket.io handshake (which may include a brief
+    // polling→websocket upgrade delay).
+    let hasConnectedOnce = socket.connected
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    function clearReconnectTimer() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+    }
+
     function onConnect() {
-      setSocketStatus(socket.connected ? 'connected' : 'connecting')
+      hasConnectedOnce = true
+      clearReconnectTimer()
+      setSocketStatus('connected')
     }
     function onDisconnect() {
-      setSocketStatus('disconnected')
+      // Only show 'disconnected' if we were previously connected — otherwise
+      // it's just the initial connection attempt failing, which is 'connecting'.
+      if (hasConnectedOnce) {
+        clearReconnectTimer()
+        setSocketStatus('disconnected')
+      }
     }
     function onReconnectAttempt() {
-      setSocketStatus('reconnecting')
+      // Debounce: only show 'reconnecting' after 3s of continuous failure.
+      // If the socket connects within 3s, the timer is cancelled and the
+      // status stays at 'connected' (or 'connecting' for the first attempt).
+      if (!reconnectTimer && hasConnectedOnce) {
+        reconnectTimer = setTimeout(() => {
+          setSocketStatus('reconnecting')
+        }, 3000)
+      }
     }
     function onReconnect() {
+      clearReconnectTimer()
       setSocketStatus('connected')
     }
     function onReconnectError() {
-      setSocketStatus('reconnecting')
+      // Same debounce as onReconnectAttempt — don't flash the indicator
+      // for brief polling failures during the websocket upgrade.
+      if (!reconnectTimer && hasConnectedOnce) {
+        reconnectTimer = setTimeout(() => {
+          setSocketStatus('reconnecting')
+        }, 3000)
+      }
+    }
+    function onConnectError() {
+      // connect_error fires on the initial connection attempt. Don't show
+      // 'reconnecting' for this — the socket is still trying for the first
+      // time, not reconnecting.
     }
     setSocketStatus(socket.connected ? 'connected' : 'connecting')
     socket.on('connect', onConnect)
     socket.on('disconnect', onDisconnect)
+    socket.on('connect_error', onConnectError)
     socket.io.on('reconnect_attempt', onReconnectAttempt)
     socket.io.on('reconnect', onReconnect)
     socket.io.on('reconnect_error', onReconnectError)
@@ -214,8 +256,10 @@ export function ChatApp({ user }: { user: any }) {
     socket.on('conversation:upserted', onConversationUpserted)
 
     return () => {
+      clearReconnectTimer()
       socket.off('connect', onConnect)
       socket.off('disconnect', onDisconnect)
+      socket.off('connect_error', onConnectError)
       socket.io.off('reconnect_attempt', onReconnectAttempt)
       socket.io.off('reconnect', onReconnect)
       socket.io.off('reconnect_error', onReconnectError)
@@ -279,6 +323,7 @@ export function ChatApp({ user }: { user: any }) {
 
       <NewChatDialog open={newChatOpen} onOpenChange={setNewChatOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <KeyboardShortcutsDialog />
     </div>
   )
 }

@@ -299,6 +299,22 @@ function ConversationRow({
     !!otherUser &&
     (onlineUserIds.has(otherUser.userId) || otherUser.online)
 
+  // Reactive subscription to typing state for THIS conversation.
+  // Select only the raw typing object (not a transformed array) so Zustand
+  // can cache the reference and avoid infinite re-renders. The transformation
+  // to display names is done in the component body below.
+  const typingByConv = useWaslStore((s) => s.typingByConversation[conversation.id])
+  const myId = useWaslStore((s) => s.user?.id)
+  const typingNames = typingByConv
+    ? Object.entries(typingByConv)
+        .filter(([uid]) => uid !== myId)
+        .map(([uid]) => {
+          const p = conversation.participants.find((pp) => pp.userId === uid)
+          return p?.name?.split(' ')[0] || 'Someone'
+        })
+    : []
+  const isTyping = typingNames.length > 0
+
   const isMine = last?.senderId === useWaslStore.getState().user?.id
 
   let preview = last?.content || 'Tap to start chatting'
@@ -311,6 +327,14 @@ function ConversationRow({
       : isMine && last && last.type !== 'system'
       ? 'You: '
       : ''
+
+  // Typing preview text — "typing…" for 1-on-1, "Name is typing…" for groups
+  const typingText =
+    conversation.isGroup && typingNames.length === 1
+      ? `${typingNames[0]} is typing…`
+      : conversation.isGroup && typingNames.length > 1
+        ? `${typingNames.length} people typing…`
+        : 'typing…'
 
   return (
     <div
@@ -371,24 +395,40 @@ function ConversationRow({
           <div
             className={cn(
               'text-sm truncate flex items-center gap-1',
-              conversation.unreadCount > 0
-                ? 'text-foreground font-medium'
-                : 'text-muted-foreground'
+              isTyping
+                ? 'text-[var(--wasl-green)] font-medium'
+                : conversation.unreadCount > 0
+                  ? 'text-foreground font-medium'
+                  : 'text-muted-foreground'
             )}
           >
-            {isMine && last && last.type !== 'system' && (
-              <CheckCheck
-                className={cn(
-                  'w-4 h-4 shrink-0',
-                  last.status === 'read'
-                    ? 'text-sky-500'
-                    : last.status === 'delivered'
-                    ? 'text-sky-400'
-                    : 'text-muted-foreground'
+            {isTyping ? (
+              <>
+                {/* Animated typing dots for the sidebar preview */}
+                <span className="inline-flex items-center gap-0.5 mr-0.5">
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                </span>
+                <span className="truncate">{typingText}</span>
+              </>
+            ) : (
+              <>
+                {isMine && last && last.type !== 'system' && (
+                  <CheckCheck
+                    className={cn(
+                      'w-4 h-4 shrink-0',
+                      last.status === 'read'
+                        ? 'text-sky-500'
+                        : last.status === 'delivered'
+                        ? 'text-sky-400'
+                        : 'text-muted-foreground'
+                    )}
+                  />
                 )}
-              />
+                <span className="truncate">{previewSender + preview}</span>
+              </>
             )}
-            <span className="truncate">{previewSender + preview}</span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {conversation.unreadCount > 0 ? (

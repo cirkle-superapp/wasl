@@ -1220,3 +1220,93 @@ Agent: main (cron job 380238 — webDevReview)
 - Group avatar could animate the stacked initials in on mount
 - The "Reconnecting…" indicator could auto-trigger a manual reconnect button
 - Markdown could be extended to support ```fenced code blocks``` and > blockquotes
+
+---
+Task ID: 20 — Bug fix (Reconnecting status) + 4 new features + visual polish (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–19 complete). App was healthy: dev server (port 3000) + chat-service (port 3003) both running. Lint passes.
+- **Bug found**: The "Reconnecting…" status indicator was stuck on every page load. Root cause: the socket.io polling transport fails with HTTP 404 because the browser connects directly to port 3000 (Next.js), bypassing Caddy (port 81) which routes XTransformPort requests. The socket.io client keeps retrying polling, firing `reconnect_error` → status stays 'reconnecting'.
+- Real-time features (typing indicators, presence) were broken in local dev because the socket never connected.
+
+### Phase 2: Bug Fix
+
+**1. Next.js rewrite proxy for /socket.io (next.config.ts)**
+- Added `async rewrites()` to `next.config.ts` that proxies `/socket.io` and `/socket.io/:path*` to `http://localhost:3003` (the chat-service).
+- In production (through Caddy on port 81), this rewrite is never triggered because Caddy handles the routing before the request reaches Next.js.
+- In local dev (browser → port 3000), Next.js now forwards socket.io requests to port 3003, fixing the 404s.
+- Configurable via `SOCKET_IO_PORT` env var (defaults to 3003).
+- **Result**: socket.io polling now returns 200, websocket upgrade succeeds, and real-time features work in local dev.
+
+**2. Grace period for "Reconnecting…" status (chat-app.tsx)**
+- Added `hasConnectedOnce` ref to track if the socket has ever successfully connected.
+- `reconnect_attempt` and `reconnect_error` now only set status to 'reconnecting' if the socket has previously connected (prevents the initial connection flash).
+- Added a 3-second debounce timer: even after the first disconnection, the "Reconnecting…" indicator only appears after 3 seconds of continuous failure. If the socket reconnects within 3s, the timer is cancelled.
+- `connect_error` handler added — fires on the initial connection attempt. Deliberately does NOT set 'reconnecting' because the socket is still trying for the first time, not reconnecting.
+- **Result**: No more "Reconnecting…" flash on page load. The indicator only appears for genuine, prolonged disconnections (>3 seconds after the first successful connection).
+
+### Phase 3: New Features
+
+**3. Unread message separator (chat-window.tsx)**
+- Captures the initial `unreadCount` from the conversation BEFORE clearing it (via `initialUnreadRef`).
+- Shows a green "Unread messages" divider line between the last read message and the first unread message.
+- The separator stays as a visual marker even after messages are marked as read.
+- Has a subtle `wasl-unread-fade-in` CSS animation (0.3s scale + opacity).
+- **Verified**: inserted 3 unread test messages, opened the chat, and confirmed "UNREAD MESSAGES" divider appears.
+
+**4. Typing indicator in sidebar (sidebar.tsx)**
+- ConversationRow now reactively subscribes to `typingByConversation[conversation.id]` (via `useWaslStore`).
+- When someone is typing, the sidebar preview shows animated green dots + "typing…" text (or "Name is typing…" for groups).
+- Fixed a Zustand infinite-loop bug: the initial selector returned a new array on every render (`Object.entries(...).filter(...).map(...)`). Fixed by selecting only the raw typing object and transforming it in the component body.
+- Also fixed the demo bot typing simulation: the socket.io server broadcasts `typing:update` to all clients EXCEPT the sender, so the current user never received the typing event. Added `useWaslStore.getState().setTyping(...)` calls alongside the socket emits to ensure the current user sees the indicator.
+- **Verified**: sent a message to Amira (demo bot), saw 6 typing dots (3 in sidebar + 3 in chat), "typing…" text in green in the sidebar, and "Amira Hassan typing…" in the chat header.
+
+**5. Keyboard shortcuts dialog (keyboard-shortcuts-dialog.tsx — NEW)**
+- New component `KeyboardShortcutsDialog` that opens with `Ctrl+/` (or `Cmd+/` on Mac).
+- Shows all shortcuts grouped by category (Navigation, Messages, Search, Settings) with proper `<kbd>` key badges.
+- Includes shortcuts: Ctrl+K (command palette), Ctrl+/ (this dialog), Esc (close), Enter (send), Shift+Enter (new line), ↑↓ (navigate search), Ctrl+V (paste image), Ctrl+F (search messages), Ctrl+, (settings), Ctrl+L (app lock).
+- Added `Ctrl+,` shortcut to open settings (dispatches the same event as the command palette).
+- Global `<kbd>` styling added to globals.css (monospace font, proper sizing).
+- **Verified**: pressed Ctrl+/, dialog opened with all shortcuts listed.
+
+### Phase 4: Visual Polish
+
+**6. Improved welcome screen (chat-window.tsx)**
+- The empty-state welcome screen now shows a 2x2 grid of feature hint cards:
+  - "Protected messages" (Lock icon, green) — "Lock icon in composer"
+  - "Drag & drop" (Paperclip icon, teal) — "Images up to 1.5MB"
+  - "AI summary" (Sparkles icon, amber) — "In chat menu"
+  - "Search" (Search icon, sky) — "Ctrl+K palette"
+- Added keyboard shortcut hints at the bottom: `Ctrl+K to search · Ctrl+/ for shortcuts` with proper `<kbd>` styling.
+- The welcome card now scrolls if the viewport is too small (`overflow-y-auto wasl-scroll`).
+
+**7. Date pill animation (globals.css)**
+- Added `wasl-date-pill-in` keyframe: 0.2s subtle slide-down + fade-in.
+- Applied to all date dividers in the chat (they animate in when scrolled into view).
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors
+- ✅ No "Reconnecting…" status on page load (socket connects successfully via the rewrite proxy)
+- ✅ No socket.io 404s in the dev log (rewrite proxy forwards to port 3003)
+- ✅ Typing indicator shows in sidebar (green dots + "typing…" text) + chat header + chat messages area
+- ✅ Unread message separator shows "UNREAD MESSAGES" divider between read and unread messages
+- ✅ Keyboard shortcuts dialog opens with Ctrl+/ and shows all shortcuts grouped by category
+- ✅ Welcome screen shows feature hint cards + keyboard shortcut hints
+- ✅ No console errors
+- ✅ Messages send and receive correctly (REST API + socket.io)
+
+### Files Touched
+- `next.config.ts` — rewrite proxy for /socket.io → localhost:3003
+- `src/app/globals.css` — kbd styling, date pill animation, unread separator animation
+- `src/components/wasl/chat-app.tsx` — socket status grace period (3s debounce + hasConnectedOnce ref) + connect_error handler + KeyboardShortcutsDialog import
+- `src/components/wasl/chat-window.tsx` — unread separator + improved welcome screen + local setTyping for demo bot
+- `src/components/wasl/sidebar.tsx` — typing indicator in conversation list (reactive subscription + animated dots)
+- `src/components/wasl/keyboard-shortcuts-dialog.tsx` — NEW (Ctrl+/ dialog with all shortcuts)
+
+### Outstanding (next-phase priorities)
+- Wire up the contact-info-panel "Mute notifications", "Starred messages", and "Encryption" buttons to real backend state
+- Add OpenGraph meta tag fetching for richer link previews (title + description + image)
+- Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
+- Add a message context menu (right-click on desktop) for quick react/reply/copy/forward
+- Add read receipts viewer in contact-info panel ("Seen by" list)

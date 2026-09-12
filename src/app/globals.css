@@ -700,6 +700,32 @@
   animation: wasl-bubble-out-in 0.16s ease-out;
 }
 
+/* ---- Unread messages separator ---- */
+@keyframes wasl-unread-fade-in {
+  from { opacity: 0; transform: scaleX(0.8); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+.wasl-unread-separator {
+  animation: wasl-unread-fade-in 0.3s ease-out;
+}
+
+/* ---- Keyboard key styling (kbd elements) ---- */
+kbd {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.7rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* ---- Date pill subtle entrance ---- */
+@keyframes wasl-date-pill-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wasl-date-pill {
+  animation: wasl-date-pill-in 0.2s ease-out;
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 
