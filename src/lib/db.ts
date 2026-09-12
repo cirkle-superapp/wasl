@@ -5,6 +5,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+let _db: PrismaClient | null = null
+
 function createPrismaClient(): PrismaClient {
   const useTurso = process.env.USE_TURSO === 'true'
   const tursoUrl = process.env.TURSO_DATABASE_URL
@@ -12,8 +14,6 @@ function createPrismaClient(): PrismaClient {
 
   if (useTurso && tursoUrl && tursoToken && tursoUrl.startsWith('libsql://')) {
     try {
-      // Pass config directly to PrismaLibSQL (not a separate libsql client).
-      // This is the correct API per @prisma/adapter-libsql docs.
       const adapter = new PrismaLibSQL({
         url: tursoUrl,
         authToken: tursoToken,
@@ -25,13 +25,28 @@ function createPrismaClient(): PrismaClient {
     }
   }
 
-  // Local SQLite — keep the default PrismaClient behavior (no adapter needed)
   console.log('[db] Using local SQLite')
   return new PrismaClient({
     log: process.env.NODE_ENV !== 'production' ? ['error', 'warn'] : ['error'],
   })
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+// LAZY initialization: only create the Prisma client on first property access.
+// This ensures process.env is fully loaded by Next.js before we read it.
+function getDb(): PrismaClient {
+  if (_db) return _db
+  _db = createPrismaClient()
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = _db
+  }
+  return _db
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+// Export a Proxy that lazily initializes on first access
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getDb()
+    const value = (client as any)[prop]
+    return typeof value === 'function' ? value.bind(client) : value
+  },
+})
