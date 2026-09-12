@@ -264,6 +264,44 @@ export function AuthScreen() {
       {/* Form area pinned to bottom */}
       <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-10">
         <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-8 space-y-6">
+          {/* Tab switcher — segmented control for Sign up / Log in */}
+          <div className="relative flex p-1 bg-muted/50 rounded-xl border border-border/60">
+            <button
+              type="button"
+              onClick={() => setMode('signup')}
+              className={cn(
+                'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
+                mode === 'signup'
+                  ? cn(
+                      'text-white shadow-sm',
+                      isCirkle
+                        ? 'bg-[#009588]'
+                        : 'bg-[var(--wasl-green)]'
+                    )
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Sign up
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={cn(
+                'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
+                mode === 'login'
+                  ? cn(
+                      'text-white shadow-sm',
+                      isCirkle
+                        ? 'bg-[#009588]'
+                        : 'bg-[var(--wasl-green)]'
+                    )
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Log in
+            </button>
+          </div>
+
           <div className="space-y-1.5">
             <h2 className="text-2xl font-semibold text-foreground">
               {mode === 'signup' ? 'Create your account' : 'Welcome back'}
@@ -454,42 +492,19 @@ export function AuthScreen() {
             </Button>
           </form>
 
-          <div className="text-center text-sm">
-            {mode === 'signup' ? (
-              <span className="text-muted-foreground">
-                Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode('login')}
-                  className={cn(
-                    'font-medium hover:underline',
-                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
-                  )}
-                >
-                  Log in
-                </button>
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border/60" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white dark:bg-[var(--wasl-sidebar-bg)] px-3 text-muted-foreground">
+                or
               </span>
-            ) : (
-              <span className="text-muted-foreground">
-                New to Wasl?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode('signup')}
-                  className={cn(
-                    'font-medium hover:underline',
-                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
-                  )}
-                >
-                  Create an account
-                </button>
-              </span>
-            )}
+            </div>
           </div>
 
-          <div className="pt-2 text-center">
-            <p className="text-xs text-muted-foreground mb-2">
-              Tip: explore Wasl in one click
-            </p>
+          <div className="text-center">
             <Button
               type="button"
               variant="outline"
@@ -501,7 +516,11 @@ export function AuthScreen() {
               disabled={loading}
               onClick={handleDemoLogin}
             >
-              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {loading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-2" />
+              )}
               Try the live demo
             </Button>
           </div>
