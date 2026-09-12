@@ -125,6 +125,14 @@ export async function POST(req: NextRequest) {
             content: "Hi! I'm great, thanks. This app looks awesome!",
           },
           { from: otherId, content: 'Glad to hear it. Let me know if you need anything.' },
+          // A protected message — the demo user has marked this message as
+          // protected, so the recipient (the real user) cannot screenshot or
+          // forward it unless they enable "privacy always allow".
+          {
+            from: otherId,
+            content: '🔒 This message is protected — you cannot screenshot or forward it.',
+            protected: true,
+          },
         ]
         for (let i = 0; i < msgs.length; i++) {
           await db.message.create({
@@ -134,6 +142,7 @@ export async function POST(req: NextRequest) {
               content: msgs[i].content,
               type: 'text',
               status: 'read',
+              protected: (msgs[i] as any).protected ?? null,
             },
           })
         }

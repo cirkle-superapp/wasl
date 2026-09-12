@@ -381,14 +381,19 @@ export function ChatWindow({
 
   // ---- Send message ----------------------------------------------------------
   const handleSend = useCallback(
-    async (content: string, type: string = 'text') => {
+    async (content: string, type: string = 'text', opts?: { protected?: boolean }) => {
       if (!activeConversationId || !user?.id) return
       const res = await fetch(
         `/api/conversations/${activeConversationId}/messages`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, type, replyToId: replyTo?.id }),
+          body: JSON.stringify({
+            content,
+            type,
+            replyToId: replyTo?.id,
+            protected: opts?.protected,
+          }),
         }
       )
       if (!res.ok) {
@@ -601,7 +606,18 @@ export function ChatWindow({
           body: JSON.stringify({ targetConversationId: conv.id }),
         })
         if (res.ok) {
-          toast.success(`Forwarded to ${conv.name}`)
+          const data = await res.json().catch(() => ({}))
+          if (data.protected) {
+            toast.success(`Forwarded to ${conv.name} (protected)`)
+          } else {
+            toast.success(`Forwarded to ${conv.name}`)
+          }
+        } else if (res.status === 403) {
+          const err = await res.json().catch(() => null)
+          toast.error(err?.error || 'This message is protected by the sender. You cannot forward it.', {
+            description: 'Enable "Always allow screenshots & forwarding" in Settings → Privacy to override.',
+            duration: 6000,
+          })
         } else {
           toast.error('Failed to forward')
         }
@@ -613,8 +629,8 @@ export function ChatWindow({
   )
 
   const handleSendImage = useCallback(
-    async (dataUrl: string) => {
-      await handleSend(dataUrl, 'image')
+    async (dataUrl: string, opts?: { protected?: boolean }) => {
+      await handleSend(dataUrl, 'image', opts)
     },
     [handleSend]
   )

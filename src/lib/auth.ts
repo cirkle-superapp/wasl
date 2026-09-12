@@ -13,6 +13,8 @@ export type SessionUser = {
   avatarColor: string | null
   about: string
   verified: boolean
+  defaultProtectMessages: boolean
+  privacyAlwaysAllow: boolean
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -31,6 +33,8 @@ export async function getSession(): Promise<SessionUser | null> {
       avatarColor: true,
       about: true,
       verified: true,
+      defaultProtectMessages: true,
+      privacyAlwaysAllow: true,
     },
   })
   return user ?? null

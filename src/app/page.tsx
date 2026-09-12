@@ -22,6 +22,8 @@ export default async function Page() {
         avatarColor: session.avatarColor,
         about: session.about,
         verified: session.verified,
+        defaultProtectMessages: session.defaultProtectMessages,
+        privacyAlwaysAllow: session.privacyAlwaysAllow,
       }}
     />
   )

@@ -4,14 +4,14 @@ import { getSession } from '@/lib/auth'
 
 export const runtime = 'nodejs'
 
-// PATCH /api/profile - update current user profile (name, about, avatar)
+// PATCH /api/profile - update current user profile (name, about, avatar, privacy)
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const body = await req.json()
-  const { name, about, avatar } = body || {}
+  const { name, about, avatar, defaultProtectMessages, privacyAlwaysAllow } = body || {}
   const data: any = {}
   if (typeof name === 'string' && name.trim().length >= 2) {
     data.name = name.trim()
@@ -21,6 +21,13 @@ export async function PATCH(req: NextRequest) {
   }
   if (typeof avatar === 'string') {
     data.avatar = avatar.slice(0, 10 * 1024) // max ~10KB data URL or text
+  }
+  // Privacy / message-protection settings
+  if (typeof defaultProtectMessages === 'boolean') {
+    data.defaultProtectMessages = defaultProtectMessages
+  }
+  if (typeof privacyAlwaysAllow === 'boolean') {
+    data.privacyAlwaysAllow = privacyAlwaysAllow
   }
   const updated = await db.user.update({
     where: { id: session.id },
@@ -35,6 +42,8 @@ export async function PATCH(req: NextRequest) {
       avatarColor: true,
       about: true,
       verified: true,
+      defaultProtectMessages: true,
+      privacyAlwaysAllow: true,
     },
   })
   return NextResponse.json({ user: updated })

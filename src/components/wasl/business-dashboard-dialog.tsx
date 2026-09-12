@@ -27,10 +27,12 @@ import {
   Plus,
   Globe,
   Lock,
+  LockOpen,
   Trash2,
   Search,
   UserPlus,
   Crown,
+  ShieldAlert,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { useWaslStore } from '@/lib/store'
@@ -70,6 +72,7 @@ type BusinessData = {
   ownerId: string
   hidePhone: boolean
   hiddenPhone: string | null
+  defaultProtectMessages: boolean
   owner: { id: string; name: string; verified: boolean }
   members: Member[]
   groups: Group[]
@@ -97,6 +100,7 @@ export function BusinessDashboardDialog({
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
+  const [togglingProtect, setTogglingProtect] = useState(false)
 
   const load = useCallback(async () => {
     if (!businessId) return
@@ -248,6 +252,37 @@ export function BusinessDashboardDialog({
     }
   }
 
+  async function toggleBusinessProtection(next: boolean) {
+    if (!businessId || !isAdmin) return
+    setTogglingProtect(true)
+    // Optimistic update
+    setBusiness((b) => (b ? { ...b, defaultProtectMessages: next } : b))
+    try {
+      const res = await fetch(`/api/business/${businessId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultProtectMessages: next }),
+      })
+      if (!res.ok) {
+        // Roll back
+        setBusiness((b) => (b ? { ...b, defaultProtectMessages: !next } : b))
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error || 'Failed to update protection setting')
+        return
+      }
+      toast.success(
+        next
+          ? 'Business messages are now protected by default'
+          : 'Default protection disabled for business messages'
+      )
+    } catch {
+      setBusiness((b) => (b ? { ...b, defaultProtectMessages: !next } : b))
+      toast.error('Network error')
+    } finally {
+      setTogglingProtect(false)
+    }
+  }
+
   async function openGroupConversation(conversationId: string) {
     // Refresh conversation list to ensure the group is present, then activate
     const freshRes = await fetch('/api/conversations', { cache: 'no-store' })
@@ -300,9 +335,10 @@ export function BusinessDashboardDialog({
         </DialogHeader>
 
         <Tabs defaultValue="groups" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="groups">Groups</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="privacy">Privacy</TabsTrigger>
           </TabsList>
 
           {/* Groups tab */}
@@ -523,6 +559,80 @@ export function BusinessDashboardDialog({
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* Privacy tab — business-level message protection */}
+          <TabsContent value="privacy" className="flex-1 overflow-y-auto wasl-scroll -mx-1 px-1">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border p-3 bg-muted/30">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert
+                    className={cn(
+                      'w-5 h-5 mt-0.5 shrink-0',
+                      business.defaultProtectMessages
+                        ? 'text-[var(--wasl-green)]'
+                        : 'text-muted-foreground'
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold">
+                      Protect business messages by default
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                      When ON, every message sent on behalf of this business is
+                      protected from screenshot and forwarding. Recipients can
+                      still override the protection if they have enabled
+                      &quot;always allow&quot; in their personal privacy settings.
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
+                      Individual messages can also be unprotected per-send using
+                      the lock icon in the composer (members override this
+                      default for a specific message).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!!business.defaultProtectMessages}
+                    onCheckedChange={(v) => toggleBusinessProtection(v)}
+                    disabled={!isAdmin || togglingProtect}
+                    aria-label="Protect business messages by default"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground space-y-2">
+                <div className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Lock className="w-3.5 h-3.5" /> How protection works
+                </div>
+                <ul className="space-y-1 list-disc list-inside leading-snug">
+                  <li>
+                    Protected messages show a lock badge to recipients.
+                  </li>
+                  <li>
+                    Recipients cannot copy, forward, drag or right-click
+                    protected messages.
+                  </li>
+                  <li>
+                    PrintScreen and Ctrl+S/Ctrl+P are blocked when a protected
+                    bubble is focused.
+                  </li>
+                  <li>
+                    Any screenshot / forwarding attempt is recorded in the
+                    audit log (the message owner can view attempts).
+                  </li>
+                  <li>
+                    Recipients who enable <strong>always allow</strong> in
+                    their personal privacy settings can override this
+                    protection.
+                  </li>
+                </ul>
+              </div>
+
+              {!isAdmin && (
+                <p className="text-[11px] text-muted-foreground italic text-center">
+                  Only the business owner or an admin can change this setting.
+                </p>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>

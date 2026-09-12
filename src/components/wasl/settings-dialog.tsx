@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw, Palette, ShieldCheck, Building2, Search } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw, Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
 import { useColorTheme } from './color-theme-provider'
@@ -43,6 +44,13 @@ export function SettingsDialog({
   const [myBusinesses, setMyBusinesses] = useState<any[]>([])
   const [activeBizId, setActiveBizId] = useState<string | null>(null)
   const [bizDashOpen, setBizDashOpen] = useState(false)
+  // Privacy / message-protection local state (synced to backend on toggle)
+  const [defaultProtect, setDefaultProtect] = useState<boolean>(
+    !!user?.defaultProtectMessages
+  )
+  const [alwaysAllow, setAlwaysAllow] = useState<boolean>(
+    !!user?.privacyAlwaysAllow
+  )
 
   // Load my businesses when the dialog opens
   useEffect(() => {
@@ -60,8 +68,57 @@ export function SettingsDialog({
     if (open) {
       setName(user?.name || '')
       setAbout(user?.about || '')
+      setDefaultProtect(!!user?.defaultProtectMessages)
+      setAlwaysAllow(!!user?.privacyAlwaysAllow)
     }
   }, [open, user])
+
+  async function togglePrivacy(
+    field: 'defaultProtectMessages' | 'privacyAlwaysAllow',
+    value: boolean
+  ) {
+    // Optimistic update
+    if (field === 'defaultProtectMessages') setDefaultProtect(value)
+    if (field === 'privacyAlwaysAllow') setAlwaysAllow(value)
+    try {
+      const res = await fetch('/api/privacy', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) {
+        // Roll back on failure
+        if (field === 'defaultProtectMessages') setDefaultProtect(!value)
+        if (field === 'privacyAlwaysAllow') setAlwaysAllow(!value)
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error || 'Failed to update privacy setting')
+        return
+      }
+      const data = await res.json()
+      if (user) {
+        setUser({
+          ...user,
+          defaultProtectMessages: data.defaultProtectMessages,
+          privacyAlwaysAllow: data.privacyAlwaysAllow,
+        })
+      }
+      toast.success(
+        field === 'defaultProtectMessages'
+          ? value
+            ? 'Your messages are now protected by default'
+            : 'Default protection disabled'
+          : value
+            ? 'You can now screenshot & forward any message you receive'
+            : 'Privacy-always-allow disabled'
+      )
+    } catch (e) {
+      console.error(e)
+      // Roll back
+      if (field === 'defaultProtectMessages') setDefaultProtect(!value)
+      if (field === 'privacyAlwaysAllow') setAlwaysAllow(!value)
+      toast.error('Network error')
+    }
+  }
 
   async function save() {
     setSaving(true)
@@ -281,6 +338,84 @@ export function SettingsDialog({
                 </div>
               </button>
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <Label className="flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Privacy & message protection
+            </Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Control whether your messages can be screenshotted or forwarded.
+              Protected messages show a lock icon to recipients.
+            </p>
+
+            {/* Protect my messages by default */}
+            <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <ShieldAlert
+                    className={cn(
+                      'w-4 h-4 mt-0.5 shrink-0',
+                      defaultProtect
+                        ? 'text-[var(--wasl-green)]'
+                        : 'text-muted-foreground'
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">
+                      Protect my messages by default
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      When ON, every message you send is protected — recipients
+                      cannot screenshot or forward it unless they have
+                      &quot;always allow&quot; enabled.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={defaultProtect}
+                  onCheckedChange={(v) => togglePrivacy('defaultProtectMessages', v)}
+                  aria-label="Protect my messages by default"
+                />
+              </div>
+            </div>
+
+            {/* Always allow screenshots & forwarding */}
+            <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <EyeOff
+                    className={cn(
+                      'w-4 h-4 mt-0.5 shrink-0',
+                      alwaysAllow
+                        ? 'text-[var(--wasl-green)]'
+                        : 'text-muted-foreground'
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">
+                      Always allow screenshots & forwarding
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      When ON, you can screenshot or forward any message you
+                      receive — even if the sender protected it. Use this only
+                      if you accept the privacy trade-off.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={alwaysAllow}
+                  onCheckedChange={(v) => togglePrivacy('privacyAlwaysAllow', v)}
+                  aria-label="Always allow screenshots and forwarding"
+                />
+              </div>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground italic">
+              Tip: Per-message protection can also be toggled with the lock icon
+              in the composer before sending. Business accounts have their own
+              protection setting in the business dashboard.
+            </p>
           </div>
 
           <div className="pt-2 border-t border-border space-y-2">

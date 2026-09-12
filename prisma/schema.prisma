@@ -34,6 +34,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // ---- Privacy / message protection ------------------------------------------
+  // When true, all outgoing messages from this user are protected from
+  // screenshot and forwarding by default (per-message `protected` can override).
+  defaultProtectMessages Boolean @default(false)
+  // When true, this user can always screenshot/forward any message they
+  // receive, regardless of whether the sender protected it. The user has
+  // chosen "privacy always allow" — opting out of receiving protection.
+  privacyAlwaysAllow     Boolean @default(false)
+
   sentMessages      Message[]      @relation("MessageSender")
   conversations     Participant[]
   createdConversations Conversation[] @relation("ConversationCreator")
@@ -42,6 +51,7 @@ model User {
   stories          Story[]
   folders          ChatFolder[]
   phoneNumbers     PhoneNumber[]
+  screenshotAttempts ScreenshotAttempt[] @relation("ScreenshotReporter")
   // Business
   ownedBusinesses   Business[]     @relation("BusinessOwner")
   businessMemberships BusinessMember[]
@@ -112,12 +122,18 @@ model Message {
   // Which phone number was active when this message was sent (optional, for
   // display purposes).
   fromPhone      String?
+  // ---- Privacy / message protection ------------------------------------------
+  // `null`  → use the sender's `defaultProtectMessages` setting.
+  // `true`  → this message IS protected (recipient cannot screenshot or forward).
+  // `false` → this message is NOT protected (anyone can screenshot or forward).
+  protected      Boolean?
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   reactions    Reaction[]
   starredBy    StarredMessage[]
+  screenshotAttempts ScreenshotAttempt[]
 
   @@index([conversationId, createdAt])
 }
@@ -302,6 +318,11 @@ model Business {
   hiddenPhone     String?
   hidePhone       Boolean  @default(false)
   verified        Boolean  @default(false)
+  // ---- Privacy / message protection (business accounts) ---------------------
+  // Same semantics as User.defaultProtectMessages: when true, every message
+  // sent "as this business" is protected from screenshot/forwarding unless the
+  // individual message overrides it with `protected: false`.
+  defaultProtectMessages Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -506,4 +527,24 @@ model DisappearingSetting {
   enabled        Boolean  @default(false)
   duration       Int      @default(86400) // seconds (86400 = 24h, 604800 = 7d, 7776000 = 90d)
   updatedAt      DateTime @updatedAt
+}
+
+/// Screenshot / capture attempt log — when a user attempts to screenshot or
+/// save a protected message, the server records the attempt so the sender
+/// can be notified. This is the audit trail for the screen-capture-protection
+/// feature. `kind` is one of: `printscreen`, `copy`, `save`, `contextmenu`,
+/// `drag`, `forward`.
+model ScreenshotAttempt {
+  id        String   @id @default(cuid())
+  messageId String
+  reporterId String? // the user who reported the attempt (the recipient, often null for server-detected)
+  kind      String   @default("printscreen") // printscreen | copy | save | contextmenu | drag | forward
+  note      String?
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporter User?  @relation("ScreenshotReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@index([messageId, createdAt])
+  @@index([reporterId])
 }

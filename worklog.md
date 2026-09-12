@@ -986,3 +986,122 @@ Stage Summary:
 - No console errors ✅
 - GitHub + Turso + Vercel all connected and working ✅
 - Preview: HTTP 200, Turso connected ✅
+
+---
+Task ID: 18 — Screen-capture / Forwarding Protection (Privacy "always allow")
+Agent: main
+
+### Task
+Implement message protection that blocks screenshots and forwarding by default, with two exceptions:
+1. The OTHER user (sender) explicitly allows it — per-message lock override OR sender's "Protect my messages by default" setting OFF
+2. The recipient has chosen "privacy always allow" — a personal privacy setting that overrides any incoming protection
+3. Same rules apply to business accounts (their own default-protection setting in the business dashboard)
+
+### Database schema changes (pushed to BOTH local SQLite and Turso)
+- `User.defaultProtectMessages` (Boolean, default false) — sender's default for outgoing messages
+- `User.privacyAlwaysAllow` (Boolean, default false) — recipient's global override
+- `Message.protected` (Boolean?, nullable) — per-message override (null = use sender's default)
+- `Business.defaultProtectMessages` (Boolean, default false) — business-account level default
+- New model `ScreenshotAttempt` (id, messageId, reporterId?, kind, note?, createdAt) — audit log of blocked attempts
+
+### APIs
+- `PATCH /api/profile` — accepts `defaultProtectMessages`, `privacyAlwaysAllow`
+- `GET / PATCH /api/privacy` — dedicated privacy settings endpoint
+- `PATCH /api/business/[id]` — accepts `defaultProtectMessages`
+- `POST /api/conversations/[id]/messages` — accepts `protected` override; resolves effective flag from sender's default
+- `POST /api/messages/[id]/forward` — enforces protection:
+  - Owner of the message can always forward their own message (protection restricts recipients, not the original sender)
+  - Non-owner is blocked UNLESS they have `privacyAlwaysAllow=true`
+  - Blocked attempts are recorded in `ScreenshotAttempt` for the sender's audit log
+  - Forwarded copy inherits the `protected` flag (protected messages stay protected in the new conversation)
+- `POST /api/messages/[id]/screenshot-attempt` — frontend records blocked copy/save/printscreen/drag/contextmenu attempts
+- `GET /api/messages/[id]/screenshot-attempts` — sender-only audit log of attempts on their protected messages
+- `/api/auth/login`, `/api/auth/signup`, `/api/auth/me`, `/api/business/[id]` — all return the new privacy fields
+- `lib/auth.ts` `SessionUser` type and `getSession()` select list extended with the privacy fields
+- `app/page.tsx` passes the privacy fields from the session into `<ChatApp user={...}>`
+
+### Frontend
+- **SettingsDialog** — new "Privacy & message protection" section with two switches:
+  - "Protect my messages by default" (ShieldAlert icon)
+  - "Always allow screenshots & forwarding" (EyeOff icon)
+  - Each switch toggles the corresponding setting via `PATCH /api/privacy`, with optimistic update + rollback on failure
+- **MessageInput** — new "Toggle message protection" lock button that cycles through 3 states:
+  - Inherit (use the user's `defaultProtectMessages` setting)
+  - ON (force protect this message — green lock)
+  - OFF (force do NOT protect — amber open lock)
+  - The current state is reflected in the title attribute and the icon
+- **MessageBubble** — the heart of the protection UX:
+  - Lock badge with green background shown in the corner of any protected message (both owner & recipient see it)
+  - When the recipient doesn't have "always allow" and the message is protected:
+    - Copy toolbar button shows as disabled with a tooltip "Copy disabled — message is protected" (clicking shows a toast warning)
+    - Forward toolbar button shows as disabled with a tooltip "Forward disabled — message is protected"
+    - Right-click context menu is blocked (preventDefault + toast warning)
+    - Image drag-and-drop is blocked (preventDefault + toast warning)
+    - PrintScreen keyup is captured (toast warning + audit log)
+    - Ctrl+C / Ctrl+S / Ctrl+P keydown is captured when the bubble is focused (preventDefault + toast warning + audit log)
+    - The bubble gets a `.wasl-protected-bubble` CSS class with a subtle green inner ring + diagonal hatch pattern, and `user-select: none`
+  - The useProtectionState hook resolves `{ isProtected, isOwner, alwaysAllow, blocked }` and the bubble only blocks when `blocked = isProtected && !isOwner && !alwaysAllow`
+- **ChatWindow** — `handleSend` and `handleSendImage` now accept an `opts?: { protected?: boolean }` argument that gets forwarded to the POST messages API
+- **ChatWindow** — `handleForwardMessage` now handles the HTTP 403 response with a descriptive toast pointing the user to Settings → Privacy
+- **BusinessDashboardDialog** — new "Privacy" tab (third tab next to Groups/Members):
+  - Switch "Protect business messages by default"
+  - Explanation panel listing all the protection behaviours
+  - Admin-only; non-admins see a "Only the business owner or an admin can change this setting" message
+- **store.ts** — `ChatMessage.protected` (boolean | null) and `CurrentUser.defaultProtectMessages`/`privacyAlwaysAllow` added to types
+
+### globals.css
+- New `.wasl-protected-bubble` class — subtle green inner ring + diagonal hatch pattern (light/dark variants)
+- `user-select: none` on protected bubbles and their children
+- Lock-badge pop-in animation
+
+### Verification (agent-browser end-to-end)
+- ✅ Dev server starts cleanly, no errors in dev.log
+- ✅ Live demo login works (returns privacy fields in response)
+- ✅ Settings dialog shows both privacy switches
+- ✅ Toggling "Protect my messages by default" ON persists (PATCH /api/privacy returns 200)
+- ✅ Toggling "Always allow" ON persists (PATCH /api/privacy returns 200)
+- ✅ Lock toggle in composer cycles through 3 states (inherit → ON → OFF → inherit) with correct title attributes
+- ✅ Sending a protected message renders the lock badge (`aria-label="Protected message"` confirmed in DOM)
+- ✅ Receiving a protected message from another user (inserted via SQL) shows the lock badge AND `data-protected="true"` AND `.wasl-protected-bubble` class
+- ✅ With "Always allow" ON, the same protected message is NOT blocked (`data-protected="true"` count drops to 0)
+- ✅ Toggling "Always allow" OFF re-blocks the message (`data-protected="true"` count returns to 1)
+- ✅ Clicking the disabled "Copy"/"Forward" toolbar button shows the toast warning: "🔒 This message is protected by the sender. Screenshots, copying and forwarding are disabled."
+- ✅ The attempt is recorded in the `ScreenshotAttempt` audit log (verified via direct Turso query)
+- ✅ Server-side forward enforcement:
+  - Owner forwarding their own protected message → HTTP 200 (allowed)
+  - Non-owner forwarding a protected message → HTTP 403 (blocked)
+  - Non-owner with "Always allow" ON forwarding a protected message → HTTP 200 (allowed via override)
+- ✅ Forwarded copy inherits the `protected` flag (protected messages stay protected in the new conversation)
+- ✅ Lint passes with 0 errors
+- ✅ No console errors
+
+### Files touched
+- `prisma/schema.prisma` — new fields + ScreenshotAttempt model
+- `scripts/migrate-turso-privacy.ts` — idempotent Turso migration script (new)
+- `scripts/verify-turso-privacy.ts` — verification script (new)
+- `scripts/insert-test-protected-message.ts` — test-data helper (new)
+- `src/lib/auth.ts` — SessionUser type + getSession select list
+- `src/lib/store.ts` — ChatMessage.protected + CurrentUser privacy fields
+- `src/app/page.tsx` — pass privacy fields from session into ChatApp
+- `src/app/api/auth/login/route.ts`, `src/app/api/auth/signup/route.ts` — return privacy fields
+- `src/app/api/profile/route.ts` — accept privacy fields
+- `src/app/api/privacy/route.ts` — new dedicated privacy endpoint (GET + PATCH)
+- `src/app/api/business/[id]/route.ts` — accept + return `defaultProtectMessages`
+- `src/app/api/business/route.ts` — serialize `defaultProtectMessages`
+- `src/app/api/conversations/[id]/messages/route.ts` — accept `protected` override, resolve effective flag from sender's default, return it
+- `src/app/api/messages/[id]/route.ts` — return `protected` field on GET
+- `src/app/api/messages/[id]/forward/route.ts` — enforce protection (owner vs non-owner vs always-allow)
+- `src/app/api/messages/[id]/screenshot-attempt/route.ts` — new (POST)
+- `src/app/api/messages/[id]/screenshot-attempts/route.ts` — new (GET, sender-only audit log)
+- `src/app/api/seed/route.ts` — seed a protected demo message in new 1-on-1 conversations
+- `src/components/wasl/settings-dialog.tsx` — Privacy section + privacy toggle handlers
+- `src/components/wasl/message-input.tsx` — lock toggle button + SendOptions type
+- `src/components/wasl/message-bubble.tsx` — useProtectionState hook + lock badge + block handlers + audit logging
+- `src/components/wasl/chat-window.tsx` — pass `protected` flag through handleSend/handleSendImage + handle 403 forward response
+- `src/components/wasl/business-dashboard-dialog.tsx` — new Privacy tab
+- `src/app/globals.css` — `.wasl-protected-bubble` styles
+
+### Outstanding (future work)
+- UI in the contact-info panel for the sender to view screenshot attempts on their protected messages (API exists at `/api/messages/[id]/screenshot-attempts`, UI not yet added)
+- Server-side PrintScreen detection is not possible from a web context — we can only catch the PrintScreen keyup event client-side. The server-side enforcement is limited to the forward API.
+- Native screenshot tools (OS-level) cannot be blocked from a web app — the audit log is the strongest signal we have.

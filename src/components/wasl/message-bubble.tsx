@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Check,
   CheckCheck,
@@ -14,12 +14,59 @@ import {
   Pause,
   Pencil,
   Forward,
+  Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
 import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
+import { toast } from 'sonner'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+// ---- Protection helpers -------------------------------------------------
+// Resolves whether a message is effectively protected from screenshot /
+// forwarding. The effective flag is:
+//   - the explicit `message.protected` value if it is a boolean
+//   - otherwise the sender's `defaultProtectMessages` setting (we don't have
+//     the sender's settings here, so we just use the explicit value — the
+//     backend always resolves and persists it on send, so the frontend
+//     always sees the resolved boolean).
+//
+// Returns `{ isProtected, isOwner, alwaysAllow, blocked }` where `blocked`
+// is true only when the current user is the recipient of a protected
+// message and has NOT opted into "privacy always allow".
+function useProtectionState(message: ChatMessage) {
+  const me = useWaslStore((s) => s.user)
+  const isOwner = !!me && message.senderId === me.id
+  const alwaysAllow = !!me?.privacyAlwaysAllow
+  const isProtected = message.protected === true
+  const blocked = isProtected && !isOwner && !alwaysAllow
+  return { isProtected, isOwner, alwaysAllow, blocked }
+}
+
+// Record a screenshot/copy/save attempt to the audit log via the API and
+// show a toast. Idempotent — debounced per-message per-kind to avoid
+// spamming the server when the user holds down PrintScreen.
+const recentAttemptCache = new Map<string, number>()
+function recordAttempt(messageId: string, kind: string) {
+  const key = `${messageId}:${kind}`
+  const now = Date.now()
+  if (recentAttemptCache.has(key)) {
+    const last = recentAttemptCache.get(key)!
+    // Debounce: at most one record per 5 seconds per kind per message.
+    if (now - last < 5000) return
+  }
+  recentAttemptCache.set(key, now)
+  // Fire and forget
+  fetch(`/api/messages/${messageId}/screenshot-attempt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  }).catch(() => {})
+}
+
+const PROTECTED_WARNING =
+  '🔒 This message is protected by the sender. Screenshots, copying and forwarding are disabled.'
 
 export function MessageBubble({
   message,
@@ -56,6 +103,75 @@ export function MessageBubble({
   const mine = message.senderId === me?.id
   const [showReactions, setShowReactions] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const protection = useProtectionState(message)
+  // `blocked` means: this is a protected message that I RECEIVED and I have
+  // NOT enabled "privacy always allow". In that case the bubble becomes
+  // read-only: no copy, no forward, no context menu, no drag, no screenshot.
+  const blocked = protection.blocked
+
+  // ---- Keyboard capture-blocking (PrintScreen / Ctrl+C / Ctrl+S / Ctrl+P) ---
+  // Mounted only when `blocked` is true. We attach a `keyup` listener to
+  // `window` so we catch PrintScreen even when the bubble isn't focused, and
+  // a `keydown` listener to the bubble element so we can preventDefault on
+  // copy/save/print shortcuts when focus is inside the protected bubble.
+  useEffect(() => {
+    if (!blocked) return
+    function onKeyUp(e: KeyboardEvent) {
+      // PrintScreen key — most common screenshot trigger on Windows/Linux.
+      if (e.key === 'PrintScreen') {
+        toast.error(PROTECTED_WARNING, { duration: 4000 })
+        recordAttempt(message.id, 'printscreen')
+      }
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd + C / S / P  → copy / save / print
+      const meta = e.ctrlKey || e.metaKey
+      if (meta && (e.key === 'c' || e.key === 'C')) {
+        const sel = window.getSelection?.()
+        // Only block if the selection is inside our bubble.
+        if (sel && bubbleRef.current && sel.anchorNode && bubbleRef.current.contains(sel.anchorNode)) {
+          e.preventDefault()
+          toast.error(PROTECTED_WARNING, { duration: 4000 })
+          recordAttempt(message.id, 'copy')
+        }
+      } else if (meta && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P')) {
+        if (document.activeElement && bubbleRef.current?.contains(document.activeElement as Node)) {
+          e.preventDefault()
+          toast.error(PROTECTED_WARNING, { duration: 4000 })
+          recordAttempt(message.id, 'save')
+        }
+      }
+    }
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [blocked, message.id])
+
+  // Block the right-click context menu on protected bubbles.
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!blocked) return
+      e.preventDefault()
+      toast.error(PROTECTED_WARNING, { duration: 4000 })
+      recordAttempt(message.id, 'contextmenu')
+    },
+    [blocked, message.id]
+  )
+
+  // Block drag of images out of protected bubbles.
+  const onDragStart = useCallback(
+    (e: React.DragEvent) => {
+      if (!blocked) return
+      e.preventDefault()
+      toast.error(PROTECTED_WARNING, { duration: 4000 })
+      recordAttempt(message.id, 'drag')
+    },
+    [blocked, message.id]
+  )
 
   // Close popover on outside click
   useEffect(() => {
@@ -163,18 +279,42 @@ export function MessageBubble({
           <ToolbarButton title={starred ? 'Unstar' : 'Star'} onClick={() => onStar?.()}>
             <Star className={cn('w-4 h-4', starred && 'fill-amber-400 text-amber-400')} />
           </ToolbarButton>
-          <ToolbarButton title="Copy" onClick={() => { onCopy?.(); setShowReactions(false) }}>
-            <Copy className="w-4 h-4" />
-          </ToolbarButton>
+          {blocked ? (
+            <ToolbarButton
+              title="Copy disabled — message is protected"
+              onClick={() => {
+                toast.error(PROTECTED_WARNING, { duration: 4000 })
+                recordAttempt(message.id, 'copy')
+              }}
+            >
+              <Copy className="w-4 h-4 opacity-40" />
+            </ToolbarButton>
+          ) : (
+            <ToolbarButton title="Copy" onClick={() => { onCopy?.(); setShowReactions(false) }}>
+              <Copy className="w-4 h-4" />
+            </ToolbarButton>
+          )}
           {mine && message.type === 'text' && onEdit && (
             <ToolbarButton title="Edit" onClick={() => onEdit()}>
               <Pencil className="w-4 h-4" />
             </ToolbarButton>
           )}
           {onForward && (
-            <ToolbarButton title="Forward" onClick={() => onForward()}>
-              <Forward className="w-4 h-4" />
-            </ToolbarButton>
+            blocked ? (
+              <ToolbarButton
+                title="Forward disabled — message is protected"
+                onClick={() => {
+                  toast.error(PROTECTED_WARNING, { duration: 4000 })
+                  recordAttempt(message.id, 'forward')
+                }}
+              >
+                <Forward className="w-4 h-4 opacity-40" />
+              </ToolbarButton>
+            ) : (
+              <ToolbarButton title="Forward" onClick={() => onForward()}>
+                <Forward className="w-4 h-4" />
+              </ToolbarButton>
+            )
           )}
           {mine && (
             <ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>
@@ -206,11 +346,38 @@ export function MessageBubble({
 
         {/* The bubble */}
         <div
+          ref={bubbleRef}
+          onContextMenu={onContextMenu}
+          onDragStart={onDragStart}
           className={cn(
             'px-2.5 py-1.5 shadow-sm relative',
-            mine ? 'wasl-bubble-out' : 'wasl-bubble-in'
+            mine ? 'wasl-bubble-out' : 'wasl-bubble-in',
+            blocked && 'wasl-protected-bubble'
           )}
+          style={blocked ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
+          data-protected={blocked ? 'true' : undefined}
         >
+          {/* Lock badge — shown when the message is protected */}
+          {protection.isProtected && (
+            <div
+              className={cn(
+                'absolute -top-1.5 z-10 flex items-center justify-center w-5 h-5 rounded-full shadow-sm border',
+                mine
+                  ? 'right-1 bg-[var(--wasl-green)] border-[var(--wasl-green-dark)] text-white'
+                  : 'left-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-[var(--wasl-green)]'
+              )}
+              title={
+                blocked
+                  ? '🔒 Protected by sender — screenshot, copy and forward are disabled'
+                  : mine
+                    ? '🔒 Protected — recipient cannot screenshot or forward'
+                    : '🔒 Protected message'
+              }
+              aria-label="Protected message"
+            >
+              <Lock className="w-3 h-3" />
+            </div>
+          )}
           {isGroup && !mine && senderName && (
             <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
               {senderName}
@@ -226,16 +393,33 @@ export function MessageBubble({
           )}
           {message.type === 'image' ? (
             <div className="rounded-lg overflow-hidden max-w-xs">
-              <img src={message.content} alt="sent" className="w-full h-auto" />
-              <div className="text-[10px] text-right text-foreground/60 mt-0.5">
+              <img
+                src={message.content}
+                alt="sent"
+                className={cn('w-full h-auto', blocked && 'pointer-events-none select-none')}
+                draggable={!blocked}
+                onDragStart={onDragStart}
+              />
+              <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+                {protection.isProtected && (
+                  <Lock className="w-3 h-3 inline opacity-60" />
+                )}
                 {formatChatTimestamp(message.createdAt)}
                 {mine && <StatusTicks status={message.status} className="ml-1" />}
               </div>
             </div>
           ) : (
-            <div className="text-sm leading-relaxed break-words whitespace-pre-wrap pr-1">
+            <div
+              className={cn(
+                'text-sm leading-relaxed break-words whitespace-pre-wrap pr-1',
+                blocked && 'select-none'
+              )}
+            >
               {message.content}
               <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
+                {protection.isProtected && (
+                  <Lock className="w-3 h-3 inline opacity-60" />
+                )}
                 {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
                 {formatChatTimestamp(message.createdAt)}
                 {mine && <StatusTicks status={message.status} />}

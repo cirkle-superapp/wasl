@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
       avatarColor: user.avatarColor,
       about: user.about,
       verified: user.verified,
+      defaultProtectMessages: user.defaultProtectMessages,
+      privacyAlwaysAllow: user.privacyAlwaysAllow,
     })
   } catch (err) {
     console.error('[auth/login] error', err)

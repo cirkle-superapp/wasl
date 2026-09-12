@@ -75,6 +75,7 @@ export async function GET(
         createdAt: m.createdAt,
         replyToId: m.replyToId,
         commitId: m.commitId,
+        protected: m.protected,
         starred: starredIds.has(m.id),
         reactions: m.reactions.map((r) => ({
           id: r.id,
@@ -104,10 +105,22 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await req.json()
-  const { content, type = 'text', replyToId } = body || {}
+  const { content, type = 'text', replyToId, protected: protectedOverride } = body || {}
   if (!content || !String(content).trim()) {
     return NextResponse.json({ error: 'content is required' }, { status: 400 })
   }
+
+  // Resolve the effective `protected` flag:
+  //   - explicit boolean override (from the message-input lock toggle) wins
+  //   - otherwise use the sender's `defaultProtectMessages` setting
+  const sender = await db.user.findUnique({
+    where: { id: session.id },
+    select: { defaultProtectMessages: true },
+  })
+  const effectiveProtected =
+    typeof protectedOverride === 'boolean'
+      ? protectedOverride
+      : sender?.defaultProtectMessages ?? false
 
   const message = await db.message.create({
     data: {
@@ -117,6 +130,7 @@ export async function POST(
       type: String(type),
       status: 'sent',
       replyToId: replyToId ? String(replyToId) : null,
+      protected: effectiveProtected,
     },
   })
   // Bump conversation updatedAt for sorting
@@ -135,6 +149,7 @@ export async function POST(
     createdAt: message.createdAt,
     replyToId: message.replyToId,
     commitId: message.commitId,
+    protected: message.protected,
   })
 }
 

@@ -12,11 +12,15 @@ import {
   BarChart3,
   Clock,
   Trash2,
+  Lock,
+  LockOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
 import { useWaslStore } from '@/lib/store'
 import { toast } from 'sonner'
+
+export type SendOptions = { protected?: boolean }
 
 export function MessageInput({
   conversationId,
@@ -29,9 +33,9 @@ export function MessageInput({
   onSchedule,
 }: {
   conversationId: string
-  onSend: (content: string, type?: string) => Promise<void>
+  onSend: (content: string, type?: string, opts?: SendOptions) => Promise<void>
   onTypingChange: (typing: boolean) => void
-  onSendImage?: (dataUrl: string) => Promise<void>
+  onSendImage?: (dataUrl: string, opts?: SendOptions) => Promise<void>
   onOpenCommit?: () => void
   canCommit?: boolean
   onOpenPoll?: () => void
@@ -42,6 +46,11 @@ export function MessageInput({
   const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
+  // Lock override for the next message:
+  //   null  → use the user's `defaultProtectMessages` setting
+  //   true  → force protect this message
+  //   false → force do NOT protect this message
+  const [lockOverride, setLockOverride] = useState<boolean | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -53,11 +62,17 @@ export function MessageInput({
   const setReplyTo = useWaslStore((s) => s.setReplyTo)
   const user = useWaslStore((s) => s.user)
 
+  // Resolve the effective `protected` flag for the next outgoing message.
+  const defaultProtect = !!user?.defaultProtectMessages
+  const effectiveProtect =
+    lockOverride === null ? defaultProtect : lockOverride
+
   // Reset state when conversation changes
   useEffect(() => {
     setValue('')
     setEmojiOpen(false)
     setReplyTo(null)
+    setLockOverride(null)
     cancelRecording()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }, [conversationId, setReplyTo])
@@ -174,7 +189,7 @@ export function MessageInput({
     if (!trimmed || sending) return
     setSending(true)
     try {
-      await onSend(trimmed, 'text')
+      await onSend(trimmed, 'text', { protected: effectiveProtect })
       setValue('')
       emitTyping(false)
       if (typingTimer.current) {
@@ -208,7 +223,7 @@ export function MessageInput({
     const reader = new FileReader()
     reader.onload = async () => {
       try {
-        await onSendImage?.(reader.result as string)
+        await onSendImage?.(reader.result as string, { protected: effectiveProtect })
       } catch (err) {
         console.error(err)
         toast.error('Failed to send image')
@@ -326,6 +341,46 @@ export function MessageInput({
             <Clock className="w-5 h-5" />
           </button>
         )}
+
+        {/* Protection lock toggle — protect the next outgoing message from
+            screenshot/forwarding. Cycles through three states:
+              - inherit (use the user's default — shown as a hollow lock)
+              - protect (filled green lock)
+              - allow (open lock)
+            The current effective state is shown in the title attribute. */}
+        <button
+          type="button"
+          onClick={() => {
+            // Cycle: null → true → false → null
+            setLockOverride((cur) =>
+              cur === null ? true : cur === true ? false : null
+            )
+          }}
+          className={cn(
+            'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0',
+            effectiveProtect
+              ? 'text-[var(--wasl-green)] bg-[var(--wasl-green)]/10 hover:bg-[var(--wasl-green)]/20'
+              : lockOverride === false
+                ? 'text-amber-500 bg-amber-500/10 hover:bg-amber-500/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+          )}
+          title={
+            lockOverride === null
+              ? `Message protection: inherit (your default is ${defaultProtect ? 'protected' : 'not protected'})`
+              : lockOverride
+                ? 'Message protection: ON — recipient cannot screenshot or forward'
+                : 'Message protection: OFF — recipient can screenshot & forward'
+          }
+          aria-label="Toggle message protection"
+        >
+          {effectiveProtect ? (
+            <Lock className="w-5 h-5" />
+          ) : lockOverride === false ? (
+            <LockOpen className="w-5 h-5" />
+          ) : (
+            <Lock className="w-5 h-5" />
+          )}
+        </button>
 
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5">

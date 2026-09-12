@@ -48,6 +48,7 @@ export async function GET(
       createdAt: message.createdAt,
       replyToId: message.replyToId,
       commitId: message.commitId,
+      protected: message.protected,
       starred: !!starred,
       reactions: message.reactions.map((r) => ({
         id: r.id,

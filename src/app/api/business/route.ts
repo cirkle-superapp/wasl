@@ -166,6 +166,7 @@ function serializeBusiness(b: any) {
     rejectionReason: b.rejectionReason,
     hidePhone: b.hidePhone,
     hiddenPhone: b.hiddenPhone,
+    defaultProtectMessages: b.defaultProtectMessages ?? false,
     createdAt: b.createdAt,
     owner: b.owner
       ? {

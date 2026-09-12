@@ -20,6 +20,9 @@ export type CurrentUser = {
   about: string
   verified?: boolean
   phoneNumbers?: UserPhoneNumber[]
+  // Privacy / message-protection settings
+  defaultProtectMessages?: boolean
+  privacyAlwaysAllow?: boolean
 }
 
 export type Participant = {
@@ -53,6 +56,11 @@ export type ChatMessage = {
   commitId?: string | null
   starred?: boolean
   reactions?: Reaction[]
+  // Privacy / message-protection flag.
+  // `undefined`/`null` → use the sender's `defaultProtectMessages` setting.
+  // `true` → message IS protected (recipient cannot screenshot or forward).
+  // `false` → message is NOT protected (anyone can screenshot or forward).
+  protected?: boolean | null
 }
 
 // Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.

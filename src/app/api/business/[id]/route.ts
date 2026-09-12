@@ -52,6 +52,7 @@ export async function GET(
       verified: business.verified,
       hidePhone: business.hidePhone,
       hiddenPhone: business.hiddenPhone,
+      defaultProtectMessages: business.defaultProtectMessages,
       createdAt: business.createdAt,
       owner: {
         id: business.owner.id,
@@ -113,6 +114,10 @@ export async function PATCH(
   if (typeof body?.category === 'string') data.category = body.category
   if (typeof body?.hidePhone === 'boolean') data.hidePhone = body.hidePhone
   if (typeof body?.hiddenPhone === 'string') data.hiddenPhone = body.hiddenPhone || null
+  // Privacy / message-protection setting for the business account.
+  if (typeof body?.defaultProtectMessages === 'boolean') {
+    data.defaultProtectMessages = body.defaultProtectMessages
+  }
   await db.business.update({ where: { id }, data })
   return NextResponse.json({ ok: true })
 }
