@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Sparkles,
   Lock,
+  ListChecks,
+  Wand2,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -27,6 +29,9 @@ import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ChatSummaryDialog } from './chat-summary-dialog'
 import { AppLockDialog } from './app-lock-dialog'
+import { ActionItemsDialog } from './action-items-dialog'
+import { ToneAdjusterDialog } from './tone-adjuster-dialog'
+import { CommandPalette } from './command-palette'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -79,6 +84,9 @@ export function ChatWindow({
   const [scheduleContent, setScheduleContent] = useState('')
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [appLockOpen, setAppLockOpen] = useState(false)
+  const [actionItemsOpen, setActionItemsOpen] = useState(false)
+  const [toneOpen, setToneOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [botReplying, setBotReplying] = useState(false)
 
@@ -688,6 +696,12 @@ export function ChatWindow({
               <DropdownMenuItem onClick={() => setSummaryOpen(true)}>
                 <Sparkles className="w-4 h-4 mr-2" /> AI summary
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
+                <ListChecks className="w-4 h-4 mr-2" /> Action items
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setToneOpen(true)}>
+                <Wand2 className="w-4 h-4 mr-2" /> Tone adjuster
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCopyLast}>
                 <Copy className="w-4 h-4 mr-2" /> Copy last message
               </DropdownMenuItem>
@@ -851,6 +865,27 @@ export function ChatWindow({
       <AppLockDialog
         open={appLockOpen}
         onOpenChange={setAppLockOpen}
+      />
+
+      {/* AI action items dialog */}
+      <ActionItemsDialog
+        open={actionItemsOpen}
+        onOpenChange={setActionItemsOpen}
+        conversationId={activeConversationId}
+      />
+
+      {/* AI tone adjuster dialog */}
+      <ToneAdjusterDialog
+        open={toneOpen}
+        onOpenChange={setToneOpen}
+        initialContent=""
+        onApply={() => {}}
+      />
+
+      {/* Command palette (Ctrl+K) */}
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
       />
     </div>
   )

@@ -430,3 +430,71 @@ model AppLock {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// Threaded reply — a reply thread within a chat (Cirkle-inspired reply-thread)
+model Thread {
+  id             String   @id @default(cuid())
+  conversationId String
+  parentMessageId String
+  createdAt      DateTime @default(now())
+
+  messages       ThreadMessage[]
+
+  @@index([conversationId])
+  @@index([parentMessageId])
+}
+
+model ThreadMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+}
+
+/// Whisper message — ephemeral self-destructing message (Cirkle-inspired whisper-mode)
+model WhisperMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  expiresAt      DateTime
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([expiresAt])
+}
+
+/// Receipt split — expense splitting in chat (Cirkle-inspired receipt-split)
+model ReceiptSplit {
+  id             String   @id @default(cuid())
+  conversationId String
+  creatorId      String
+  title          String
+  totalAmount    Float
+  currency       String   @default("SAR")
+  splitCount     Int      @default(2)
+  createdAt      DateTime @default(now())
+
+  participants   ReceiptSplitParticipant[]
+
+  @@index([conversationId])
+}
+
+model ReceiptSplitParticipant {
+  id        String   @id @default(cuid())
+  splitId   String
+  userId    String
+  amount    Float
+  paid      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  split ReceiptSplit @relation(fields: [splitId], references: [id], onDelete: Cascade)
+
+  @@unique([splitId, userId])
+}
