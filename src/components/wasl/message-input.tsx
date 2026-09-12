@@ -10,6 +10,7 @@ import {
   Reply,
   ShieldCheck,
   BarChart3,
+  Clock,
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,7 @@ export function MessageInput({
   onOpenCommit,
   canCommit,
   onOpenPoll,
+  onSchedule,
 }: {
   conversationId: string
   onSend: (content: string, type?: string) => Promise<void>
@@ -33,6 +35,7 @@ export function MessageInput({
   onOpenCommit?: () => void
   canCommit?: boolean
   onOpenPoll?: () => void
+  onSchedule?: (content: string) => void
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -303,6 +306,24 @@ export function MessageInput({
             title="Create a poll"
           >
             <BarChart3 className="w-5 h-5" />
+          </button>
+        )}
+
+        {/* Schedule button — Cirkle-inspired scheduled messages */}
+        {onSchedule && (
+          <button
+            type="button"
+            onClick={() => { if (value.trim()) onSchedule(value.trim()) }}
+            disabled={!value.trim()}
+            className={cn(
+              'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0',
+              value.trim()
+                ? 'text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10'
+                : 'text-muted-foreground/30 cursor-not-allowed'
+            )}
+            title="Schedule message"
+          >
+            <Clock className="w-5 h-5" />
           </button>
         )}
 

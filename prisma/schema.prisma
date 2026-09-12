@@ -349,3 +349,84 @@ model BusinessGroup {
   @@index([businessId])
   @@index([visibility])
 }
+
+/// Scheduled message — send at a future time (Cirkle-inspired scheduled-messages)
+model ScheduledMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  type           String   @default("text")
+  scheduledFor   DateTime
+  sent          Boolean  @default(false)
+  sentAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([scheduledFor])
+  @@index([conversationId])
+}
+
+/// Broadcast channel — one-to-many messaging (Cirkle-inspired broadcast-channel)
+model BroadcastChannel {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  ownerId     String
+  avatarColor String?
+  subscriberCount Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscribers BroadcastSubscriber[]
+  messages    BroadcastMessage[]
+
+  @@index([ownerId])
+}
+
+model BroadcastSubscriber {
+  id          String   @id @default(cuid())
+  channelId   String
+  userId      String
+  subscribedAt DateTime @default(now())
+
+  channel BroadcastChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+}
+
+model BroadcastMessage {
+  id          String   @id @default(cuid())
+  channelId   String
+  senderId    String
+  content     String
+  type        String   @default("text")
+  createdAt   DateTime @default(now())
+
+  channel BroadcastChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt])
+}
+
+/// Time capsule message — unlock at a future date (Cirkle-inspired time-capsule)
+model TimeCapsule {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  unlockAt       DateTime
+  opened         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([unlockAt])
+  @@index([conversationId])
+}
+
+/// App lock PIN — per-user PIN for app access (Cirkle-inspired app-lock)
+model AppLock {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  pinHash   String
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

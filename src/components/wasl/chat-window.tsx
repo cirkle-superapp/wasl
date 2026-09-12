@@ -13,6 +13,8 @@ import {
   Reply as ReplyIcon,
   Copy,
   ChevronDown,
+  Sparkles,
+  Lock,
 } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -21,6 +23,10 @@ import { MessageInput } from './message-input'
 import { NewCommitDialog } from './new-commit-dialog'
 import { NewPollDialog } from './new-poll-dialog'
 import { ChatSearchDialog } from './chat-search-dialog'
+import { SmartReplyChips } from './smart-reply-chips'
+import { ScheduleDialog } from './schedule-dialog'
+import { ChatSummaryDialog } from './chat-summary-dialog'
+import { AppLockDialog } from './app-lock-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -69,6 +75,10 @@ export function ChatWindow({
   const [commitOpen, setCommitOpen] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleContent, setScheduleContent] = useState('')
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [appLockOpen, setAppLockOpen] = useState(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [botReplying, setBotReplying] = useState(false)
 
@@ -675,6 +685,9 @@ export function ChatWindow({
               <DropdownMenuItem onClick={onOpenInfo}>
                 <Info className="w-4 h-4 mr-2" /> Contact info
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSummaryOpen(true)}>
+                <Sparkles className="w-4 h-4 mr-2" /> AI summary
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCopyLast}>
                 <Copy className="w-4 h-4 mr-2" /> Copy last message
               </DropdownMenuItem>
@@ -683,6 +696,9 @@ export function ChatWindow({
                   <Users className="w-4 h-4 mr-2" /> Group members
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => setAppLockOpen(true)}>
+                <Lock className="w-4 h-4 mr-2" /> App lock
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                 <Trash2 className="w-4 h-4 mr-2" /> Delete chat
               </DropdownMenuItem>
@@ -777,7 +793,8 @@ export function ChatWindow({
         )}
       </div>
 
-      {/* Input */}
+      {/* Smart reply chips + Input */}
+      <SmartReplyChips conversationId={activeConversationId} />
       <MessageInput
         conversationId={activeConversationId}
         onSend={handleSend}
@@ -786,6 +803,7 @@ export function ChatWindow({
         onOpenCommit={() => setCommitOpen(true)}
         canCommit={!conversation.isGroup && !!otherUser}
         onOpenPoll={() => setPollOpen(true)}
+        onSchedule={(content) => { setScheduleContent(content); setScheduleOpen(true) }}
       />
 
       {/* New Commit dialog (Cirkle-inspired) */}
@@ -812,6 +830,27 @@ export function ChatWindow({
         conversationName={conversation.name}
         conversationAvatar={conversation.avatar}
         conversationAvatarColor={conversation.avatarColor}
+      />
+
+      {/* Schedule message dialog */}
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        conversationId={activeConversationId}
+        content={scheduleContent}
+      />
+
+      {/* AI chat summary dialog */}
+      <ChatSummaryDialog
+        open={summaryOpen}
+        onOpenChange={setSummaryOpen}
+        conversationId={activeConversationId}
+      />
+
+      {/* App lock dialog */}
+      <AppLockDialog
+        open={appLockOpen}
+        onOpenChange={setAppLockOpen}
       />
     </div>
   )
