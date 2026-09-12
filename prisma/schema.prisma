@@ -130,6 +130,9 @@ model Message {
   // `true`  → this message IS protected (recipient cannot screenshot or forward).
   // `false` → this message is NOT protected (anyone can screenshot or forward).
   protected      Boolean?
+  // When true, the message has been edited at least once. The previous
+  // versions are stored in the MessageEdit table.
+  edited         Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -137,8 +140,23 @@ model Message {
   reactions    Reaction[]
   starredBy    StarredMessage[]
   screenshotAttempts ScreenshotAttempt[]
+  edits        MessageEdit[]
 
   @@index([conversationId, createdAt])
+}
+
+/// Message edit history — stores each previous version of a message's
+/// content when the sender edits it. This enables the "edited" indicator
+/// and the "view edit history" feature.
+model MessageEdit {
+  id        String   @id @default(cuid())
+  messageId String
+  content   String   // the previous content before the edit
+  editedAt  DateTime @default(now()) // when this edit was made (i.e. when the new version replaced this one)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, editedAt])
 }
 
 /// Cirkle-inspired Commit (AI-verified agreement) anchored to a conversation.

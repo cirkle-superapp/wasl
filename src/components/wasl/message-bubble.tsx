@@ -25,6 +25,7 @@ import { findUrls, prettyPath } from '@/lib/link-preview'
 import { renderMarkdownLite } from '@/lib/markdown'
 import { LinkPreviewCard } from './link-preview-card'
 import { ReadReceiptsDialog } from './read-receipts-dialog'
+import { EditHistoryDialog } from './edit-history-dialog'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -115,6 +116,7 @@ export function MessageBubble({
   const mine = message.senderId === me?.id
   const [showReactions, setShowReactions] = useState(false)
   const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
+  const [editHistoryOpen, setEditHistoryOpen] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
@@ -455,6 +457,19 @@ export function MessageBubble({
                   <Lock className="w-3 h-3 inline opacity-60" />
                 )}
                 {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                {message.edited && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditHistoryOpen(true)
+                    }}
+                    className="italic hover:text-foreground transition-colors"
+                    title="Edited — click to view edit history"
+                  >
+                    edited
+                  </button>
+                )}
                 {formatChatTimestamp(message.createdAt)}
                 {mine && <StatusTicks status={message.status} onClick={() => setReadReceiptsOpen(true)} />}
               </span>
@@ -557,6 +572,12 @@ export function MessageBubble({
       <ReadReceiptsDialog
         open={readReceiptsOpen}
         onOpenChange={setReadReceiptsOpen}
+        messageId={message.id}
+      />
+      {/* Edit history dialog — opened by clicking the "edited" indicator */}
+      <EditHistoryDialog
+        open={editHistoryOpen}
+        onOpenChange={setEditHistoryOpen}
         messageId={message.id}
       />
     </ContextMenu>

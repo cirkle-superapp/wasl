@@ -49,6 +49,7 @@ export async function GET(
       replyToId: message.replyToId,
       commitId: message.commitId,
       protected: message.protected,
+      edited: message.edited,
       starred: !!starred,
       reactions: message.reactions.map((r) => ({
         id: r.id,

@@ -34,6 +34,7 @@ import { AppLockDialog } from './app-lock-dialog'
 import { ActionItemsDialog } from './action-items-dialog'
 import { ToneAdjusterDialog } from './tone-adjuster-dialog'
 import { CommandPalette } from './command-palette'
+import { ForwardDialog } from './forward-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -609,8 +610,11 @@ export function ChatWindow({
           toast.error(err?.error || 'Failed to edit')
           return
         }
-        // Update locally
-        useWaslStore.getState().updateMessage(activeConversationId, m.id, { content: newContent.trim() })
+        // Update locally — set both the new content AND the edited flag
+        useWaslStore.getState().updateMessage(activeConversationId, m.id, {
+          content: newContent.trim(),
+          edited: true,
+        })
         getSocket().emit('message:reacted', { conversationId: activeConversationId, messageId: m.id })
         toast.success('Message edited')
       } catch {
@@ -621,43 +625,13 @@ export function ChatWindow({
   )
 
   // ---- Forward message -----------------------------------------------------
+  // Opens the ForwardDialog (multi-select) instead of using prompt().
+  const [forwardOpen, setForwardOpen] = useState(false)
+  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null)
   const handleForwardMessage = useCallback(
     async (m: ChatMessage) => {
-      const target = prompt('Enter conversation ID to forward to (or type a name):')
-      if (!target) return
-      // Try to find a conversation by name
-      const conv = useWaslStore.getState().conversations.find(
-        (c) => c.name.toLowerCase().includes(target.toLowerCase())
-      )
-      if (!conv) {
-        toast.error('Conversation not found')
-        return
-      }
-      try {
-        const res = await fetch(`/api/messages/${m.id}/forward`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetConversationId: conv.id }),
-        })
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}))
-          if (data.protected) {
-            toast.success(`Forwarded to ${conv.name} (protected)`)
-          } else {
-            toast.success(`Forwarded to ${conv.name}`)
-          }
-        } else if (res.status === 403) {
-          const err = await res.json().catch(() => null)
-          toast.error(err?.error || 'This message is protected by the sender. You cannot forward it.', {
-            description: 'Enable "Always allow screenshots & forwarding" in Settings → Privacy to override.',
-            duration: 6000,
-          })
-        } else {
-          toast.error('Failed to forward')
-        }
-      } catch {
-        toast.error('Network error')
-      }
+      setForwardMessage(m)
+      setForwardOpen(true)
     },
     []
   )
@@ -1240,6 +1214,14 @@ export function ChatWindow({
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
+      />
+
+      {/* Forward dialog (multi-select) */}
+      <ForwardDialog
+        open={forwardOpen}
+        onOpenChange={setForwardOpen}
+        messageId={forwardMessage?.id || null}
+        messageContent={forwardMessage?.content || ''}
       />
     </div>
   )

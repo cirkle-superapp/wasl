@@ -76,6 +76,7 @@ export async function GET(
         replyToId: m.replyToId,
         commitId: m.commitId,
         protected: m.protected,
+        edited: m.edited,
         starred: starredIds.has(m.id),
         reactions: m.reactions.map((r) => ({
           id: r.id,
@@ -150,6 +151,7 @@ export async function POST(
     replyToId: message.replyToId,
     commitId: message.commitId,
     protected: message.protected,
+    edited: message.edited,
   })
 }
 

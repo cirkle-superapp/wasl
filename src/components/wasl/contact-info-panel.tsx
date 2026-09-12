@@ -28,6 +28,7 @@ import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { StarredMessagesDialog } from './starred-messages-dialog'
+import { EncryptionDialog } from './encryption-dialog'
 
 // Icon mapping for screenshot-attempt kinds → human-readable label + icon
 const KIND_META: Record<string, { label: string; icon: typeof Camera }> = {
@@ -85,6 +86,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
   const [starredOpen, setStarredOpen] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [encryptionOpen, setEncryptionOpen] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -553,7 +555,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           <Button
             variant="ghost"
             className="w-full justify-start"
-            onClick={() => toast.info('Encryption details')}
+            onClick={() => setEncryptionOpen(true)}
           >
             <Shield className="w-4 h-4 mr-3" /> Encryption
           </Button>
@@ -574,6 +576,9 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
         conversationId={activeConversationId}
         conversationName={conversation?.name}
       />
+
+      {/* Encryption info dialog */}
+      <EncryptionDialog open={encryptionOpen} onOpenChange={setEncryptionOpen} />
     </div>
   )
 }

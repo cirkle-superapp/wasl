@@ -61,6 +61,9 @@ export type ChatMessage = {
   // `true` → message IS protected (recipient cannot screenshot or forward).
   // `false` → message is NOT protected (anyone can screenshot or forward).
   protected?: boolean | null
+  // When true, the message has been edited at least once. The edit history
+  // can be fetched from /api/messages/[id]/edits.
+  edited?: boolean
 }
 
 // Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.
