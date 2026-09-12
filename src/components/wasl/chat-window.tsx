@@ -347,6 +347,30 @@ export function ChatWindow({
     setShowScrollBtn(false)
   }
 
+  // ---- Scroll to a specific message (by ID) ---------------------------------
+  // Used by the "jump to message" feature from the StarredMessagesDialog.
+  // Listens for a custom window event so any component can trigger it.
+  useEffect(() => {
+    function onJumpToMessage(e: Event) {
+      const messageId = (e as CustomEvent<string>).detail
+      if (!messageId || !scrollRef.current) return
+      const target = scrollRef.current.querySelector(
+        `[data-message-id="${messageId}"]`
+      ) as HTMLElement | null
+      if (target) {
+        // Scroll the message into view (smooth, centered in the container)
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Briefly flash the message to draw attention
+        target.classList.add('wasl-message-flash')
+        setTimeout(() => target.classList.remove('wasl-message-flash'), 2000)
+      }
+    }
+    window.addEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+    return () => {
+      window.removeEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+    }
+  }, [])
+
   // ---- Load older messages ---------------------------------------------------
   async function loadMore() {
     if (!activeConversationId || !oldestLoaded) return
@@ -1064,7 +1088,11 @@ export function ChatWindow({
                 idx === unreadBoundary &&
                 unreadBoundary > 0
               return (
-                <div key={m.id}>
+                <div
+                  key={m.id}
+                  data-message-id={m.id}
+                  className="wasl-message-wrapper"
+                >
                   {showDate && (
                     <div className="flex justify-center my-3">
                       <div className="wasl-date-pill text-xs px-3 py-1 rounded-lg font-medium">

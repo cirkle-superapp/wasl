@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { findUrls, prettyPath } from '@/lib/link-preview'
 import { renderMarkdownLite } from '@/lib/markdown'
 import { LinkPreviewCard } from './link-preview-card'
+import { ReadReceiptsDialog } from './read-receipts-dialog'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -113,6 +114,7 @@ export function MessageBubble({
   const me = useWaslStore((s) => s.user)
   const mine = message.senderId === me?.id
   const [showReactions, setShowReactions] = useState(false)
+  const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
@@ -437,7 +439,7 @@ export function MessageBubble({
                   <Lock className="w-3 h-3 inline opacity-60" />
                 )}
                 {formatChatTimestamp(message.createdAt)}
-                {mine && <StatusTicks status={message.status} className="ml-1" />}
+                {mine && <StatusTicks status={message.status} className="ml-1" onClick={() => setReadReceiptsOpen(true)} />}
               </div>
             </div>
           ) : (
@@ -454,7 +456,7 @@ export function MessageBubble({
                 )}
                 {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
                 {formatChatTimestamp(message.createdAt)}
-                {mine && <StatusTicks status={message.status} />}
+                {mine && <StatusTicks status={message.status} onClick={() => setReadReceiptsOpen(true)} />}
               </span>
             </div>
           )}
@@ -551,6 +553,12 @@ export function MessageBubble({
           </>
         )}
       </ContextMenuContent>
+      {/* Read receipts dialog — opened by clicking the blue read-ticks */}
+      <ReadReceiptsDialog
+        open={readReceiptsOpen}
+        onOpenChange={setReadReceiptsOpen}
+        messageId={message.id}
+      />
     </ContextMenu>
   )
 }
@@ -742,9 +750,11 @@ function ToolbarButton({
 function StatusTicks({
   status,
   className,
+  onClick,
 }: {
   status: string
   className?: string
+  onClick?: () => void
 }) {
   if (status === 'sent') {
     return <Check className={cn('w-3.5 h-3.5 inline', className)} />
@@ -753,6 +763,24 @@ function StatusTicks({
     return <CheckCheck className={cn('w-3.5 h-3.5 inline', className)} />
   }
   if (status === 'read') {
+    // When onClick is provided, the read-ticks become a clickable button that
+    // opens the read-receipts dialog (sender-only feature).
+    if (onClick) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onClick()
+          }}
+          className="inline-flex items-center hover:scale-110 transition-transform"
+          title="Read — click to see who read this message"
+          aria-label="Read — click to see details"
+        >
+          <CheckCheck className={cn('w-3.5 h-3.5 inline text-sky-500', className)} />
+        </button>
+      )
+    }
     return (
       <CheckCheck className={cn('w-3.5 h-3.5 inline text-sky-500', className)} />
     )

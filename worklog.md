@@ -1400,3 +1400,84 @@ Agent: main (cron job 380238 — webDevReview)
 - Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
 - Add read receipts viewer in contact-info panel ("Seen by" list)
 - Add a "Jump to message" feature from the starred messages dialog
+
+---
+Task ID: 22 — Read receipts + Jump to message + Mute notifications + visual polish (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–21 complete). App was healthy: dev server (port 3000) + chat-service (port 3003) both running. Lint passes. No errors in dev.log.
+- Smoke-tested auth, chat, socket connection, search, sidebar — all working. No bugs found.
+- Identified 3 features from the outstanding list: read receipts viewer, jump-to-message from starred dialog, mute notifications.
+
+### Phase 2: Features Added
+
+**1. Read receipts viewer — read-receipts-dialog.tsx (NEW) + api/messages/[id]/read-receipts (NEW)**
+- New API: `GET /api/messages/[id]/read-receipts` — returns the list of participants who have read this message (whose `lastReadAt` >= message's `createdAt`), excluding the sender. Sender-only access.
+- New component `ReadReceiptsDialog` — shows "Read by" with:
+  - Header: "X of Y recipients read this message"
+  - Read section: avatar + name + "Read <time>" + blue CheckCheck icon for each participant who read it
+  - Remaining section: count of recipients who haven't read it yet
+  - Empty state: "Not read yet" with instructions
+  - Loading state: spinner
+- Made the blue read-ticks (CheckCheck) in MessageBubble CLICKABLE — clicking opens the ReadReceiptsDialog. Added `onClick` prop to `StatusTicks` component. The ticks get a `hover:scale-110` micro-animation.
+- Verified: clicked the blue read-ticks on a sent message → dialog opened showing "0 of 1 recipient read this message" with "Not read yet" empty state.
+
+**2. Jump to message — starred-messages-dialog.tsx + chat-window.tsx**
+- Added `data-message-id={m.id}` attribute to each message wrapper in chat-window.tsx.
+- New `useEffect` in chat-window.tsx listens for `wasl:jump-to-message` custom window events. When fired, it:
+  - Finds the target message element via `querySelector('[data-message-id="..."]')`
+  - Scrolls it into view (smooth, centered)
+  - Adds a `.wasl-message-flash` class for 2 seconds (teal ring + background flash animation)
+- Updated `StarredMessagesDialog` — each starred message card is now clickable (with `role="button"` and keyboard support). Clicking dispatches the `wasl:jump-to-message` event and closes the dialog.
+- Added "Jump to message" label with ArrowDown icon that appears on hover (opacity transition).
+- New `wasl-message-flash` CSS animation: 1.5s teal box-shadow ring + background color pulse.
+- Verified: opened Starred messages dialog → clicked a starred message → dialog closed → chat scrolled to the message → flash animation played.
+
+**3. Mute notifications — api/conversations/[id]/mute (NEW) + contact-info-panel.tsx**
+- Added `muted Boolean @default(false)` field to the Participant model in prisma/schema.prisma. Pushed to both local SQLite and Turso.
+- New API: `GET /api/conversations/[id]/mute` (returns current mute state) + `POST /api/conversations/[id]/mute` (toggles mute, body: `{ muted: boolean }`).
+- Updated `ContactInfoPanel`:
+  - Loads the mute state on mount via `loadMuted()`
+  - `toggleMute()` function: optimistic update + rollback on failure + toast
+  - Button shows "Mute notifications" (Bell icon) when unmuted, "Unmute notifications" (BellOff icon, amber color) when muted
+  - Button gets amber styling when muted
+- Verified: clicked "Mute notifications" → button changed to "Unmute notifications" + toast "Notifications muted" + API returns `{"muted":true}`. Clicked again → unmuted + toast "Notifications unmuted" + API returns `{"muted":false}`.
+
+### Phase 3: Visual Polish
+
+**4. Scroll-to-bottom button bounce animation (globals.css)**
+- New `wasl-scroll-btn-bounce` keyframe: 0% (translateY 8px + scale 0.9 + opacity 0) → 60% (translateY -2px + scale 1.05 + opacity 1) → 100% (translateY 0 + scale 1 + opacity 1), 0.25s.
+- Replaces the previous simple fade-in — the button now bounces in with a slight overshoot.
+
+**5. Jump-to-message flash animation (globals.css)**
+- New `wasl-message-flash` keyframe: teal box-shadow ring expands from 0 to 6px + background color pulses from teal-tinted to transparent, 1.5s.
+- Makes the target message visually distinct when scrolled to.
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors
+- ✅ Read receipts dialog opens when clicking blue read-ticks on own messages
+- ✅ Read receipts API returns 403 for non-senders, 200 for sender
+- ✅ Jump-to-message: clicking a starred message scrolls to it + flash animation plays
+- ✅ Mute notifications: button toggles between Bell/BellOff, API persists state, toast confirms
+- ✅ No console errors
+- ✅ No "Reconnecting" status (socket connected)
+- ✅ Schema migration applied to both local SQLite and Turso
+
+### Files Touched
+- `prisma/schema.prisma` — added `muted Boolean @default(false)` to Participant
+- `src/app/globals.css` — wasl-message-flash animation + wasl-scroll-btn-bounce animation
+- `src/components/wasl/chat-window.tsx` — data-message-id attribute + jump-to-message event listener
+- `src/components/wasl/contact-info-panel.tsx` — mute state + toggleMute + BellOff icon + loadMuted
+- `src/components/wasl/message-bubble.tsx` — ReadReceiptsDialog import + clickable StatusTicks + readReceiptsOpen state
+- `src/components/wasl/starred-messages-dialog.tsx` — jumpToMessage function + clickable cards + ArrowDown icon
+- `src/components/wasl/read-receipts-dialog.tsx` — NEW (read receipts viewer dialog)
+- `src/app/api/messages/[id]/read-receipts/route.ts` — NEW (read receipts API)
+- `src/app/api/conversations/[id]/mute/route.ts` — NEW (mute toggle API)
+
+### Outstanding (next-phase priorities)
+- Wire up the "Encryption" button in contact-info panel (last remaining "coming soon" button)
+- Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
+- Add message edit history (show "edited" indicator + view previous versions)
+- Add a "Forward to multiple chats" feature (multi-select in forward dialog)
+- Add online/last-seen indicators in the read-receipts dialog

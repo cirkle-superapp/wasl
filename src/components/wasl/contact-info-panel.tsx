@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   Phone,
   Bell,
+  BellOff,
   Trash2,
   X,
   Image as ImageIcon,
@@ -83,6 +84,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [captureLoading, setCaptureLoading] = useState(false)
   const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
   const [starredOpen, setStarredOpen] = useState(false)
+  const [muted, setMuted] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -134,7 +136,47 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     }
     loadMedia()
     loadCapture()
+    loadMuted()
   }, [activeConversationId, loadCapture])
+
+  const loadMuted = useCallback(async () => {
+    if (!activeConversationId) return
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/mute`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      setMuted(!!data.muted)
+    } catch {
+      // ignore
+    }
+  }, [activeConversationId])
+
+  async function toggleMute() {
+    const next = !muted
+    setMuted(next) // optimistic
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/mute`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ muted: next }),
+        }
+      )
+      if (!res.ok) {
+        setMuted(!next) // rollback
+        toast.error('Failed to update mute setting')
+        return
+      }
+      toast.success(next ? 'Notifications muted' : 'Notifications unmuted')
+    } catch {
+      setMuted(!next) // rollback
+      toast.error('Network error')
+    }
+  }
 
   if (!conversation) return null
 
@@ -485,10 +527,21 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
         <div className="space-y-2">
           <Button
             variant="ghost"
-            className="w-full justify-start text-foreground hover:bg-muted"
-            onClick={() => toast.info('Notifications toggle is coming soon')}
+            className={cn(
+              'w-full justify-start text-foreground hover:bg-muted',
+              muted && 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+            )}
+            onClick={toggleMute}
           >
-            <Bell className="w-4 h-4 mr-3" /> Mute notifications
+            {muted ? (
+              <>
+                <BellOff className="w-4 h-4 mr-3" /> Unmute notifications
+              </>
+            ) : (
+              <>
+                <Bell className="w-4 h-4 mr-3" /> Mute notifications
+              </>
+            )}
           </Button>
           <Button
             variant="ghost"

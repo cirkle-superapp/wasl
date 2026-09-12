@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { Star, Lock, X, Loader2, MessageSquare } from 'lucide-react'
+import { Star, Lock, X, Loader2, MessageSquare, ArrowDown } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { formatChatTimestamp } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -75,6 +75,13 @@ export function StarredMessagesDialog({
     }
   }, [open, load])
 
+  // Jump to a starred message in the chat — dispatches a custom window event
+  // that the ChatWindow listens for, then closes the dialog.
+  function jumpToMessage(messageId: string) {
+    window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: messageId }))
+    onOpenChange(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
@@ -116,7 +123,16 @@ export function StarredMessagesDialog({
                 return (
                   <div
                     key={s.id}
-                    className="rounded-lg border border-border bg-white/70 dark:bg-white/5 p-3 space-y-2"
+                    className="rounded-lg border border-border bg-white/70 dark:bg-white/5 p-3 space-y-2 hover:border-[var(--wasl-green)]/40 hover:bg-[var(--wasl-green)]/5 transition-colors cursor-pointer group/star"
+                    onClick={() => jumpToMessage(s.message.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        jumpToMessage(s.message.id)
+                      }
+                    }}
                   >
                     {/* Sender header */}
                     {sender && (
@@ -152,10 +168,16 @@ export function StarredMessagesDialog({
                         s.message.content
                       )}
                     </div>
-                    {/* Starred timestamp */}
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      Starred {formatChatTimestamp(s.starredAt)}
+                    {/* Footer: starred time + jump button */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        Starred {formatChatTimestamp(s.starredAt)}
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] opacity-0 group-hover/star:opacity-100 transition-opacity">
+                        <ArrowDown className="w-3 h-3" />
+                        Jump to message
+                      </span>
                     </div>
                   </div>
                 )
