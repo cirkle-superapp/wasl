@@ -1105,3 +1105,118 @@ Implement message protection that blocks screenshots and forwarding by default, 
 - UI in the contact-info panel for the sender to view screenshot attempts on their protected messages (API exists at `/api/messages/[id]/screenshot-attempts`, UI not yet added)
 - Server-side PrintScreen detection is not possible from a web context — we can only catch the PrintScreen keyup event client-side. The server-side enforcement is limited to the forward API.
 - Native screenshot tools (OS-level) cannot be blocked from a web app — the audit log is the strongest signal we have.
+
+---
+Task ID: 19 — Continuous QA + 7 new features + styling polish (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–18 complete). The app was healthy: dev server (port 3000) and chat-service (port 3003) both running. Smoke-tested auth, chat, settings, contact-info-panel — no errors.
+- One small UX issue identified: the contact-info-panel wasn't showing the new "Capture attempts" section that the privacy feature (Task 18) had API support for but no UI yet.
+
+### Phase 2: Features Added (7 new)
+
+**1. Screenshot Attempts Viewer (completes Task 18's privacy feature)**
+- New aggregate API: `GET /api/conversations/[id]/screenshot-attempts` — returns all attempts across all of the current user's protected messages in a conversation, with reporter info + summary counts by kind.
+- New section in `contact-info-panel.tsx` called "Capture attempts" that:
+  - Shows a count badge when there are attempts
+  - Shows summary chips per attempt kind (printscreen, copy, save, contextmenu, drag, forward)
+  - Lists each protected message with attempts, expandable to show individual attempts (avatar + name + timestamp + kind badge)
+  - Auto-expands the most recent message
+  - Has an empty state explaining how to enable protection
+  - Has a Refresh button
+  - Uses skeleton loaders while fetching
+
+**2. Paste Image Upload (Ctrl+V)**
+- New `paste` event listener on `window` in chat-window.tsx — when an image file is in the clipboard AND no text input is focused, reads it and sends as image. Toast: "Pasted image sent". 1.5MB size cap. Doesn't break paste-into-composer.
+
+**3. Drag-and-Drop File Upload**
+- New `onDragEnter` / `onDragOver` / `onDragLeave` / `onDrop` handlers on the chat-window root
+- Beautiful drop overlay with backdrop blur, dashed border, and "Drop image to send · PNG / JPG / WEBP / GIF · max 1.5MB" text
+- `dragDepthRef` tracks drag enter/leave depth so the overlay doesn't flicker when moving over child elements
+- Multi-file drop supported — each image is sent as a separate message
+- Non-image files show an error toast
+
+**4. Link Previews in MessageBubble**
+- New `src/lib/link-preview.ts` with URL detection regex (handles `http://`, `https://`, `www.`, and bare `domain.tld/path` forms)
+- Renders a compact preview card below the message with: favicon (from Google's S2 favicon service, with onError fallback), domain, path (truncated), and an external-link icon
+- Click opens in new tab with `rel="noopener noreferrer"`
+- Only the first URL is previewed (to keep bubbles compact)
+- Hidden when the bubble is in blocked-protection state
+
+**5. Markdown Lite in MessageBubble**
+- New `src/lib/markdown.tsx` — single-pass tokenizer supporting `**bold**`, `__bold__`, `_italic_`, `` `inline code` ``, `~~strikethrough~~`, and bare URL linkification
+- Renders to React nodes (no `dangerouslySetInnerHTML`) — safe from XSS
+- Inline code uses a monospace font with subtle background
+- Links get dotted underline + Wasl teal/green color
+
+**6. Skeleton Loaders (replaces "Loading…" text)**
+- Rewrote `src/components/ui/skeleton.tsx` to export `Skeleton`, `MessageSkeleton`, and `ConversationRowSkeleton` components
+- New `wasl-skeleton-shimmer` CSS animation (gradient sweep, light/dark variants)
+- Chat-window's "Loading messages…" replaced with 6 alternating in/out `MessageSkeleton`s + a date-pill skeleton
+- "Loading older messages…" now shows 3 pulsing dots
+- Sidebar's "Loading chats..." replaced with 8 `ConversationRowSkeleton`s
+- Removed the now-unused `Loader2` import from sidebar
+
+**7. Connection Status Indicator**
+- New `socketStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected'` state in the wasl store
+- chat-app.tsx now listens to socket `connect`, `disconnect`, `reconnect_attempt`, `reconnect`, `reconnect_error` events and updates the store
+- Chat header shows an amber "Reconnecting" / "Offline" pill next to the user name when the socket is not healthy
+- The "typing…" indicator also falls back to the connection status when the socket is down
+
+### Phase 3: Styling Polish
+
+**8. Group Avatar with Stacked Initials**
+- New `WaslGroupAvatar` component in `wasl-avatar.tsx` — renders up to 4 participant avatars in a 2x2 grid (or 2 side-by-side for 2 participants)
+- Falls back to `WaslAvatar` when no participants are provided
+- Used in both sidebar conversation rows AND chat-window header for group conversations
+- Has a proper `aria-label` for accessibility
+
+**9. Animated Send Button**
+- New `wasl-send-pulse` CSS animation — gentle 1.08x scale pulse every 1.6s
+- Applied to the send button when there's text to send (along with a green shadow)
+- Makes the send affordance more discoverable
+
+**10. Better Bubble Entrance**
+- New `wasl-bubble-out-in` keyframe — soft 6px slide-up + 0.98x scale-in over 160ms
+- Applied to all incoming/outgoing bubbles via the existing `wasl-animate-in` wrapper class
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors (after fixing a React Hooks violation: removed `useMemo` inside conditional text rendering)
+- ✅ Live demo login works, no console errors
+- ✅ Group avatar shows stacked initials ("DUAHOKLM" for "Friends on Wasl" group)
+- ✅ Drag-and-drop overlay appears when dragging a file over the chat ("Drop image to send · PNG / JPG / WEBP / GIF · max 1.5MB")
+- ✅ Sending a message with `https://example.com - **bold** _italic_ \`code\`` correctly renders:
+  - `<strong>bold</strong>` ✓
+  - `<em>italic</em>` ✓
+  - `<code>code</code>` ✓
+  - Link preview card with favicon + domain ✓
+  - Inline linkified URL in message body ✓
+- ✅ Skeleton loaders appear during chat load (25 skeleton elements counted during initial message load)
+- ✅ Contact-info panel now shows "Capture attempts" section with proper empty state
+- ✅ `/api/conversations/[id]/screenshot-attempts` returns 200 with empty summary when no protected messages exist
+- ✅ Connection status indicator correctly clears once socket connects (showed "Reconnecting…" initially, then disappeared after ~5s)
+- ✅ Send button shows pulse animation when text is entered (verified via DOM class `wasl-send-pulse`)
+
+### Files Touched
+- `src/app/globals.css` — skeleton shimmer + send-pulse + bubble-out-in animations
+- `src/components/ui/skeleton.tsx` — rewritten with Skeleton, MessageSkeleton, ConversationRowSkeleton
+- `src/components/wasl/chat-app.tsx` — socket status listeners
+- `src/components/wasl/chat-window.tsx` — paste + drag-drop handlers + skeleton loaders + connection pill + group avatar
+- `src/components/wasl/contact-info-panel.tsx` — Capture attempts section
+- `src/components/wasl/message-bubble.tsx` — link preview card + markdown rendering
+- `src/components/wasl/message-input.tsx` — send button pulse + aria-label
+- `src/components/wasl/sidebar.tsx` — ConversationRowSkeleton + group avatar
+- `src/components/wasl/wasl-avatar.tsx` — new WaslGroupAvatar component
+- `src/lib/store.ts` — socketStatus state + setSocketStatus action
+- `src/lib/link-preview.ts` — NEW (URL detection + favicon helpers)
+- `src/lib/markdown.tsx` — NEW (single-pass markdown-lite tokenizer)
+- `src/app/api/conversations/[id]/screenshot-attempts/route.ts` — NEW aggregate endpoint
+
+### Outstanding (next-phase priorities)
+- The contact-info-panel "Mute notifications", "Starred messages", and "Encryption" buttons still show "coming soon" toasts — wire them up to real backend state
+- The link preview is favicon-only — could add OpenGraph meta tag fetching via a server-side proxy for richer cards (title + description + image)
+- Drag-and-drop is currently image-only — extend to support PDF/voice notes/documents
+- Group avatar could animate the stacked initials in on mount
+- The "Reconnecting…" indicator could auto-trigger a manual reconnect button
+- Markdown could be extended to support ```fenced code blocks``` and > blockquotes

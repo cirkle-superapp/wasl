@@ -15,11 +15,14 @@ import {
   Pencil,
   Forward,
   Lock,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
 import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
 import { toast } from 'sonner'
+import { findUrls, faviconUrl, prettyPath } from '@/lib/link-preview'
+import { renderMarkdownLite } from '@/lib/markdown'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
@@ -253,6 +256,24 @@ export function MessageBubble({
   const grouped = groupReactions(reactions || [])
   const myReaction = (reactions || []).find((r) => r.userId === currentUserId)?.emoji
 
+  // Detect URLs in text messages so we can render a small preview card.
+  // This is a plain function call (not a hook) so it's safe to compute after
+  // the early returns above for system / commit / poll / voice messages.
+  // The regex is O(n) which is negligible for typical chat message lengths.
+  const linkPreview =
+    message.type === 'text'
+      ? (() => {
+          const urls = findUrls(message.content)
+          if (urls.length === 0) return null
+          const first = urls[0]
+          return {
+            href: first.href,
+            domain: first.domain,
+            path: prettyPath(first.path),
+          }
+        })()
+      : null
+
   return (
     <div
       className={cn(
@@ -415,7 +436,7 @@ export function MessageBubble({
                 blocked && 'select-none'
               )}
             >
-              {message.content}
+              {renderMarkdownLite(message.content)}
               <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
                 {protection.isProtected && (
                   <Lock className="w-3 h-3 inline opacity-60" />
@@ -425,6 +446,42 @@ export function MessageBubble({
                 {mine && <StatusTicks status={message.status} />}
               </span>
             </div>
+          )}
+          {/* Link preview card — shown below any text message that contains
+              at least one URL. We render at most one preview (the first URL)
+              to keep the bubble compact. The card has a favicon + domain +
+              visible path; clicking opens the link in a new tab. */}
+          {message.type === 'text' && !blocked && linkPreview && (
+            <a
+              href={linkPreview.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1.5 mb-1 flex items-center gap-2 rounded-lg border border-foreground/10 bg-foreground/[0.03] dark:bg-foreground/[0.06] hover:bg-foreground/[0.06] dark:hover:bg-foreground/[0.1] transition-colors p-2 max-w-[280px] no-underline group/link"
+            >
+              <img
+                src={faviconUrl(linkPreview.domain, 32)}
+                alt=""
+                width={24}
+                height={24}
+                className="w-6 h-6 rounded shrink-0 bg-white"
+                onError={(e) => {
+                  // Hide the favicon if it fails to load — fall back to globe icon
+                  ;(e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-medium text-foreground truncate">
+                  {linkPreview.domain}
+                </div>
+                {linkPreview.path && (
+                  <div className="text-[10px] text-muted-foreground truncate">
+                    {linkPreview.path}
+                  </div>
+                )}
+              </div>
+              <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 opacity-50 group-hover/link:opacity-100 transition-opacity" />
+            </a>
           )}
         </div>
 

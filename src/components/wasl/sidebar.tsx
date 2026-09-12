@@ -11,12 +11,11 @@ import {
   Sun,
   MoreVertical,
   Trash2,
-  Loader2,
   CheckCheck,
   Phone,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
-import { WaslAvatar } from './wasl-avatar'
+import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
 import { StoryBar } from './story-bar'
 import { PhoneNumbersDialog } from './phone-numbers-dialog'
@@ -24,6 +23,7 @@ import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -214,8 +214,11 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto wasl-scroll bg-[var(--wasl-sidebar-bg)]">
         <StoryBar />
         {loading && conversations.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading chats...
+          // Skeleton placeholders while the conversation list loads.
+          <div className="py-2">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <ConversationRowSkeleton key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground">
@@ -319,14 +322,26 @@ function ConversationRow({
           : 'hover:bg-muted/40 bg-[var(--wasl-sidebar-bg)]'
       )}
     >
-      <WaslAvatar
-        name={conversation.name}
-        src={conversation.avatar}
-        color={conversation.avatarColor}
-        size={48}
-        online={isOnline}
-        showStatus={!conversation.isGroup}
-      />
+      {conversation.isGroup ? (
+        <WaslGroupAvatar
+          name={conversation.name}
+          participants={conversation.participants.map((p) => ({
+            name: p.name,
+            avatar: p.avatar,
+            avatarColor: p.avatarColor,
+          }))}
+          size={48}
+        />
+      ) : (
+        <WaslAvatar
+          name={conversation.name}
+          src={conversation.avatar}
+          color={conversation.avatarColor}
+          size={48}
+          online={isOnline}
+          showStatus
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Phone,
   Bell,
@@ -11,13 +11,60 @@ import {
   Star,
   Shield,
   ShieldCheck,
+  Lock,
+  Camera,
+  Copy,
+  Forward,
+  MousePointerClick,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WaslAvatar } from './wasl-avatar'
 import { useWaslStore, type Commit } from '@/lib/store'
-import { formatLastSeen } from '@/lib/time'
+import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+
+// Icon mapping for screenshot-attempt kinds → human-readable label + icon
+const KIND_META: Record<string, { label: string; icon: typeof Camera }> = {
+  printscreen: { label: 'Screenshot key', icon: Camera },
+  copy: { label: 'Copy attempt', icon: Copy },
+  save: { label: 'Save attempt', icon: Forward },
+  contextmenu: { label: 'Right-click', icon: MousePointerClick },
+  drag: { label: 'Drag attempt', icon: MousePointerClick },
+  forward: { label: 'Forward attempt', icon: Forward },
+}
+
+type CaptureAttempt = {
+  id: string
+  kind: string
+  note: string | null
+  createdAt: string
+  reporter: {
+    id: string
+    name: string
+    username: string
+    avatar: string | null
+    avatarColor: string | null
+  } | null
+}
+
+type CaptureMessage = {
+  id: string
+  content: string
+  type: string
+  createdAt: string
+  attempts: CaptureAttempt[]
+}
+
+type CaptureSummary = {
+  messages: CaptureMessage[]
+  totalAttempts: number
+  byKind: Record<string, number>
+  protectedMessageCount: number
+}
 
 export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const {
@@ -31,9 +78,37 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const conversation =
     conversations.find((c) => c.id === activeConversationId) || null
   const [media, setMedia] = useState<string[]>([])
+  const [capture, setCapture] = useState<CaptureSummary | null>(null)
+  const [captureLoading, setCaptureLoading] = useState(false)
+  const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
+
+  const loadCapture = useCallback(async () => {
+    if (!activeConversationId) return
+    setCaptureLoading(true)
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/screenshot-attempts`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) {
+        setCapture(null)
+        return
+      }
+      const data: CaptureSummary = await res.json()
+      setCapture(data)
+      // Auto-expand the most-recent message's attempts list
+      if (data.messages.length > 0) {
+        setExpandedCapture(new Set([data.messages[0].id]))
+      }
+    } catch {
+      setCapture(null)
+    } finally {
+      setCaptureLoading(false)
+    }
+  }, [activeConversationId])
 
   useEffect(() => {
     async function loadMedia() {
@@ -56,7 +131,8 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       }
     }
     loadMedia()
-  }, [activeConversationId])
+    loadCapture()
+  }, [activeConversationId, loadCapture])
 
   if (!conversation) return null
 
@@ -81,6 +157,15 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     } catch {
       toast.error('Failed to delete')
     }
+  }
+
+  function toggleCaptureMessage(messageId: string) {
+    setExpandedCapture((prev) => {
+      const next = new Set(prev)
+      if (next.has(messageId)) next.delete(messageId)
+      else next.add(messageId)
+      return next
+    })
   }
 
   return (
@@ -183,6 +268,138 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
+        {/* Capture attempts (sender-side audit log of protected messages) */}
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+            <Lock className="w-3.5 h-3.5 text-[var(--wasl-green)]" /> Capture attempts
+            {capture && capture.totalAttempts > 0 && (
+              <span className="ml-auto text-[10px] normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] font-semibold">
+                {capture.totalAttempts}
+              </span>
+            )}
+          </div>
+          {captureLoading ? (
+            <div className="space-y-1.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-12 rounded-md bg-muted/40 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : !capture || capture.totalAttempts === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
+              <Lock className="w-3.5 h-3.5 inline mr-1.5 text-[var(--wasl-green)]" />
+              {capture && capture.protectedMessageCount > 0
+                ? 'No capture attempts recorded on your protected messages in this chat.'
+                : 'No protected messages yet. Use the lock icon in the composer to send a protected message; attempts to screenshot or forward it will be shown here.'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* Kind summary chips */}
+              {Object.keys(capture.byKind).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {Object.entries(capture.byKind).map(([kind, count]) => {
+                    const meta = KIND_META[kind] || {
+                      label: kind,
+                      icon: AlertTriangle,
+                    }
+                    const Icon = meta.icon
+                    return (
+                      <span
+                        key={kind}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-medium border border-amber-500/20"
+                        title={meta.label}
+                      >
+                        <Icon className="w-3 h-3" />
+                        {count} {meta.label.toLowerCase()}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Per-message attempt list */}
+              {capture.messages.map((m) => {
+                const isExpanded = expandedCapture.has(m.id)
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-lg border border-border bg-white/70 dark:bg-white/5 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleCaptureMessage(m.id)}
+                      className="w-full flex items-center gap-2 p-2.5 text-left hover:bg-muted/40 transition-colors"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-[var(--wasl-green)] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-muted-foreground truncate">
+                          {m.content.slice(0, 80) || '(empty message)'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {formatChatTimestamp(m.createdAt)} · {m.attempts.length} attempt
+                          {m.attempts.length === 1 ? '' : 's'}
+                        </div>
+                      </div>
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-border/60 bg-amber-50/40 dark:bg-amber-500/5 p-2 space-y-1.5">
+                        {m.attempts.map((a) => {
+                          const meta = KIND_META[a.kind] || {
+                            label: a.kind,
+                            icon: AlertTriangle,
+                          }
+                          const Icon = meta.icon
+                          return (
+                            <div
+                              key={a.id}
+                              className="flex items-center gap-2 text-xs p-1.5 rounded-md hover:bg-amber-100/40 dark:hover:bg-amber-500/10"
+                            >
+                              <WaslAvatar
+                                name={a.reporter?.name || 'Unknown'}
+                                src={a.reporter?.avatar || undefined}
+                                color={a.reporter?.avatarColor || undefined}
+                                size={22}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">
+                                  {a.reporter?.name || 'Unknown user'}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {formatChatTimestamp(a.createdAt)}
+                                </div>
+                              </div>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-medium shrink-0">
+                                <Icon className="w-3 h-3" />
+                                {meta.label}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {capture && capture.totalAttempts > 0 && (
+            <button
+              type="button"
+              onClick={loadCapture}
+              className="mt-2 text-[11px] text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:underline flex items-center gap-1"
+            >
+              <Camera className="w-3 h-3" /> Refresh
+            </button>
+          )}
+        </div>
+
         {/* Media */}
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
@@ -193,7 +410,6 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
               {media.map((src, i) => (
-                 
                 <img
                   key={i}
                   src={src}

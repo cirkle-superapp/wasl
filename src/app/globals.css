@@ -655,6 +655,51 @@
   animation: wasl-lock-pop 0.2s ease-out;
 }
 
+/* ---- Skeleton shimmer (loading placeholders) ---- */
+@keyframes wasl-skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.wasl-skeleton {
+  position: relative;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, currentColor 8%, transparent) 0%,
+    color-mix(in oklab, currentColor 16%, transparent) 50%,
+    color-mix(in oklab, currentColor 8%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: wasl-skeleton-shimmer 1.4s ease-in-out infinite;
+  color: var(--foreground);
+}
+.dark .wasl-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, #ffffff 6%, transparent) 0%,
+    color-mix(in oklab, #ffffff 12%, transparent) 50%,
+    color-mix(in oklab, #ffffff 6%, transparent) 100%
+  );
+}
+
+/* ---- Send button pulse — shown when the composer has text to send ---- */
+@keyframes wasl-send-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+.wasl-send-pulse {
+  animation: wasl-send-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---- Soft entrance for outgoing message bubbles ---- */
+@keyframes wasl-bubble-out-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wasl-animate-in > .wasl-bubble-out,
+.wasl-animate-in > .wasl-bubble-in {
+  animation: wasl-bubble-out-in 0.16s ease-out;
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 

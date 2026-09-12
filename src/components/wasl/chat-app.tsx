@@ -20,6 +20,7 @@ export function ChatApp({ user }: { user: any }) {
     setUserOnline,
     setOnlineUsers,
     setTyping,
+    setSocketStatus,
     setShowProfilePanel,
     showProfilePanel,
   } = useWaslStore()
@@ -102,6 +103,29 @@ export function ChatApp({ user }: { user: any }) {
   useEffect(() => {
     if (!user?.id) return
     const socket = connectSocket(user.id)
+
+    // Track socket connection state for the chat-header indicator
+    function onConnect() {
+      setSocketStatus(socket.connected ? 'connected' : 'connecting')
+    }
+    function onDisconnect() {
+      setSocketStatus('disconnected')
+    }
+    function onReconnectAttempt() {
+      setSocketStatus('reconnecting')
+    }
+    function onReconnect() {
+      setSocketStatus('connected')
+    }
+    function onReconnectError() {
+      setSocketStatus('reconnecting')
+    }
+    setSocketStatus(socket.connected ? 'connected' : 'connecting')
+    socket.on('connect', onConnect)
+    socket.on('disconnect', onDisconnect)
+    socket.io.on('reconnect_attempt', onReconnectAttempt)
+    socket.io.on('reconnect', onReconnect)
+    socket.io.on('reconnect_error', onReconnectError)
 
     function onPresenceUpdate(payload: {
       userId: string
@@ -190,13 +214,18 @@ export function ChatApp({ user }: { user: any }) {
     socket.on('conversation:upserted', onConversationUpserted)
 
     return () => {
+      socket.off('connect', onConnect)
+      socket.off('disconnect', onDisconnect)
+      socket.io.off('reconnect_attempt', onReconnectAttempt)
+      socket.io.off('reconnect', onReconnect)
+      socket.io.off('reconnect_error', onReconnectError)
       socket.off('presence:update', onPresenceUpdate)
       socket.off('online-users', onOnlineUsers)
       socket.off('typing:update', onTyping)
       socket.off('conversation:updated', onConversationUpdated)
       socket.off('conversation:upserted', onConversationUpserted)
     }
-  }, [user?.id, setUserOnline, setOnlineUsers, setTyping, upsertConversation])
+  }, [user?.id, setUserOnline, setOnlineUsers, setTyping, upsertConversation, setSocketStatus])
 
   // Cleanup socket on unmount
   useEffect(() => {

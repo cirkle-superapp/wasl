@@ -430,12 +430,13 @@ export function MessageInput({
             onClick={value.trim() ? handleSend : startRecording}
             disabled={sending}
             className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-white',
+              'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 text-white',
               value.trim()
-                ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)]'
+                ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] wasl-send-pulse shadow-md shadow-[var(--wasl-green)]/30'
                 : 'bg-gray-400 hover:bg-gray-500'
             )}
             title={value.trim() ? 'Send' : 'Record voice message'}
+            aria-label={value.trim() ? 'Send message' : 'Record voice message'}
           >
             {value.trim() ? (
               <Send className="w-5 h-5" />

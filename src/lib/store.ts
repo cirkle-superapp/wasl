@@ -136,6 +136,11 @@ type WaslState = {
     typing: boolean
   ) => void
 
+  // Socket connection status — used to show a small "connecting…" indicator
+  // in the chat header when the real-time socket is reconnecting.
+  socketStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
+  setSocketStatus: (status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected') => void
+
   showProfilePanel: boolean
   setShowProfilePanel: (show: boolean) => void
 
@@ -284,6 +289,9 @@ export const useWaslStore = create<WaslState>((set) => ({
         },
       }
     }),
+
+  socketStatus: 'connecting',
+  setSocketStatus: (status) => set({ socketStatus: status }),
 
   showProfilePanel: false,
   setShowProfilePanel: (show) => set({ showProfilePanel: show }),

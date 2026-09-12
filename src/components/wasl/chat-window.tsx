@@ -18,8 +18,9 @@ import {
   ListChecks,
   Wand2,
   Timer,
+  Paperclip,
 } from 'lucide-react'
-import { WaslAvatar } from './wasl-avatar'
+import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
@@ -45,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
+import { Skeleton, MessageSkeleton } from '@/components/ui/skeleton'
 
 const PAGE_SIZE = 40
 
@@ -76,6 +78,7 @@ export function ChatWindow({
     toggleReaction,
     setStarred,
     removeMessage,
+    socketStatus,
   } = useWaslStore()
 
   const [commitOpen, setCommitOpen] = useState(false)
@@ -90,6 +93,9 @@ export function ChatWindow({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [botReplying, setBotReplying] = useState(false)
+  // Drop zone state — shown when a file is dragged over the chat window
+  const [isDragging, setIsDragging] = useState(false)
+  const dragDepthRef = useRef(0)
 
   const conversation = conversations.find((c) => c.id === activeConversationId)
   const messages = activeConversationId
@@ -635,6 +641,109 @@ export function ChatWindow({
     [handleSend]
   )
 
+  // ---- Paste image upload (Ctrl+V with image in clipboard) ------------------
+  // Reads any image file from the clipboard `items` list, converts it to a
+  // data URL, and sends it via the existing image-send flow.
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      // Only intercept when there's no active text input focus (so we don't
+      // break paste-into-message-composer).
+      const active = document.activeElement
+      const inTextarea =
+        active &&
+        (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')
+      if (inTextarea) return
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (!file) continue
+          if (file.size > 1.5 * 1024 * 1024) {
+            toast.error('Image too large (max 1.5MB)')
+            return
+          }
+          e.preventDefault()
+          const reader = new FileReader()
+          reader.onload = () => {
+            const dataUrl = reader.result as string
+            void handleSendImage(dataUrl)
+            toast.success('Pasted image sent')
+          }
+          reader.onerror = () => toast.error('Failed to read pasted image')
+          reader.readAsDataURL(file)
+          return
+        }
+      }
+    },
+    [handleSendImage]
+  )
+
+  // Mount the paste listener on the window whenever the chat window mounts.
+  useEffect(() => {
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [handlePaste])
+
+  // ---- Drag-and-drop image upload ------------------------------------------
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+    dragDepthRef.current += 1
+    setIsDragging(true)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      dragDepthRef.current = 0
+      setIsDragging(false)
+      const files = Array.from(e.dataTransfer.files || [])
+      const images = files.filter((f) => f.type.startsWith('image/'))
+      if (images.length === 0) {
+        if (files.length > 0) {
+          toast.error('Only image files are supported')
+        }
+        return
+      }
+      for (const file of images) {
+        if (file.size > 1.5 * 1024 * 1024) {
+          toast.error(`Image too large: ${file.name} (max 1.5MB)`)
+          continue
+        }
+        const reader = new FileReader()
+        reader.onload = () => {
+          void handleSendImage(reader.result as string)
+        }
+        reader.onerror = () =>
+          toast.error(`Failed to read ${file.name}`)
+        reader.readAsDataURL(file)
+      }
+      toast.success(
+        images.length === 1
+          ? `Sent ${images[0].name}`
+          : `Sent ${images.length} images`
+      )
+    },
+    [handleSendImage]
+  )
+
   // ---- Typing indicator ------------------------------------------------------
   const onTypingChange = useCallback(
     (typing: boolean) => {
@@ -710,7 +819,29 @@ export function ChatWindow({
   let lastDate = ''
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 wasl-chat-pattern">
+    <div
+      className="flex-1 flex flex-col min-w-0 wasl-chat-pattern relative"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drop zone overlay — shown only while a file is being dragged over */}
+      {isDragging && (
+        <div className="absolute inset-0 z-40 bg-[var(--wasl-green)]/10 backdrop-blur-sm border-2 border-dashed border-[var(--wasl-green)] rounded-lg flex items-center justify-center pointer-events-none">
+          <div className="bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl px-6 py-4 shadow-lg flex items-center gap-3">
+            <Paperclip className="w-6 h-6 text-[var(--wasl-green)] rotate-45" />
+            <div>
+              <div className="font-semibold text-foreground">
+                Drop image to send
+              </div>
+              <div className="text-xs text-muted-foreground">
+                PNG / JPG / WEBP / GIF · max 1.5MB
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Chat header */}
       <div className="bg-[var(--wasl-sidebar-bg)] px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border shadow-sm">
         <button
@@ -723,20 +854,37 @@ export function ChatWindow({
           onClick={onOpenInfo}
           className="flex items-center gap-3 flex-1 min-w-0 text-left"
         >
-          <WaslAvatar
-            name={conversation.name}
-            src={conversation.avatar}
-            color={conversation.avatarColor}
-            size={42}
-            online={isOnline}
-            showStatus={!conversation.isGroup}
-          />
+          {conversation.isGroup ? (
+            <WaslGroupAvatar
+              name={conversation.name}
+              participants={conversation.participants.map((p) => ({
+                name: p.name,
+                avatar: p.avatar,
+                avatarColor: p.avatarColor,
+              }))}
+              size={42}
+            />
+          ) : (
+            <WaslAvatar
+              name={conversation.name}
+              src={conversation.avatar}
+              color={conversation.avatarColor}
+              size={42}
+              online={isOnline}
+              showStatus
+            />
+          )}
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-foreground truncate">
               {conversation.name}
             </div>
             <div className="text-xs text-muted-foreground truncate">
-              {typingUsers.length > 0 ? (
+              {socketStatus === 'reconnecting' || socketStatus === 'disconnected' ? (
+                <span className="inline-flex items-center gap-1 text-amber-500 dark:text-amber-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  {socketStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline'}
+                </span>
+              ) : typingUsers.length > 0 ? (
                 <span className="text-[var(--wasl-green)] font-medium">
                   typing…
                 </span>
@@ -748,6 +896,20 @@ export function ChatWindow({
             </div>
           </div>
         </button>
+        {/* Socket connection pill — only shown when the socket is not healthy */}
+        {(socketStatus === 'reconnecting' || socketStatus === 'disconnected') && (
+          <span
+            title={
+              socketStatus === 'reconnecting'
+                ? 'Real-time connection lost — Wasl is reconnecting…'
+                : 'You are offline. Messages will be sent when you reconnect.'
+            }
+            className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium border bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 mr-1"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            {socketStatus === 'reconnecting' ? 'Reconnecting' : 'Offline'}
+          </span>
+        )}
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Video call is not available in this demo')}>
             <Video className="w-5 h-5" />
@@ -815,14 +977,28 @@ export function ChatWindow({
         className="flex-1 overflow-y-auto wasl-scroll px-2 sm:px-4 py-4 max-w-4xl w-full mx-auto"
       >
         {loading && messages.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-            Loading messages…
+          // Skeleton placeholders while the first batch of messages loads.
+          // Alternates between incoming and outgoing so the layout matches
+          // what users will see once messages render.
+          <div className="space-y-3">
+            <div className="flex justify-center mb-2">
+              <Skeleton className="h-5 w-24" />
+            </div>
+            <MessageSkeleton />
+            <MessageSkeleton mine />
+            <MessageSkeleton />
+            <MessageSkeleton mine />
+            <MessageSkeleton />
+            <MessageSkeleton mine />
           </div>
         ) : (
           <>
             {loadingMore && (
-              <div className="text-center text-xs text-muted-foreground py-2">
-                Loading older messages…
+              <div className="text-center text-xs text-muted-foreground py-2 flex items-center justify-center gap-2">
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <span className="ml-2">Loading older messages…</span>
               </div>
             )}
             {messages.map((m, idx) => {
