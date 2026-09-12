@@ -90,14 +90,21 @@ export async function POST(req: NextRequest) {
     let conversationId: string | null = null
     if (created.length > 0) {
       const otherId = created[0].id
-      const existing = await db.conversation.findFirst({
+      // Check for existing 1-on-1 by looking at all non-group conversations where
+      // BOTH the current user and the other user are participants.
+      const all1on1 = await db.conversation.findMany({
         where: {
           isGroup: false,
-          participants: { every: { userId: { in: [session.id, otherId] } } },
+          participants: { some: { userId: session.id } },
         },
         include: { participants: true },
       })
-      if (existing && existing.participants.length === 2) {
+      const existing = all1on1.find(
+        (c) =>
+          c.participants.length === 2 &&
+          c.participants.some((p) => p.userId === otherId)
+      )
+      if (existing) {
         conversationId = existing.id
       } else {
         const conv = await db.conversation.create({
@@ -134,43 +141,57 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create a group conversation with a few demo users
+    // Create a group conversation with a few demo users (idempotent)
     const groupParticipants = [session.id, ...created.slice(0, 3).map((u) => u.id)]
-    const groupConv = await db.conversation.create({
-      data: {
-        name: 'Friends on Wasl',
+    // Check if a group named "Friends on Wasl" already exists with the current user
+    const existingGroup = await db.conversation.findFirst({
+      where: {
         isGroup: true,
-        createdBy: session.id,
-        avatarColor: pickAvatarColor('friends-group'),
-        participants: {
-          create: groupParticipants.map((uid) => ({ userId: uid })),
+        name: 'Friends on Wasl',
+        participants: { some: { userId: session.id } },
+      },
+    })
+    let groupConvId: string
+    if (existingGroup) {
+      groupConvId = existingGroup.id
+    } else {
+      const groupConv = await db.conversation.create({
+        data: {
+          name: 'Friends on Wasl',
+          isGroup: true,
+          createdBy: session.id,
+          avatarColor: pickAvatarColor('friends-group'),
+          participants: {
+            create: groupParticipants.map((uid) => ({ userId: uid })),
+          },
         },
-      },
-    })
-    await db.message.create({
-      data: {
-        conversationId: groupConv.id,
-        senderId: session.id,
-        content: `${session.name} created the group "Friends on Wasl"`,
-        type: 'system',
-        status: 'read',
-      },
-    })
-    await db.message.create({
-      data: {
-        conversationId: groupConv.id,
-        senderId: created[1]?.id || session.id,
-        content: 'Welcome everyone 🎉',
-        type: 'text',
-        status: 'read',
-      },
-    })
+      })
+      await db.message.create({
+        data: {
+          conversationId: groupConv.id,
+          senderId: session.id,
+          content: `${session.name} created the group "Friends on Wasl"`,
+          type: 'system',
+          status: 'read',
+        },
+      })
+      await db.message.create({
+        data: {
+          conversationId: groupConv.id,
+          senderId: created[1]?.id || session.id,
+          content: 'Welcome everyone 🎉',
+          type: 'text',
+          status: 'read',
+        },
+      })
+      groupConvId = groupConv.id
+    }
 
     return NextResponse.json({
       ok: true,
       created,
       conversationId,
-      groupId: groupConv.id,
+      groupId: groupConvId,
     })
   } catch (err) {
     console.error('[seed] error', err)
