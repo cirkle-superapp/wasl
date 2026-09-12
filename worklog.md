@@ -1638,3 +1638,86 @@ Agent: main (cron job 380238 — webDevReview)
 - Add a "Reply from notification" feature (quick reply without opening the app)
 - Add message pinning (pin important messages to the top of the chat)
 - Add a "Message info" dialog showing delivery + read timeline
+
+---
+Task ID: 25 — Message pinning + Message info dialog + visual polish (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–24 complete). App was healthy: dev server (port 3000) + chat-service (port 3003) both running. Lint passes. No errors in dev.log.
+- Smoke-tested auth, chat, socket connection, sidebar — all working. No bugs found.
+- Identified 2 features from the outstanding list: message pinning + message info dialog.
+
+### Phase 2: Features Added
+
+**1. Message pinning — api/messages/[id]/pin (NEW) + schema + UI**
+- Added `pinned Boolean @default(false)` field to the Message model. Pushed to both local SQLite and Turso.
+- New API: `POST /api/messages/[id]/pin` — toggles the pinned state:
+  - Only the sender can pin their own message
+  - Any participant can unpin
+  - Only one message per conversation can be pinned at a time (pinning a new message unpins any previously-pinned message)
+  - Body: `{ pinned: boolean }`
+- Updated all message-returning APIs to include the `pinned` field.
+- Updated `ChatMessage` type in store.ts to include `pinned?: boolean`.
+- Added `onPin` prop to MessageBubble — appears in the context menu as "Pin"/"Unpin" (with Pin/PinOff icons).
+- Added `handlePinMessage` in chat-window — optimistic update with rollback + socket broadcast.
+- Added a **pinned message bar** at the top of the chat (above the chat header):
+  - Shows a Pin icon + "Pinned by [sender]" label + message content (truncated)
+  - Clicking the bar scrolls to the pinned message (dispatches `wasl:jump-to-message`)
+  - Hover shows a PinOff icon to quickly unpin
+  - Has a slide-down entrance animation (`wasl-pinned-bar-in`)
+- Verified: sent "Important message to pin" → right-clicked → Pin → pinned bar appeared showing "Pinned by Demo User" + message content → API returned 200.
+
+**2. Message info dialog — message-info-dialog.tsx (NEW)**
+- New component `MessageInfoDialog` — opens from the context menu's "Info" item.
+- Shows:
+  - Message preview (truncated to 200 chars)
+  - Delivery + read timeline with 3 stages:
+    - **Sent** — when the message was created (always active)
+    - **Delivered** — when it was delivered to the recipient's device
+    - **Read** — when the recipient opened and read the message
+  - Each stage has a circular icon + connector line + timestamp (or "Pending…" / "Not read yet")
+  - Inactive stages are shown with reduced opacity (muted)
+  - Timeline stages pop in with a staggered animation (`wasl-timeline-pop`, 100ms delay per stage)
+  - Tip for unread own messages: "Click the blue read-ticks (✓✓) on your message to see who has read it"
+- Verified: right-clicked a message → Info → dialog opened showing "Sent" (active) → "Delivered" (active) → "Read" (Not read yet) + the tip message.
+
+### Phase 3: Visual Polish
+
+**3. Pinned message bar entrance animation (globals.css)**
+- New `wasl-pinned-bar-in` keyframe: slide-down from -100% + max-height transition, 0.25s.
+- The pinned bar smoothly slides into view when a message is pinned.
+
+**4. Message info timeline pop-in animation (globals.css)**
+- New `wasl-timeline-pop` keyframe: scale(0.8) → scale(1) + opacity fade, 0.2s.
+- Each timeline stage in the MessageInfoDialog pops in with a 100ms stagger.
+- Also reused for the pinned message indicator.
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors
+- ✅ Pin/unpin in context menu — "Pin" shows for sender's own messages, "Unpin" shows when already pinned
+- ✅ Pinned message bar appears at the top of the chat showing "Pinned by Demo User" + content
+- ✅ Pin API returns 200 for own messages, 403 for others' messages
+- ✅ Message info dialog opens from context menu "Info" item
+- ✅ Timeline shows Sent → Delivered → Read stages with timestamps
+- ✅ Timeline animation plays (staggered pop-in)
+- ✅ Pinned bar animation plays (slide-down)
+- ✅ No console errors
+
+### Files Touched
+- `prisma/schema.prisma` — added `pinned Boolean @default(false)` to Message
+- `src/app/api/messages/[id]/pin/route.ts` — NEW (pin/unpin API)
+- `src/app/api/messages/[id]/route.ts` — return `pinned` field
+- `src/app/api/conversations/[id]/messages/route.ts` — return `pinned` field in GET + POST
+- `src/lib/store.ts` — added `pinned` to ChatMessage type
+- `src/components/wasl/message-bubble.tsx` — Pin/Unpin context menu item + Info item + MessageInfoDialog + messageInfoOpen state
+- `src/components/wasl/message-info-dialog.tsx` — NEW (delivery + read timeline dialog)
+- `src/components/wasl/chat-window.tsx` — pinned message bar + handlePinMessage + Pin/PinOff imports
+- `src/app/globals.css` — wasl-pinned-bar-in + wasl-timeline-pop animations
+
+### Outstanding (next-phase priorities)
+- Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
+- Add per-user "deleted for me" tracking (currently both delete options permanently remove the message)
+- Add a "Reply from notification" feature (quick reply without opening the app)
+- Add message search highlighting in the main chat (currently only in the search dialog)
+- Add a "Forward to external app" feature (share to other apps via Web Share API)

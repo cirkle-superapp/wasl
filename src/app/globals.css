@@ -805,6 +805,30 @@ kbd {
   animation: wasl-scroll-btn-bounce 0.25s ease-out;
 }
 
+/* ---- Pinned message bar entrance ---- */
+@keyframes wasl-pinned-bar-in {
+  from { opacity: 0; transform: translateY(-100%); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 60px; }
+}
+.wasl-pinned-bar {
+  animation: wasl-pinned-bar-in 0.25s ease-out;
+  overflow: hidden;
+}
+
+/* ---- Message info timeline pop-in ---- */
+@keyframes wasl-timeline-pop {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.wasl-timeline-pop {
+  animation: wasl-timeline-pop 0.2s ease-out backwards;
+}
+
+/* ---- Pinned message indicator (small pin on the bubble) ---- */
+.wasl-pinned-indicator {
+  animation: wasl-timeline-pop 0.2s ease-out;
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 

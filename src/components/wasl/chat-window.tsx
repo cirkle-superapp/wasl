@@ -19,6 +19,8 @@ import {
   Wand2,
   Timer,
   Paperclip,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -661,6 +663,48 @@ export function ChatWindow({
     []
   )
 
+  // ---- Pin/unpin message ---------------------------------------------------
+  const handlePinMessage = useCallback(
+    async (m: ChatMessage) => {
+      if (!activeConversationId) return
+      const newPinned = !m.pinned
+      // Optimistic update
+      useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: newPinned })
+      // If pinning, unpin any other pinned messages in this conversation
+      if (newPinned) {
+        const msgs = useWaslStore.getState().messagesByConversation[activeConversationId] || []
+        for (const msg of msgs) {
+          if (msg.id !== m.id && msg.pinned) {
+            useWaslStore.getState().updateMessage(activeConversationId, msg.id, { pinned: false })
+          }
+        }
+      }
+      try {
+        const res = await fetch(`/api/messages/${m.id}/pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned: newPinned }),
+        })
+        if (!res.ok) {
+          // Rollback
+          useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: !newPinned })
+          toast.error('Failed to pin message')
+          return
+        }
+        // Broadcast via socket so other clients update
+        getSocket().emit('message:reacted', {
+          conversationId: activeConversationId,
+          messageId: m.id,
+        })
+        toast.success(newPinned ? 'Message pinned' : 'Message unpinned')
+      } catch {
+        useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: !newPinned })
+        toast.error('Network error')
+      }
+    },
+    [activeConversationId]
+  )
+
   const handleSendImage = useCallback(
     async (dataUrl: string, opts?: { protected?: boolean }) => {
       await handleSend(dataUrl, 'image', opts)
@@ -909,6 +953,39 @@ export function ChatWindow({
           </div>
         </div>
       )}
+      {/* Pinned message bar — shows the currently pinned message at the top
+          of the chat. Clicking it scrolls to the pinned message. */}
+      {messages.find((m) => m.pinned) && (() => {
+        const pinned = messages.find((m) => m.pinned)!
+        const pinnedSender = conversation.participants.find((p) => p.userId === pinned.senderId)?.name
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: pinned.id }))
+            }}
+            className="wasl-pinned-bar w-full flex items-center gap-2.5 px-4 py-2 bg-[var(--wasl-green)]/5 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin"
+          >
+            <Pin className="w-4 h-4 text-[var(--wasl-green)] shrink-0 rotate-45" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--wasl-green)] flex items-center gap-1.5">
+                Pinned {pinnedSender && <span className="normal-case font-normal text-muted-foreground">by {pinnedSender}</span>}
+              </div>
+              <div className="text-xs text-foreground truncate">
+                {pinned.content.slice(0, 80)}
+                {pinned.content.length > 80 ? '…' : ''}
+              </div>
+            </div>
+            <PinOff
+              className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/pin:opacity-100 transition-opacity shrink-0"
+              onClick={(e) => {
+                e.stopPropagation()
+                handlePinMessage(pinned)
+              }}
+            />
+          </button>
+        )
+      })()}
       {/* Chat header */}
       <div className="bg-[var(--wasl-sidebar-bg)] px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border shadow-sm">
         <button
@@ -1121,6 +1198,7 @@ export function ChatWindow({
                       onDelete={() => handleDeleteMessage(m.id)}
                       onEdit={() => handleEditMessage(m)}
                       onForward={() => handleForwardMessage(m)}
+                      onPin={() => handlePinMessage(m)}
                       starred={m.starred}
                       reactions={m.reactions}
                       currentUserId={user?.id}

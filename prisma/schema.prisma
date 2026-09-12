@@ -133,6 +133,9 @@ model Message {
   // When true, the message has been edited at least once. The previous
   // versions are stored in the MessageEdit table.
   edited         Boolean  @default(false)
+  // When true, the message is pinned to the top of the conversation by the
+  // sender. Only one message per conversation can be pinned at a time.
+  pinned         Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

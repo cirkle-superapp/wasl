@@ -16,6 +16,9 @@ import {
   Forward,
   Lock,
   ExternalLink,
+  Pin,
+  PinOff,
+  Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -26,6 +29,7 @@ import { renderMarkdownLite } from '@/lib/markdown'
 import { LinkPreviewCard } from './link-preview-card'
 import { ReadReceiptsDialog } from './read-receipts-dialog'
 import { EditHistoryDialog } from './edit-history-dialog'
+import { MessageInfoDialog } from './message-info-dialog'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -93,6 +97,7 @@ export function MessageBubble({
   onDelete,
   onEdit,
   onForward,
+  onPin,
   starred,
   reactions,
   currentUserId,
@@ -108,6 +113,7 @@ export function MessageBubble({
   onDelete?: () => void
   onEdit?: () => void
   onForward?: () => void
+  onPin?: () => void
   starred?: boolean
   reactions?: Reaction[]
   currentUserId?: string
@@ -117,6 +123,7 @@ export function MessageBubble({
   const [showReactions, setShowReactions] = useState(false)
   const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
   const [editHistoryOpen, setEditHistoryOpen] = useState(false)
+  const [messageInfoOpen, setMessageInfoOpen] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
@@ -549,12 +556,32 @@ export function MessageBubble({
             Forward
           </ContextMenuItem>
         )}
+        {onPin && (
+          <ContextMenuItem onClick={() => onPin()}>
+            {message.pinned ? (
+              <>
+                <PinOff className="w-4 h-4 mr-2" />
+                Unpin
+              </>
+            ) : (
+              <>
+                <Pin className="w-4 h-4 mr-2" />
+                Pin
+              </>
+            )}
+          </ContextMenuItem>
+        )}
         {mine && message.type === 'text' && onEdit && (
           <ContextMenuItem onClick={() => onEdit()}>
             <Pencil className="w-4 h-4 mr-2" />
             Edit
           </ContextMenuItem>
         )}
+        {/* Message info — shows delivery + read timeline */}
+        <ContextMenuItem onClick={() => setMessageInfoOpen(true)}>
+          <Info className="w-4 h-4 mr-2" />
+          Info
+        </ContextMenuItem>
         {mine && (
           <>
             <ContextMenuSeparator />
@@ -579,6 +606,12 @@ export function MessageBubble({
         open={editHistoryOpen}
         onOpenChange={setEditHistoryOpen}
         messageId={message.id}
+      />
+      {/* Message info dialog — shows delivery + read timeline */}
+      <MessageInfoDialog
+        open={messageInfoOpen}
+        onOpenChange={setMessageInfoOpen}
+        message={message}
       />
     </ContextMenu>
   )
