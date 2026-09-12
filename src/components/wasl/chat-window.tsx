@@ -35,6 +35,7 @@ import { ActionItemsDialog } from './action-items-dialog'
 import { ToneAdjusterDialog } from './tone-adjuster-dialog'
 import { CommandPalette } from './command-palette'
 import { ForwardDialog } from './forward-dialog'
+import { DeleteMessageDialog } from './delete-message-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -366,11 +367,25 @@ export function ChatWindow({
         setTimeout(() => target.classList.remove('wasl-message-flash'), 2000)
       }
     }
+    // Remove a message from the local state after deletion (triggered by the
+    // DeleteMessageDialog after the API confirms the deletion).
+    function onMessageDeleted(e: Event) {
+      const messageId = (e as CustomEvent<string>).detail
+      if (!messageId || !activeConversationId) return
+      removeMessage(activeConversationId, messageId)
+      // Broadcast via socket so other clients also remove it
+      getSocket().emit('message:reacted', {
+        conversationId: activeConversationId,
+        messageId,
+      })
+    }
     window.addEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+    window.addEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
     return () => {
       window.removeEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+      window.removeEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
     }
-  }, [])
+  }, [activeConversationId, removeMessage])
 
   // ---- Load older messages ---------------------------------------------------
   async function loadMore() {
@@ -574,21 +589,31 @@ export function ChatWindow({
     }
   }, [])
 
+  // ---- Delete message — opens the DeleteMessageDialog -----------------------
+  const [deleteMessage, setDeleteMessage] = useState<ChatMessage | null>(null)
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
-      if (!activeConversationId) return
-      if (!confirm('Delete this message? This cannot be undone.')) return
-      removeMessage(activeConversationId, messageId)
-      try {
-        await fetch(`/api/messages/${messageId}`, { method: 'DELETE' })
-        getSocket().emit('message:reacted', {
-          conversationId: activeConversationId,
-          messageId,
-        })
-        toast.success('Message deleted')
-      } catch (e) {
-        console.error(e)
-        toast.error('Failed to delete')
+      // Find the message object to pass to the dialog
+      const msgs = useWaslStore.getState().messagesByConversation[activeConversationId || ''] || []
+      const m = msgs.find((mm) => mm.id === messageId)
+      if (m) {
+        setDeleteMessage(m)
+      } else {
+        // Fallback: if we can't find the message, use the old confirm() flow
+        if (!confirm('Delete this message? This cannot be undone.')) return
+        if (!activeConversationId) return
+        removeMessage(activeConversationId, messageId)
+        try {
+          await fetch(`/api/messages/${messageId}`, { method: 'DELETE' })
+          getSocket().emit('message:reacted', {
+            conversationId: activeConversationId,
+            messageId,
+          })
+          toast.success('Message deleted')
+        } catch (e) {
+          console.error(e)
+          toast.error('Failed to delete')
+        }
       }
     },
     [activeConversationId, removeMessage]
@@ -1222,6 +1247,22 @@ export function ChatWindow({
         onOpenChange={setForwardOpen}
         messageId={forwardMessage?.id || null}
         messageContent={forwardMessage?.content || ''}
+      />
+
+      {/* Delete message dialog (delete for me / for everyone) */}
+      <DeleteMessageDialog
+        open={!!deleteMessage}
+        onOpenChange={(v) => {
+          if (!v) setDeleteMessage(null)
+        }}
+        messageId={deleteMessage?.id || null}
+        messageContent={deleteMessage?.content || ''}
+        isOwnMessage={deleteMessage?.senderId === user?.id}
+        canDeleteForEveryone={
+          !!deleteMessage &&
+          deleteMessage.senderId === user?.id &&
+          (Date.now() - new Date(deleteMessage.createdAt).getTime()) / 60000 < 60
+        }
       />
     </div>
   )

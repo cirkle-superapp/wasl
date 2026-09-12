@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { CheckCheck, Loader2 } from 'lucide-react'
+import { CheckCheck, Loader2, Clock } from 'lucide-react'
 import { WaslAvatar } from './wasl-avatar'
 import { formatChatTimestamp, formatLastSeen } from '@/lib/time'
 import { useWaslStore } from '@/lib/store'
@@ -128,8 +128,21 @@ export function ReadReceiptsDialog({
                       <div className="text-sm font-medium truncate text-foreground">
                         {p.name}
                       </div>
-                      <div className="text-[10px] text-muted-foreground truncate">
-                        Read {formatChatTimestamp(p.readAt)}
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span>Read {formatChatTimestamp(p.readAt)}</span>
+                        <span className="text-muted-foreground/40">·</span>
+                        {/* Online/last-seen indicator */}
+                        {isOnline ? (
+                          <span className="text-[var(--wasl-green)] font-medium flex items-center gap-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--wasl-green)] inline-block" />
+                            online
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-0.5">
+                            <Clock className="w-2.5 h-2.5" />
+                            {formatLastSeen(p.lastSeen, false)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <CheckCheck className="w-4 h-4 text-sky-500 shrink-0" />

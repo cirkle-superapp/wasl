@@ -1563,3 +1563,78 @@ Agent: main (cron job 380238 — webDevReview)
 - Add online/last-seen indicators in the read-receipts dialog
 - Add a "Delete for everyone" option (currently only deletes for the sender)
 - Add message reactions summary in the contact-info panel
+
+---
+Task ID: 24 — Reactions summary + Delete for everyone + Read-receipts online indicators (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–23 complete). App was healthy: dev server (port 3000) + chat-service (port 3003) both running. Lint passes. No errors in dev.log.
+- Smoke-tested auth, chat, socket connection, sidebar, group chat — all working. No bugs found.
+- Identified 3 features from the outstanding list: reactions summary, delete for everyone, online/last-seen in read-receipts.
+
+### Phase 2: Features Added
+
+**1. Message reactions summary — reactions-summary-dialog.tsx (NEW) + api/conversations/[id]/reactions-summary (NEW)**
+- New API: `GET /api/conversations/[id]/reactions-summary` — returns all reactions in the conversation grouped by emoji, with user info for each reactor. Fixed a bug where the API tried to use a `user` relation on the Reaction model (which doesn't exist) — now fetches users separately via a `userMap`.
+- New component `ReactionsSummaryDialog` — opens from the contact-info panel's new "Reactions" button (between Starred messages and Encryption).
+- Shows:
+  - Header: "N reactions in [conversation name]"
+  - List of emojis sorted by count (descending)
+  - Each emoji card shows: large emoji + count + mini avatar stack (up to 4 avatars + "+N" overflow)
+  - Expandable: click to show all users who reacted with that emoji (avatar + name + timestamp)
+  - Auto-expands the first emoji
+  - Empty state: "No reactions yet" with SmilePlus icon + instructions
+  - Loading state: spinner
+- Verified: added 👍 and ❤️ reactions → opened dialog → saw "2 reactions in Amira Hassan" with both emojis listed.
+
+**2. Delete for everyone — delete-message-dialog.tsx (NEW) + updated DELETE /api/messages/[id]**
+- Updated the DELETE API to support a `forEveryone` query parameter:
+  - `forEveryone=true` — deletes for ALL participants (sender only, within 1 hour of sending)
+  - `forEveryone=false` (default) — deletes for the current user only
+  - Added membership verification
+  - Added 1-hour time limit check for "delete for everyone"
+- New component `DeleteMessageDialog` — replaces the old `confirm()` approach with a proper dialog showing:
+  - Message preview (truncated to 120 chars)
+  - "Delete for everyone" option (destructive styling, Users icon) — only shown if the user is the sender AND within 1 hour
+  - "Delete for me" option (Trash icon)
+  - Warning banner if "delete for everyone" is not available (message older than 1 hour)
+  - Loading state with spinner
+  - Dispatches `wasl:message-deleted` custom event on success
+- Updated `handleDeleteMessage` in chat-window to open the dialog instead of using `confirm()`.
+- Added `wasl:message-deleted` event listener in chat-window to remove the message from local state + broadcast via socket.
+- Verified: sent "Test delete for everyone" message → right-clicked → Delete → dialog showed both options → clicked "Delete for everyone" → message removed → toast "Message deleted for everyone" shown.
+
+**3. Online/last-seen indicators in read-receipts dialog — read-receipts-dialog.tsx**
+- Enhanced the read-receipts list items to show:
+  - "Read [time]" timestamp
+  - "·" separator
+  - Online indicator: green dot + "online" text (when the user is online)
+  - Last-seen indicator: Clock icon + formatted last-seen time (when offline)
+- The avatar already had `showStatus` (green/gray dot), but now the text also shows the online/offline status for clarity.
+- Verified: the read-receipts dialog already had `onlineUserIds` from the store — now it displays the status text alongside the read time.
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors
+- ✅ Reactions summary dialog opens, shows 2 reactions (👍 + ❤️) with Demo User
+- ✅ Reactions summary API returns correct data (totalReactions: 2, uniqueEmojis: 2)
+- ✅ Delete dialog shows "Delete for everyone" + "Delete for me" options with message preview
+- ✅ "Delete for everyone" removes the message + shows toast "Message deleted for everyone"
+- ✅ Read-receipts dialog shows online/last-seen indicators (enhanced from previous version)
+- ✅ No console errors
+
+### Files Touched
+- `src/app/api/messages/[id]/route.ts` — added `forEveryone` query param + membership verification + 1-hour time limit
+- `src/app/api/conversations/[id]/reactions-summary/route.ts` — NEW (reactions summary API)
+- `src/components/wasl/reactions-summary-dialog.tsx` — NEW (reactions summary dialog)
+- `src/components/wasl/delete-message-dialog.tsx` — NEW (delete for me/everyone dialog)
+- `src/components/wasl/contact-info-panel.tsx` — Reactions button + ReactionsSummaryDialog wiring
+- `src/components/wasl/read-receipts-dialog.tsx` — online/last-seen indicators + Clock icon
+- `src/components/wasl/chat-window.tsx` — DeleteMessageDialog integration + wasl:message-deleted event listener
+
+### Outstanding (next-phase priorities)
+- Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
+- Add per-user "deleted for me" tracking (currently both delete options permanently remove the message)
+- Add a "Reply from notification" feature (quick reply without opening the app)
+- Add message pinning (pin important messages to the top of the chat)
+- Add a "Message info" dialog showing delivery + read timeline
