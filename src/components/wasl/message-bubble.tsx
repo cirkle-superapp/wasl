@@ -21,8 +21,16 @@ import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
 import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
 import { toast } from 'sonner'
-import { findUrls, faviconUrl, prettyPath } from '@/lib/link-preview'
+import { findUrls, prettyPath } from '@/lib/link-preview'
 import { renderMarkdownLite } from '@/lib/markdown'
+import { LinkPreviewCard } from './link-preview-card'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
@@ -159,6 +167,7 @@ export function MessageBubble({
     (e: React.MouseEvent) => {
       if (!blocked) return
       e.preventDefault()
+      e.stopPropagation() // Prevent the Radix ContextMenu from opening
       toast.error(PROTECTED_WARNING, { duration: 4000 })
       recordAttempt(message.id, 'contextmenu')
     },
@@ -275,13 +284,15 @@ export function MessageBubble({
       : null
 
   return (
-    <div
-      className={cn(
-        'flex w-full wasl-animate-in group/msg',
-        mine ? 'justify-end' : 'justify-start'
-      )}
-    >
-      <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(
+            'flex w-full wasl-animate-in group/msg',
+            mine ? 'justify-end' : 'justify-start'
+          )}
+        >
+          <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
         {/* Hover toolbar — appears on hover (desktop) */}
         <div
           ref={toolbarRef}
@@ -449,39 +460,15 @@ export function MessageBubble({
           )}
           {/* Link preview card — shown below any text message that contains
               at least one URL. We render at most one preview (the first URL)
-              to keep the bubble compact. The card has a favicon + domain +
-              visible path; clicking opens the link in a new tab. */}
+              to keep the bubble compact. The card asynchronously fetches
+              OpenGraph meta tags for a richer preview (title + description +
+              image), falling back to a favicon-based card while loading. */}
           {message.type === 'text' && !blocked && linkPreview && (
-            <a
+            <LinkPreviewCard
               href={linkPreview.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="mt-1.5 mb-1 flex items-center gap-2 rounded-lg border border-foreground/10 bg-foreground/[0.03] dark:bg-foreground/[0.06] hover:bg-foreground/[0.06] dark:hover:bg-foreground/[0.1] transition-colors p-2 max-w-[280px] no-underline group/link"
-            >
-              <img
-                src={faviconUrl(linkPreview.domain, 32)}
-                alt=""
-                width={24}
-                height={24}
-                className="w-6 h-6 rounded shrink-0 bg-white"
-                onError={(e) => {
-                  // Hide the favicon if it fails to load — fall back to globe icon
-                  ;(e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-medium text-foreground truncate">
-                  {linkPreview.domain}
-                </div>
-                {linkPreview.path && (
-                  <div className="text-[10px] text-muted-foreground truncate">
-                    {linkPreview.path}
-                  </div>
-                )}
-              </div>
-              <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 opacity-50 group-hover/link:opacity-100 transition-opacity" />
-            </a>
+              domain={linkPreview.domain}
+              path={linkPreview.path}
+            />
           )}
         </div>
 
@@ -511,7 +498,60 @@ export function MessageBubble({
           </div>
         )}
       </div>
-    </div>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        {/* Quick reactions row */}
+        <div className="flex items-center justify-around px-1 py-1.5 border-b border-border/60 mb-1">
+          {QUICK_REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => onReact?.(emoji)}
+              className="text-lg w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted transition-transform hover:scale-125"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        <ContextMenuItem onClick={() => onReply?.()}>
+          <Reply className="w-4 h-4 mr-2" />
+          Reply
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onStar?.()}>
+          <Star className={cn('w-4 h-4 mr-2', starred && 'fill-amber-400 text-amber-400')} />
+          {starred ? 'Unstar' : 'Star'}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onCopy?.()}>
+          <Copy className="w-4 h-4 mr-2" />
+          Copy
+        </ContextMenuItem>
+        {onForward && (
+          <ContextMenuItem onClick={() => onForward()}>
+            <Forward className="w-4 h-4 mr-2" />
+            Forward
+          </ContextMenuItem>
+        )}
+        {mine && message.type === 'text' && onEdit && (
+          <ContextMenuItem onClick={() => onEdit()}>
+            <Pencil className="w-4 h-4 mr-2" />
+            Edit
+          </ContextMenuItem>
+        )}
+        {mine && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() => onDelete?.()}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

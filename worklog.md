@@ -1310,3 +1310,93 @@ Agent: main (cron job 380238 — webDevReview)
 - Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
 - Add a message context menu (right-click on desktop) for quick react/reply/copy/forward
 - Add read receipts viewer in contact-info panel ("Seen by" list)
+
+---
+Task ID: 21 — Context menu + Starred messages viewer + OG link previews + visual polish (cron webDevReview)
+Agent: main (cron job 380238 — webDevReview)
+
+### Phase 1: QA Assessment
+- Read worklog.md (Task IDs 1–20 complete). App was healthy: dev server (port 3000) + chat-service (port 3003) both running. Lint passes. No errors in dev.log.
+- Smoke-tested auth, chat, socket connection, sidebar — all working.
+- Identified 3 high-value features from the outstanding list: context menu, starred messages viewer, OpenGraph link previews.
+
+### Phase 2: Features Added
+
+**1. Message context menu (right-click) — message-bubble.tsx**
+- Wrapped the entire MessageBubble return in a Radix `<ContextMenu>` component.
+- On right-click, shows a dropdown menu with:
+  - Quick reactions row (👍 ❤️ 😂 😮 😢 🙏) at the top with a border separator
+  - Reply, Star/Unstar, Copy, Forward items
+  - Edit + Delete items (only for the user's own messages)
+  - Delete uses the `variant="destructive"` styling (red text)
+- For protected/blocked messages, the existing `onContextMenu` handler calls `e.stopPropagation()` to prevent the Radix menu from opening, and shows the protection warning toast instead.
+- Updated the `onContextMenu` handler to also call `stopPropagation()` so the Radix ContextMenuTrigger doesn't receive the event.
+- Verified: right-clicked on a message → context menu appeared with all items. Right-clicked on own message → Edit + Delete also appeared.
+
+**2. Starred messages viewer — starred-messages-dialog.tsx (NEW)**
+- New API: `GET /api/conversations/[id]/starred` — returns all messages starred by the current user in a conversation, with sender info (id, name, username, avatar, avatarColor) and message metadata (content, type, createdAt, protected flag).
+- New component `StarredMessagesDialog` — opens from the contact-info panel's "Starred messages" button (replacing the "coming soon" toast).
+- Shows a scrollable list of starred messages, each with:
+  - Sender avatar + name + timestamp
+  - Lock icon if the message is protected
+  - Message content (text or image)
+  - "Starred <time>" footer with amber star icon
+- Empty state: large star icon in a circle + "No starred messages yet" + instructions on how to star a message.
+- Loading state: spinner with "Loading…"
+- Verified: starred a message via context menu → opened Starred messages dialog → the starred message appeared with sender info and timestamp.
+
+**3. OpenGraph link previews — link-preview-card.tsx (NEW) + api/link-preview (NEW)**
+- New API: `GET /api/link-preview?url=<url>` — fetches the target URL server-side, extracts OpenGraph + Twitter Card meta tags (og:title, og:description, og:image, og:site_name, twitter:title, twitter:description, twitter:image, and `<title>`).
+  - 5-second fetch timeout, reads only first 100KB of HTML (meta tags are in `<head>`)
+  - 10-minute in-memory cache (max 200 entries, FIFO eviction)
+  - Returns `{ url, title, description, image, siteName }` — all nullable
+  - On error/timeout, returns minimal data so the UI can fall back to favicon card
+- New component `LinkPreviewCard` — handles its own OG fetching via `useEffect`:
+  - While loading: shows the favicon-based fallback card with a spinning loader icon
+  - Once loaded: shows a rich card with OG image (if available), title, description (2-line clamp), favicon, site name, and external-link icon
+  - If OG fetch fails or returns nothing useful: stays on the fallback card
+- Updated `MessageBubble` to use `<LinkPreviewCard>` instead of the inline favicon card.
+- Added `fetchOgPreview()` function to `src/lib/link-preview.ts` with a per-tab in-memory cache.
+- Added `.line-clamp-2` CSS utility for the description truncation.
+- Verified: sent "Check out this site: https://nextjs.org" → the preview card loaded with OG image, title "Next.js by Vercel - The React Framework", and description "Next.js by Vercel is the full-stack React framework for the web."
+
+### Phase 3: Visual Polish
+
+**4. Message hover micro-animation (globals.css)**
+- Subtle lift effect: on hover, the bubble gets `translateY(-1px)` + stronger box shadow.
+- Smooth 0.15s transition on the message group.
+
+**5. Emoji pop-in stagger (globals.css)**
+- New `wasl-emoji-pop` keyframe: scale(0) rotate(-15deg) → scale(1.2) rotate(5deg) → scale(1) rotate(0), 0.25s.
+- Applied to both the hover-toolbar quick-reaction popover AND the context menu emoji row.
+- Each emoji has a 40ms stagger delay (6 emojis = 0ms → 200ms total).
+- Creates a delightful cascade effect when the reaction picker opens.
+
+### Verification (agent-browser)
+- ✅ Lint passes with 0 errors (after fixing faviconUrl HMR issue + setState-in-effect lint error)
+- ✅ Context menu opens on right-click with all items (Reply, Star, Copy, Forward + Edit, Delete for own messages)
+- ✅ Quick reactions row appears at the top of the context menu
+- ✅ Starred messages dialog opens from contact-info panel, shows starred message with sender info
+- ✅ `/api/conversations/[id]/starred` returns starred messages with sender info
+- ✅ OpenGraph API returns title + description + image for nextjs.org
+- ✅ Link preview card renders with OG image, title, and description
+- ✅ Fallback favicon card shows while OG data is loading
+- ✅ No console errors
+- ✅ No "Reconnecting" status (socket connected via rewrite proxy)
+
+### Files Touched
+- `src/app/globals.css` — message hover lift, emoji pop-in stagger, line-clamp utility
+- `src/components/wasl/message-bubble.tsx` — ContextMenu wrapper + LinkPreviewCard integration
+- `src/components/wasl/contact-info-panel.tsx` — StarredMessagesDialog import + state + button wiring
+- `src/lib/link-preview.ts` — fetchOgPreview() function + OgPreview type + per-tab cache
+- `src/components/wasl/link-preview-card.tsx` — NEW (async OG fetch + rich card rendering)
+- `src/components/wasl/starred-messages-dialog.tsx` — NEW (starred messages viewer dialog)
+- `src/app/api/conversations/[id]/starred/route.ts` — NEW (starred messages API)
+- `src/app/api/link-preview/route.ts` — NEW (OpenGraph meta tag fetcher with caching)
+
+### Outstanding (next-phase priorities)
+- Wire up "Mute notifications" and "Encryption" buttons in contact-info panel (Starred is done)
+- Add message search results highlighting (matched text in messages)
+- Extend drag-and-drop to support PDF/voice notes/documents (currently image-only)
+- Add read receipts viewer in contact-info panel ("Seen by" list)
+- Add a "Jump to message" feature from the starred messages dialog

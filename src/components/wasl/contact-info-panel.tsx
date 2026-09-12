@@ -26,6 +26,7 @@ import { useWaslStore, type Commit } from '@/lib/store'
 import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { StarredMessagesDialog } from './starred-messages-dialog'
 
 // Icon mapping for screenshot-attempt kinds → human-readable label + icon
 const KIND_META: Record<string, { label: string; icon: typeof Camera }> = {
@@ -81,6 +82,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [capture, setCapture] = useState<CaptureSummary | null>(null)
   const [captureLoading, setCaptureLoading] = useState(false)
   const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
+  const [starredOpen, setStarredOpen] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -491,7 +493,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           <Button
             variant="ghost"
             className="w-full justify-start"
-            onClick={() => toast.info('Starred messages is coming soon')}
+            onClick={() => setStarredOpen(true)}
           >
             <Star className="w-4 h-4 mr-3" /> Starred messages
           </Button>
@@ -511,6 +513,14 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           </Button>
         </div>
       </div>
+
+      {/* Starred messages dialog */}
+      <StarredMessagesDialog
+        open={starredOpen}
+        onOpenChange={setStarredOpen}
+        conversationId={activeConversationId}
+        conversationName={conversation?.name}
+      />
     </div>
   )
 }

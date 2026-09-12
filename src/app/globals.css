@@ -726,6 +726,60 @@ kbd {
   animation: wasl-date-pill-in 0.2s ease-out;
 }
 
+/* ---- Message hover micro-animation ---- */
+/* Subtle lift effect when hovering over a message group. The bubble gets
+   a slightly stronger shadow + tiny scale, making it feel interactive. */
+.group\/msg {
+  transition: transform 0.15s ease-out;
+}
+.group\/msg:hover > div > .wasl-bubble-out,
+.group\/msg:hover > div > .wasl-bubble-in {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(11, 20, 26, 0.12);
+}
+
+/* ---- Reaction picker pop-in ---- */
+/* When the quick-reaction popover opens, each emoji button pops in with a
+   slight stagger for a delightful micro-interaction. */
+@keyframes wasl-emoji-pop {
+  0% { transform: scale(0) rotate(-15deg); opacity: 0; }
+  60% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.group\/msg .wasl-toolbar + div > button,
+.group\/msg > div > div > button {
+  /* Target emoji buttons in the quick reaction popover */
+}
+.wasl-toolbar + div button[class*="text-lg"] {
+  animation: wasl-emoji-pop 0.25s ease-out backwards;
+}
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(1) { animation-delay: 0ms; }
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(2) { animation-delay: 40ms; }
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(3) { animation-delay: 80ms; }
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(4) { animation-delay: 120ms; }
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(5) { animation-delay: 160ms; }
+.wasl-toolbar + div button[class*="text-lg"]:nth-child(6) { animation-delay: 200ms; }
+
+/* ---- Context menu quick-reaction stagger ---- */
+/* Same pop-in stagger for the emoji row at the top of the context menu. */
+[data-slot="context-menu-content"] button[class*="text-lg"] {
+  animation: wasl-emoji-pop 0.25s ease-out backwards;
+}
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(1) { animation-delay: 0ms; }
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(2) { animation-delay: 40ms; }
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(3) { animation-delay: 80ms; }
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(4) { animation-delay: 120ms; }
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(5) { animation-delay: 160ms; }
+[data-slot="context-menu-content"] button[class*="text-lg"]:nth-child(6) { animation-delay: 200ms; }
+
+/* ---- Line clamp utility (for OG description) ---- */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 
