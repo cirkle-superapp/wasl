@@ -206,6 +206,30 @@ export function SettingsDialog({
             </div>
           </div>
 
+          {/* Language — Arabic/English toggle (Cirkle is Arabic brand دواير) */}
+          <div className="space-y-2">
+            <Label>Language</Label>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" className="flex-1"
+                onClick={() => {
+                  document.documentElement.lang = 'en'
+                  document.documentElement.dir = 'ltr'
+                  localStorage.setItem('wasl-lang', 'en')
+                }}>
+                English
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="flex-1"
+                onClick={() => {
+                  document.documentElement.lang = 'ar'
+                  document.documentElement.dir = 'rtl'
+                  localStorage.setItem('wasl-lang', 'ar')
+                  toast.success('تم تغيير اللغة إلى العربية')
+                }}>
+                العربية
+              </Button>
+            </div>
+          </div>
+
           {/* Color theme — Cirkle palette integration */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">

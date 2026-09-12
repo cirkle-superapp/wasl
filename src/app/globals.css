@@ -609,3 +609,20 @@
 
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
+
+/* ---- Arabic RTL support (Cirkle is an Arabic brand — دواير) ---- */
+[dir="rtl"] {
+  direction: rtl;
+}
+[dir="rtl"] .flex-row { flex-direction: row-reverse; }
+[dir="rtl"] .float-right { float: left; }
+[dir="rtl"] .float-left { float: right; }
+[dir="rtl"] .ml-2 { margin-right: 0.5rem; margin-left: 0; }
+[dir="rtl"] .mr-2 { margin-left: 0.5rem; margin-right: 0; }
+[dir="rtl"] .pl-9 { padding-right: 2.25rem; padding-left: 0; }
+[dir="rtl"] .pl-3 { padding-right: 0.75rem; padding-left: 0; }
+[dir="rtl"] .left-3 { right: 0.75rem; left: auto; }
+[dir="rtl"] .right-3 { left: 0.75rem; right: auto; }
+[dir="rtl"] .-ml-1 { margin-right: -0.25rem; margin-left: 0; }
+[dir="rtl"] .-mr-1 { margin-left: -0.25rem; margin-right: 0; }
+[dir="rtl"] .rotate-45 { transform: rotate(-45deg); }
