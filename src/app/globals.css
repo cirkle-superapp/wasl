@@ -606,3 +606,6 @@
 .group\/msg:hover > div > .wasl-bubble-in {
   box-shadow: 0 2px 8px rgba(11, 20, 26, 0.12);
 }
+
+/* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
+   in layout.tsx will catch it and reload the page. */
