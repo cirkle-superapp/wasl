@@ -1721,3 +1721,95 @@ Agent: main (cron job 380238 — webDevReview)
 - Add a "Reply from notification" feature (quick reply without opening the app)
 - Add message search highlighting in the main chat (currently only in the search dialog)
 - Add a "Forward to external app" feature (share to other apps via Web Share API)
+
+---
+Task ID: 26 — COO End-to-End Audit: Settings tabs fix + Vercel deploy verification
+Agent: main (COO / Project Manager role)
+
+### Phase 1: Full Audit (End-to-End)
+
+Conducted a comprehensive audit of ALL features as COO/Project Manager. Tested every user flow with agent-browser screenshots.
+
+#### Auth Flows ✅
+- **Sign up tab**: Visible segmented control, "Create your account" heading, all fields present ✓
+- **Log in tab**: Clicking switches to "Welcome back" + login fields ✓
+- **Login form**: demo/demo123 → chat loads ✓
+- **Demo login**: "Try the live demo" → chat loads ✓
+- No errors
+
+#### Chat Screen ✅
+- **Typing area**: "Type a message" textbox is present and functional ✓
+- **Send button**: Present, clickable ✓
+- **Commit button**: "Create a verified commit" — present in composer ✓
+- **Poll button**: "Create a poll" — present ✓
+- **Message protection lock**: "Toggle message protection" — present ✓
+- **Commit dialog**: Opens, fills, submits, creates commit in chat ✓
+- **Commit card**: Shows "💰 Test Agreement", "Price · Commit", "PENDING SIGNATURE", "100 SAR", fairness score ✓
+- **Bot reply**: Amira responds with contextual message ✓
+
+#### Phone Number Switching ✅
+- **Switch phone button**: Visible in sidebar ✓
+- **Phone dialog**: Opens, shows current number, add new number field ✓
+- **Add number**: +20 100 999 8888 with "Work" label → added successfully ✓
+- **Switch**: "Use" buttons for multiple numbers ✓
+- **Remove**: "Remove" buttons work ✓
+
+#### Business Account ✅ (FIXED)
+- **CRITICAL BUG FOUND**: Business section was COMPLETELY INVISIBLE in settings dialog
+  - Root cause: Dialog was 1398px tall, viewport was only 577px
+  - Business section was below the fold, unreachable by scrolling
+  - No max-height or overflow scroll on the dialog content
+- **FIX**: Restructured settings dialog with 3 tabs:
+  1. Profile tab — avatar, name, about, phone, appearance, language, color theme, demo data
+  2. Privacy tab — message protection switches
+  3. Business tab — identity verification, register business, business search, how-it-works info
+- Each tab has scrollable content with max-h-[90vh] constraint
+- Tab bar uses icons (UserCircle, Shield, Building2) for quick visual identification
+- Verified on Vercel: Business tab shows "Verify" button + "Search for businesses" ✓
+
+#### Vercel Deployment ✅
+- **Prisma generate**: Added to buildCommand in vercel.json + postinstall in package.json
+- **Login API**: Returns all new fields (defaultProtectMessages, privacyAlwaysAllow) ✓
+- **All API routes**: privacy (200), starred (200), mute (200), screenshot-attempts (200), reactions-summary (200), link-preview (200) ✓
+- **Turso schema**: All new columns present (pinned, edited, muted, protected) + MessageEdit + ScreenshotAttempt tables ✓
+
+### Phase 2: Fixes Applied
+
+**Fix 1: Settings dialog tabs** (commit 3b502e4)
+- Rewrote settings-dialog.tsx with 3-tab layout (Profile/Privacy/Business)
+- Each tab has its own scrollable content area
+- Business section now fully visible and accessible
+
+**Fix 2: Prisma generate on Vercel** (commit 44ddf74)
+- vercel.json buildCommand: "prisma generate && next build"
+- package.json postinstall: "prisma generate"
+- Ensures Prisma client is regenerated from latest schema on every deploy
+
+**Fix 3: Login/signup tabs** (commit 66badf7)
+- Added visible segmented control tabs to auth screen
+- Removed old text-link mode switcher
+
+### Phase 3: Verification (Vercel Production)
+
+| Feature | Status | Screenshot |
+|---------|--------|------------|
+| Auth signup tab | ✅ | audit-26-vercel-final.png |
+| Auth login tab | ✅ | audit-02-auth-login.png |
+| Demo login | ✅ | audit-27-vercel-chat.png |
+| Chat typing area | ✅ | audit-30-vercel-chat-amira.png |
+| Commit button | ✅ | (in composer) |
+| Commit dialog | ✅ | audit-07-commit-dialog.png |
+| Commit in chat | ✅ | audit-10-commit-in-chat.png |
+| Phone switcher | ✅ | audit-12-phone-dialog.png |
+| Phone add | ✅ | audit-14-phone-added.png |
+| Settings - Profile tab | ✅ | audit-28-vercel-settings.png |
+| Settings - Business tab | ✅ | audit-29-vercel-business.png |
+| Settings - Privacy tab | ✅ | audit-24-privacy-tab.png |
+| Verify identity | ✅ | audit-25-verify-dialog.png |
+
+### Outstanding (next-phase priorities)
+- Extend drag-and-drop to support PDF/voice notes/documents
+- Add "Reply from notification" quick reply
+- Add per-user "deleted for me" tracking
+- Add message search highlighting in main chat
+- Add "Forward to external app" via Web Share API
