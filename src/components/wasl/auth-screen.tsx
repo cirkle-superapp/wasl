@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles } from 'lucide-react'
+import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff, ShieldCheck, Zap, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { useColorTheme } from './color-theme-provider'
@@ -32,6 +32,7 @@ export function AuthScreen() {
     suggestions: string[]
   }>({ checking: false, available: null, message: '', suggestions: [] })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
   const { colorTheme } = useColorTheme()
@@ -233,37 +234,48 @@ export function AuthScreen() {
 
   return (
     <div className="min-h-screen w-full flex flex-col">
-      {/* Top hero banner with animated Wasl logo */}
+      {/* Top hero banner — compact with logo + tagline + trust badges */}
       <div
         className={cn(
-          'text-white py-10 px-6',
+          'text-white py-6 px-6',
           isCirkle
             ? 'wasl-gradient-hero-cirkle'
             : 'bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)]'
         )}
       >
-        <div className="max-w-md mx-auto text-center space-y-4">
+        <div className="max-w-md mx-auto text-center space-y-3">
           <div className={cn('inline-flex items-center justify-center', isCirkle && 'wasl-cirkle-splash-in')}>
-            <WaslLogo size={88} animated />
+            <WaslLogo size={64} animated />
           </div>
           <h1
             className={cn(
-              'text-4xl font-bold tracking-tight',
+              'text-3xl font-bold tracking-tight',
               isCirkle && 'wasl-text-gradient-cirkle'
             )}
           >
             Wasl
           </h1>
-          <p className="text-white/85 text-sm leading-relaxed">
-            Simple. Secure. Connected.<br />
-            Sign in with your Cirkle email, phone number, or username.
+          <p className="text-white/85 text-xs leading-relaxed">
+            Simple. Secure. Connected.
           </p>
+          {/* Trust badges */}
+          <div className="flex items-center justify-center gap-4 mt-3">
+            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+              <ShieldCheck className="w-3 h-3" /> End-to-end encrypted
+            </div>
+            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+              <Zap className="w-3 h-3" /> Real-time
+            </div>
+            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+              <Users className="w-3 h-3" /> Verified agreements
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Form area pinned to bottom */}
-      <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-10">
-        <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-8 space-y-6">
+      <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-8">
+        <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-7 space-y-5">
           {/* Tab switcher — segmented control for Sign up / Log in */}
           <div className="relative flex p-1 bg-muted/50 rounded-xl border border-border/60">
             <button
@@ -272,12 +284,7 @@ export function AuthScreen() {
               className={cn(
                 'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
                 mode === 'signup'
-                  ? cn(
-                      'text-white shadow-sm',
-                      isCirkle
-                        ? 'bg-[#009588]'
-                        : 'bg-[var(--wasl-green)]'
-                    )
+                  ? 'text-white shadow-sm bg-[var(--wasl-green)]'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -289,12 +296,7 @@ export function AuthScreen() {
               className={cn(
                 'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
                 mode === 'login'
-                  ? cn(
-                      'text-white shadow-sm',
-                      isCirkle
-                        ? 'bg-[#009588]'
-                        : 'bg-[var(--wasl-green)]'
-                    )
+                  ? 'text-white shadow-sm bg-[var(--wasl-green)]'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -342,14 +344,22 @@ export function AuthScreen() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Your password"
-                      className="pl-9"
+                      className="pl-9 pr-9"
                       autoComplete="current-password"
                       disabled={loading}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
               </>
@@ -464,14 +474,22 @@ export function AuthScreen() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="At least 6 characters"
-                      className="pl-9"
+                      className="pl-9 pr-9"
                       autoComplete="new-password"
                       disabled={loading}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
               </>
@@ -482,7 +500,7 @@ export function AuthScreen() {
               className={cn(
                 'w-full font-medium',
                 isCirkle
-                  ? 'wasl-gradient-gold hover:opacity-90 text-[#1a1a14]'
+                  ? 'wasl-gradient-gold hover:opacity-90 text-[var(--cirkle-charcoal)]'
                   : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'
               )}
               disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
