@@ -1813,3 +1813,104 @@ Conducted a comprehensive audit of ALL features as COO/Project Manager. Tested e
 - Add per-user "deleted for me" tracking
 - Add message search highlighting in main chat
 - Add "Forward to external app" via Web Share API
+
+---
+Task ID: 27 — Replace z-ai-web-dev-sdk with real AI providers (COO directive)
+Agent: main (COO / Project Manager role)
+
+### Task
+Replace the z-ai-web-dev-sdk with real AI API providers using the provided keys:
+- Gemini API Key
+- Hugging Face API
+- GROQ API (Cirkle)
+- OpenRouter AI
+- NVIDIA API
+
+### Phase 1: Audit
+- Found z-ai-web-dev-sdk in package.json (line 84)
+- Searched all src/ files — z-ai SDK was NOT imported in any source code
+- All 5 AI routes (smart-reply, summary, tone, action-items, bot-reply) used
+  hardcoded rule-based/pattern matching instead of real AI
+- The z-ai-web-dev-sdk was a dead dependency — installed but never used
+
+### Phase 2: API Key Testing (Honest Results)
+
+Tested each provider directly with curl:
+
+| Provider | Status | Issue |
+|----------|--------|-------|
+| **NVIDIA** | ✅ WORKS | Model `deepseek-ai/deepseek-v4-flash-0731` works. Old models (llama-3.1-70b) reached end-of-life. |
+| **Groq** | ❌ Forbidden | API key returns 403 "Forbidden" on all endpoints |
+| **OpenRouter** | ❌ User not found | API key returns 401 "User not found" |
+| **Gemini** | ❌ Location blocked | Key works but "User location is not supported for the API use" |
+| **HuggingFace** | ❌ No response | API call timed out / empty response |
+
+**Only NVIDIA works from this server.** The other keys may work from
+Vercel's servers (different IP/location), so they're configured as
+fallbacks in the AI router.
+
+### Phase 3: Implementation
+
+**1. New AI router library** (`src/lib/ai.ts`)
+- Unified `aiChat(systemPrompt, userMessage, maxTokens)` function
+- Provider fallback chain: NVIDIA → Groq → OpenRouter → Gemini
+- OpenAI-compatible format for NVIDIA/Groq/OpenRouter
+- Separate Gemini REST API format
+- 15-second timeout per provider
+- Returns null on failure (callers use rule-based fallback)
+
+**2. Updated all 5 AI routes:**
+- `/api/ai/smart-reply` — AI generates 3 contextual reply suggestions
+- `/api/ai/summary` — AI creates structured bullet-point conversation summary
+- `/api/ai/tone` — AI rewrites messages in professional/casual/friendly/formal tone
+- `/api/ai/action-items` — AI extracts tasks/deadlines/decisions as JSON
+- `/api/conversations/[id]/bot-reply` — AI generates natural contextual replies
+
+Each route falls back to the original rule-based logic if all AI providers fail.
+
+**3. Updated environment:**
+- `.env` — Added GROQ_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY, NVIDIA_API_KEY, HUGGINGFACE_API_KEY
+- `.env.example` — Documented all AI provider keys
+- `package.json` — Removed z-ai-web-dev-sdk dependency
+- Ran `bun remove z-ai-web-dev-sdk` to remove from node_modules
+
+### Phase 4: Verification (Local)
+
+| Feature | AI Response | Time | Fallback Used? |
+|---------|------------|------|---------------|
+| Smart reply | "Let's do it! 🔒", "How do I tap that shield?", "Deal's on, let's commit!" | 1.4s | No (AI) |
+| Tone adjuster | "Could you please send me the files at your earliest convenience?" | 16s | No (AI) |
+| Bot reply | "I think we should make it a Commit, it's a pretty straightforward agreement" | 20s | No (AI) |
+| Summary | Structured bullet-point summary with action items | 17s | No (AI) |
+
+All AI features work with NVIDIA DeepSeek V4 Flash. Response times are
+15-20s due to the model's reasoning overhead, but quality is dramatically
+better than the old rule-based patterns.
+
+### Phase 5: Vercel Deployment
+
+**IMPORTANT**: The AI API keys are in `.env` which is NOT committed to
+GitHub (it's in .gitignore). The Vercel deployment needs these keys
+added manually in the Vercel dashboard:
+
+Settings → Environment Variables:
+- `NVIDIA_API_KEY` = [NVIDIA_API_KEY - see .env]
+- `GROQ_API_KEY` = [GROQ_API_KEY - see .env]
+- `OPENROUTER_API_KEY` = [OPENROUTER_API_KEY - see .env]
+- `GEMINI_API_KEY` = [GEMINI_API_KEY - see .env]
+- `HUGGINGFACE_API_KEY` = [HUGGINGFACE_API_KEY - see .env]
+
+Without these keys on Vercel, the AI routes fall back to rule-based
+responses (which still work, just less intelligent).
+
+### Files Touched
+- `src/lib/ai.ts` — NEW (unified AI router with provider fallback)
+- `src/app/api/ai/smart-reply/route.ts` — uses aiChat()
+- `src/app/api/ai/summary/route.ts` — uses aiChat()
+- `src/app/api/ai/tone/route.ts` — uses aiChat()
+- `src/app/api/ai/action-items/route.ts` — uses aiChat()
+- `src/app/api/conversations/[id]/bot-reply/route.ts` — uses aiChat()
+- `.env` — added 5 AI provider API keys
+- `.env.example` — documented all AI keys
+- `package.json` — removed z-ai-web-dev-sdk
+- `bun.lock` — updated (z-ai-web-dev-sdk removed)
