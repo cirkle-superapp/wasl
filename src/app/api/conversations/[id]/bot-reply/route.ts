@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { aiChat } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
 // POST /api/conversations/[id]/bot-reply
 // Generates a contextual reply from the demo counterparty (a "companion bot")
-// so single-user testing feels alive. Only works for 1-on-1 conversations
-// where the other participant's phone matches the demo pattern (+20100…).
+// using real AI (Groq/OpenRouter/Gemini/NVIDIA with fallback).
+// Only works for 1-on-1 conversations where the other participant's phone
+// matches the demo pattern (+20100…).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,12 +35,7 @@ export async function POST(
       participants: {
         include: {
           user: {
-            select: {
-              id: true,
-              name: true,
-              phone: true,
-              avatarColor: true,
-            },
+            select: { id: true, name: true, phone: true, avatarColor: true },
           },
         },
       },
@@ -54,7 +51,6 @@ export async function POST(
   if (!other) {
     return NextResponse.json({ error: 'No counterparty' }, { status: 400 })
   }
-  // Only allow bot replies for demo users (phone +20100…)
   if (!other.user.phone.startsWith('+20100')) {
     return NextResponse.json(
       { error: 'Counterparty is not a demo bot' },
@@ -62,16 +58,30 @@ export async function POST(
     )
   }
 
-  // Fetch the last few messages to generate a contextual reply
+  // Fetch the last few messages for context
   const recent = await db.message.findMany({
     where: { conversationId: id, type: { not: 'system' } },
     orderBy: { createdAt: 'desc' },
-    take: 5,
+    take: 10,
     select: { content: true, senderId: true },
   })
+
   const lastFromMe = recent.find((m) => m.senderId === session.id)?.content || ''
 
-  const reply = generateReply(lastFromMe, other.user.name)
+  // Try AI-generated reply first
+  const contextMessages = recent
+    .reverse()
+    .map((m) => `${m.senderId === session.id ? 'User' : other.user.name}: ${m.content}`)
+    .join('\n')
+
+  const systemPrompt = `You are ${other.user.name}, a friendly person chatting on Wasl (a messaging app). Keep replies short (1-2 sentences), casual, and natural. Be warm and conversational. Don't use markdown formatting.`
+
+  const userMessage = `Recent conversation:\n${contextMessages}\n\nGenerate a short, natural reply from ${other.user.name}:`
+
+  const aiReply = await aiChat(systemPrompt, userMessage, 100)
+
+  // Use AI reply if available, otherwise fall back to rule-based
+  const reply = aiReply || generateFallbackReply(lastFromMe)
 
   const message = await db.message.create({
     data: {
@@ -89,7 +99,6 @@ export async function POST(
     where: { id },
     data: { updatedAt: new Date() },
   })
-  // Mark as delivered (the sender is the bot, the reader is me — already read)
   await db.message.update({
     where: { id: message.id },
     data: { status: 'read' },
@@ -112,49 +121,39 @@ export async function POST(
   })
 }
 
-// Lightweight rule-based reply generator. Avoids an external LLM call so the
-// bot responds instantly and works offline.
-function generateReply(userText: string, botName: string): string {
+// Rule-based fallback reply generator (used when AI is unavailable)
+function generateFallbackReply(userText: string): string {
   const t = userText.toLowerCase().trim()
-  if (!t) {
-    return 'Hey! 👋'
-  }
-  // Greetings
+  if (!t) return 'Hey! 👋'
+
   if (/\b(hi|hello|hey|salam|سلام|اهلا|أهلا|مرحبا)\b/.test(t)) {
     return `Hey! Good to hear from you 😊 How's your day going?`
   }
-  // How are you
   if (/\b(how are you|how r u|kayfak|كيفك|عامل ايه)\b/.test(t)) {
     return `I'm doing great, thanks for asking! 🙌 What about you?`
   }
-  // Thanks
   if (/\b(thanks|thank you|thx|shukran|شكرا)\b/.test(t)) {
     return `You're welcome! 🌟 Anything else I can help with?`
   }
-  // Questions
   if (t.endsWith('?')) {
     return `That's a good question 🤔 Let me think… I'd say it depends on the details. What do you think?`
   }
-  // Price / commit related
   if (/\b(price|cost|how much|deal|commit|agreement|سعر|كم)\b/.test(t)) {
     return `Sounds like a deal 💼 We could turn that into a Commit to make it official — just tap the shield icon in the composer!`
   }
-  // Bye
   if (/\b(bye|goodbye|see you|talk later|مع السلامة)\b/.test(t)) {
     return `Talk to you soon! 👋`
   }
-  // Yes / no
   if (/^(yes|yeah|yep|ok|okay|sure|اه|نعم|تمام)\b/.test(t)) {
     return `Great! 👍`
   }
   if (/^(no|nope|nah|لا)\b/.test(t)) {
     return `No worries — let me know if you change your mind 🙏`
   }
-  // Emoji-only
   if (/^[\p{Emoji}\s]+$/u.test(t)) {
     return `😂`
   }
-  // Default: contextual acknowledgment
+
   const fallbacks = [
     `That's interesting! Tell me more 🤔`,
     `I hear you 👂 What happened next?`,
@@ -164,6 +163,5 @@ function generateReply(userText: string, botName: string): string {
     `Oh really? I didn't know that 🤓`,
     `Totally agree with you 💯`,
   ]
-  // Stable-ish pick based on text length so it feels deterministic
   return fallbacks[userText.length % fallbacks.length]
 }
