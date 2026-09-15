@@ -18,9 +18,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Wasl — Simple. Secure. Connected.",
-  description: "Wasl is a fast, simple and secure messaging app that connects you with the people who matter.",
-  keywords: ["Wasl", "chat", "messaging", "real-time", "WhatsApp-like", "commit"],
+  description: "Wasl is a fast, simple and secure messaging app that connects you with the people who matter. End-to-end encrypted, real-time messaging with verified agreements.",
+  keywords: ["Wasl", "Cirkle", "chat", "messaging", "real-time", "secure", "encrypted", "commit", "agreements", "business"],
   authors: [{ name: "Wasl" }],
+  creator: "Cirkle",
+  publisher: "Cirkle",
   icons: {
     icon: [
       { url: "/logo.svg", type: "image/svg+xml" },
@@ -36,11 +38,34 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   openGraph: {
-    title: "Wasl",
-    description: "Simple. Secure. Connected.",
+    title: "Wasl — Simple. Secure. Connected.",
+    description: "End-to-end encrypted messaging with verified agreements. Real-time chat, business accounts, and AI-powered features.",
     siteName: "Wasl",
     type: "website",
+    url: "https://cirkle-wasl.vercel.app",
+    images: [
+      {
+        url: "/og-image.svg",
+        width: 1200,
+        height: 630,
+        alt: "Wasl — Simple. Secure. Connected.",
+      },
+    ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wasl — Simple. Secure. Connected.",
+    description: "End-to-end encrypted messaging with verified agreements.",
+    images: ["/og-image.svg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#009588" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a4a5a" },
+  ],
 };
 
 // Inline script to apply the saved color theme BEFORE hydration, preventing
