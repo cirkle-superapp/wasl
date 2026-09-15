@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cirkle-wasl.vercel.app"),
   title: "Wasl — Simple. Secure. Connected.",
   description: "Wasl is a fast, simple and secure messaging app that connects you with the people who matter. End-to-end encrypted, real-time messaging with verified agreements.",
   keywords: ["Wasl", "Cirkle", "chat", "messaging", "real-time", "secure", "encrypted", "commit", "agreements", "business"],
@@ -62,10 +63,16 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+};
+
+// Viewport export — Next.js 16 requires themeColor here, not in metadata
+export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#009588" },
     { media: "(prefers-color-scheme: dark)", color: "#1a4a5a" },
   ],
+  width: "device-width",
+  initialScale: 1,
 };
 
 // Inline script to apply the saved color theme BEFORE hydration, preventing
