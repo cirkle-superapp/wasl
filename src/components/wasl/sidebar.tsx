@@ -372,6 +372,10 @@ function ConversationRow({
 
   let preview = last?.content || 'Tap to start chatting'
   if (last?.type === 'image') preview = '📷 Photo'
+  if (last?.type === 'pdf') preview = '📄 PDF'
+  if (last?.type === 'document') preview = '📄 Document'
+  if (last?.type === 'audio') preview = '🎵 Audio'
+  if (last?.type === 'voice') preview = '🎤 Voice message'
   if (last?.type === 'system') preview = last?.content
 
   const previewSender =

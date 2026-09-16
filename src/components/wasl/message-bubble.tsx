@@ -20,6 +20,9 @@ import {
   PinOff,
   Info,
   Share2,
+  FileText,
+  Download,
+  Music,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -85,6 +88,55 @@ function highlightText(text: string, query: string): React.ReactNode {
       part || null
     )
   )
+}
+
+// ---- File-attachment content parser --------------------------------------
+// PDF / document / audio messages store their payload as a small JSON blob
+// in the message `content` field: `{ url, name, size }`. This parser tolerates
+// a plain URL string too (legacy / forwarded payloads) so the renderer is
+// resilient when the JSON shape isn't present.
+export function parseFileContent(
+  content: string
+): { url: string; name?: string; size?: number } | null {
+  if (!content) return null
+  try {
+    const parsed = JSON.parse(content)
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof parsed.url === 'string'
+    ) {
+      return {
+        url: parsed.url,
+        name: typeof parsed.name === 'string' ? parsed.name : undefined,
+        size: typeof parsed.size === 'number' ? parsed.size : undefined,
+      }
+    }
+  } catch {
+    // Not JSON — fall through to plain-URL detection.
+  }
+  // Plain URL fallback (absolute http(s) or relative `/uploads/...`).
+  if (content.startsWith('http') || content.startsWith('/')) {
+    return { url: content }
+  }
+  return null
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Derive a filename from a URL when the parsed payload has no `name`.
+function deriveFilenameFromUrl(url: string, fallback: string): string {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    const last = u.pathname.split('/').filter(Boolean).pop()
+    return last ? decodeURIComponent(last) : fallback
+  } catch {
+    return fallback
+  }
 }
 
 // ---- Protection helpers -------------------------------------------------
@@ -596,6 +648,22 @@ export function MessageBubble({
                 {mine && <StatusTicks status={message.status} className="ml-1" onClick={() => setReadReceiptsOpen(true)} />}
               </div>
             </div>
+          ) : message.type === 'pdf' || message.type === 'document' ? (
+            <PdfDocumentCardContent
+              message={message}
+              mine={mine}
+              blocked={blocked}
+              isProtected={protection.isProtected}
+              onOpenReadReceipts={() => setReadReceiptsOpen(true)}
+            />
+          ) : message.type === 'audio' && !message.content.startsWith('data:audio') ? (
+            <AudioUrlCardContent
+              message={message}
+              mine={mine}
+              blocked={blocked}
+              isProtected={protection.isProtected}
+              onOpenReadReceipts={() => setReadReceiptsOpen(true)}
+            />
           ) : (
             <div
               className={cn(
@@ -922,6 +990,167 @@ function VoiceMessagePlayer({
             {mine && <StatusTicks status={status} />}
           </span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ---- File-attachment card (PDF / document) -------------------------------
+// Renders a compact "file card" inside the bubble: a coloured FileText icon
+// (red for PDF, teal/green for documents), the original filename + human-
+// readable size, and a Download button that opens the URL in a new tab.
+//
+// `blocked` is set when the message is protected AND the current user is the
+// recipient — in that case the Download button is disabled and shows the
+// protected warning toast instead of opening the link.
+function PdfDocumentCardContent({
+  message,
+  mine,
+  blocked,
+  isProtected,
+  onOpenReadReceipts,
+}: {
+  message: ChatMessage
+  mine: boolean
+  blocked: boolean
+  isProtected: boolean
+  onOpenReadReceipts: () => void
+}) {
+  const parsed = parseFileContent(message.content)
+  const isPdf = message.type === 'pdf'
+  const fallbackName = isPdf ? 'PDF document' : 'Document'
+  const name =
+    parsed?.name ||
+    (parsed?.url ? deriveFilenameFromUrl(parsed.url, fallbackName) : fallbackName)
+  const sizeLabel = parsed?.size ? formatFileSize(parsed.size) : isPdf ? 'PDF' : 'Document'
+
+  // PDF → red icon. Document → teal/green icon (uses wasl theme tokens so it
+  // respects light/dark mode and the Cirkle gold theme). No indigo/blue.
+  const iconColor = isPdf
+    ? 'text-red-500'
+    : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+  const iconBg = isPdf
+    ? 'bg-red-500/10'
+    : 'bg-[var(--wasl-teal)]/10 dark:bg-[var(--wasl-green)]/10'
+
+  return (
+    <div className="rounded-lg overflow-hidden max-w-[280px]">
+      <div className="flex items-center gap-3 p-2 min-w-[220px]">
+        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
+          <FileText className={cn('w-5 h-5', iconColor)} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate text-foreground" title={name}>
+            {name}
+          </div>
+          <div className="text-[11px] text-foreground/60 uppercase tracking-wide">
+            {sizeLabel}
+          </div>
+        </div>
+        {blocked ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toast.error(PROTECTED_WARNING, { duration: 4000 })
+              recordAttempt(message.id, 'save')
+            }}
+            className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground/40 cursor-not-allowed"
+            title="Download disabled — message is protected"
+            aria-label="Download disabled — message is protected"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        ) : (
+          <a
+            href={parsed?.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={name}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              'shrink-0 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+              'bg-[var(--wasl-green)]/10 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/20'
+            )}
+            title="Download"
+            aria-label="Download"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        )}
+      </div>
+      <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+        {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
+        {formatChatTimestamp(message.createdAt)}
+        {mine && <StatusTicks status={message.status} className="ml-1" onClick={onOpenReadReceipts} />}
+      </div>
+    </div>
+  )
+}
+
+// ---- Audio URL card ------------------------------------------------------
+// Renders an `<audio controls>` element for audio messages whose `content`
+// is a URL (i.e. an uploaded .mp3/.wav/.m4a/.ogg). Voice notes that were
+// recorded in-browser are stored as `data:audio/...` data URIs and are
+// handled by the existing VoiceMessagePlayer above.
+function AudioUrlCardContent({
+  message,
+  mine,
+  blocked,
+  isProtected,
+  onOpenReadReceipts,
+}: {
+  message: ChatMessage
+  mine: boolean
+  blocked: boolean
+  isProtected: boolean
+  onOpenReadReceipts: () => void
+}) {
+  const parsed = parseFileContent(message.content)
+  const url = parsed?.url
+  const name =
+    parsed?.name ||
+    (url ? deriveFilenameFromUrl(url, 'Audio message') : 'Audio message')
+  const sizeLabel = parsed?.size ? formatFileSize(parsed.size) : undefined
+
+  if (!url) {
+    // Malformed payload — fall back to a tiny "audio unavailable" notice
+    // rather than crashing the whole bubble.
+    return (
+      <div className="rounded-lg p-2 max-w-[280px] text-xs text-muted-foreground">
+        Audio unavailable
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg overflow-hidden max-w-[300px] p-1">
+      <div className="flex items-center gap-2 mb-1 min-w-0">
+        <Music className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
+        <span className="text-xs font-medium truncate flex-1 text-foreground" title={name}>
+          {name}
+        </span>
+        {sizeLabel && (
+          <span className="text-[10px] text-foreground/60 shrink-0">{sizeLabel}</span>
+        )}
+      </div>
+      {/* `controlsList="nodownload noplaybackrate"` keeps the native UI tidy
+          and discourages trivial screenshotting on protected bubbles (though
+          the only true protection is the audit log). */}
+      <audio
+        controls
+        src={url}
+        className="w-full"
+        controlsList="nodownload noplaybackrate"
+        // Protected recipients can't interact with the audio player beyond
+        // viewing the file card (mirrors the image's pointer-events:none
+        // treatment above).
+        style={blocked ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
+      />
+      <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+        {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
+        {formatChatTimestamp(message.createdAt)}
+        {mine && <StatusTicks status={message.status} className="ml-1" onClick={onOpenReadReceipts} />}
       </div>
     </div>
   )

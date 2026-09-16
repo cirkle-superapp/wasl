@@ -57,6 +57,9 @@ model User {
   folders          ChatFolder[]
   phoneNumbers     PhoneNumber[]
   screenshotAttempts ScreenshotAttempt[] @relation("ScreenshotReporter")
+  // Messages this user has "deleted for me" (locally hidden, still visible to
+  // other participants). See the `DeletedForMe` model.
+  deletedForMe     DeletedForMe[]
   // Business
   ownedBusinesses   Business[]     @relation("BusinessOwner")
   businessMemberships BusinessMember[]
@@ -153,8 +156,26 @@ model Message {
   starredBy    StarredMessage[]
   screenshotAttempts ScreenshotAttempt[]
   edits        MessageEdit[]
+  // Per-user "deleted for me" records — hides a message from a specific user's
+  // view without affecting other participants.
+  deletedForMe DeletedForMe[]
 
   @@index([conversationId, createdAt])
+}
+
+/// Tracks which messages a user has "deleted for me" — hides the message
+/// only for that user while leaving it visible to other participants.
+model DeletedForMe {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  deletedAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
 }
 
 /// Message edit history — stores each previous version of a message's

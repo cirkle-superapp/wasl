@@ -62,8 +62,17 @@ export async function GET(
   })
   const starredIds = new Set(starredRows.map((s) => s.messageId))
 
+  // Exclude messages the current user has "deleted for me" — these are
+  // locally hidden but still visible to other participants.
+  const deletedForMeRows = await db.deletedForMe.findMany({
+    where: { userId: session.id, message: { conversationId: id } },
+    select: { messageId: true },
+  })
+  const deletedSet = new Set(deletedForMeRows.map((d) => d.messageId))
+
   return NextResponse.json({
     messages: messages
+      .filter((m) => !deletedSet.has(m.id))
       .reverse()
       .map((m) => ({
         id: m.id,

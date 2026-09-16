@@ -96,9 +96,15 @@ export function ChatWindow({
   const [toneOpen, setToneOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  // Tracks how many NEW messages have arrived while the user was scrolled up
+  // (away from the bottom). Drives a badge on the scroll-to-bottom button.
+  const [unreadSinceScrollUp, setUnreadSinceScrollUp] = useState(0)
   const [botReplying, setBotReplying] = useState(false)
   // Drop zone state — shown when a file is dragged over the chat window
   const [isDragging, setIsDragging] = useState(false)
+  // True while one or more drag-dropped files are uploading to /api/upload.
+  // Drives a small floating "Uploading…" chip + disables further drops.
+  const [isUploading, setIsUploading] = useState(false)
   const dragDepthRef = useRef(0)
 
   const conversation = conversations.find((c) => c.id === activeConversationId)
@@ -226,6 +232,14 @@ export function ChatWindow({
       messageIdsRef.current.add(m.id)
       addMessage(activeConversationId, m)
 
+      // If the user is scrolled up (away from the bottom), increment the
+      // "new messages" badge on the scroll-to-bottom button so they know
+      // there's something new to read. We DON'T auto-scroll because the
+      // user deliberately scrolled up to read older messages.
+      if (!wasNearBottomRef.current) {
+        setUnreadSinceScrollUp((n) => n + 1)
+      }
+
       // If message is from someone else, mark as delivered
       if (m.senderId !== user?.id) {
         getSocket().emit('message:status', {
@@ -349,6 +363,7 @@ export function ChatWindow({
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     wasNearBottomRef.current = true
     setShowScrollBtn(false)
+    setUnreadSinceScrollUp(0)
   }
 
   // ---- Scroll to a specific message (by ID) ---------------------------------
@@ -389,11 +404,22 @@ export function ChatWindow({
         messageId,
       })
     }
+    // "Delete for me" — local-only hide. Same UI removal as a full delete,
+    // but we deliberately do NOT broadcast via socket: other participants
+    // should still see the message. The DeletedForMe row on the server keeps
+    // it filtered out of this user's future message fetches.
+    function onMessageHiddenForMe(e: Event) {
+      const messageId = (e as CustomEvent<string>).detail
+      if (!messageId || !activeConversationId) return
+      removeMessage(activeConversationId, messageId)
+    }
     window.addEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
     window.addEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
+    window.addEventListener('wasl:message-hidden-for-me', onMessageHiddenForMe as EventListener)
     return () => {
       window.removeEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
       window.removeEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
+      window.removeEventListener('wasl:message-hidden-for-me', onMessageHiddenForMe as EventListener)
     }
   }, [activeConversationId, removeMessage])
 
@@ -765,7 +791,17 @@ export function ChatWindow({
     return () => window.removeEventListener('paste', handlePaste)
   }, [handlePaste])
 
-  // ---- Drag-and-drop image upload ------------------------------------------
+  // ---- Drag-and-drop file upload -------------------------------------------
+  // Accepts images (<=1.5MB), PDF / document / audio (<=5MB). Routes every
+  // dropped file through the /api/upload endpoint (which returns a
+  // `{ url, type, name, size }` payload), then sends a chat message with the
+  // returned URL as the content.
+  //
+  // For PDF / document / audio we also embed `name` + `size` into the message
+  // content as a small JSON blob so the message-bubble can render a proper
+  // file-attachment card with the original filename + human-readable size.
+  // Image messages store the URL verbatim (the existing `<img>` renderer in
+  // message-bubble handles both data URLs and `/uploads/...` URLs).
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -788,39 +824,61 @@ export function ChatWindow({
   }, [])
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
       dragDepthRef.current = 0
       setIsDragging(false)
       const files = Array.from(e.dataTransfer.files || [])
-      const images = files.filter((f) => f.type.startsWith('image/'))
-      if (images.length === 0) {
-        if (files.length > 0) {
-          toast.error('Only image files are supported')
+      if (files.length === 0) return
+      if (isUploading) return // already busy — ignore concurrent drops
+
+      setIsUploading(true)
+      let sentCount = 0
+      try {
+        for (const file of files) {
+          const toastId = toast.loading(`Uploading ${file.name}…`)
+          try {
+            const fd = new FormData()
+            fd.append('file', file)
+            const res = await fetch('/api/upload', { method: 'POST', body: fd })
+            if (!res.ok) {
+              const err = await res.json().catch(() => null)
+              throw new Error(err?.error || `Upload failed (${res.status})`)
+            }
+            const data: {
+              url: string
+              type: 'image' | 'pdf' | 'document' | 'audio'
+              name: string
+              size: number
+            } = await res.json()
+            // Build the message content. Images store the URL as-is so the
+            // existing <img> renderer keeps working. Other types embed
+            // name + size as JSON so the bubble can render a file card.
+            const content =
+              data.type === 'image'
+                ? data.url
+                : JSON.stringify({
+                    url: data.url,
+                    name: data.name,
+                    size: data.size,
+                  })
+            await handleSend(content, data.type)
+            sentCount += 1
+            toast.success(`Sent ${file.name}`, { id: toastId })
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : `Failed to upload ${file.name}`
+            toast.error(msg, { id: toastId })
+          }
         }
-        return
+        if (sentCount > 1) {
+          toast.success(`Sent ${sentCount} files`)
+        }
+      } finally {
+        setIsUploading(false)
       }
-      for (const file of images) {
-        if (file.size > 1.5 * 1024 * 1024) {
-          toast.error(`Image too large: ${file.name} (max 1.5MB)`)
-          continue
-        }
-        const reader = new FileReader()
-        reader.onload = () => {
-          void handleSendImage(reader.result as string)
-        }
-        reader.onerror = () =>
-          toast.error(`Failed to read ${file.name}`)
-        reader.readAsDataURL(file)
-      }
-      toast.success(
-        images.length === 1
-          ? `Sent ${images[0].name}`
-          : `Sent ${images.length} images`
-      )
     },
-    [handleSendImage]
+    [handleSend, isUploading]
   )
 
   // ---- Typing indicator ------------------------------------------------------
@@ -853,6 +911,8 @@ export function ChatWindow({
   useEffect(() => {
     if (!activeConversationId || !conversation) return
     initialUnreadRef.current = conversation.unreadCount || 0
+    // Reset the "new messages since scroll-up" counter when switching chats.
+    setUnreadSinceScrollUp(0)
     // The GET messages endpoint already marks as read on the server.
     // We just need to update the sidebar unread count for this conversation.
     upsertConversation({
@@ -929,7 +989,7 @@ export function ChatWindow({
             <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-teal)]/30 transition-colors">
               <Paperclip className="w-4 h-4 text-[var(--wasl-teal)] mb-1" />
               <div className="text-[11px] font-medium text-foreground">Drag & drop</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">Images up to 1.5MB</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">Images, PDF, docs, audio</div>
             </div>
             <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-amber-500/30 transition-colors">
               <Sparkles className="w-4 h-4 text-amber-500 mb-1" />
@@ -976,13 +1036,22 @@ export function ChatWindow({
             <Paperclip className="w-6 h-6 text-[var(--wasl-green)] rotate-45" />
             <div>
               <div className="font-semibold text-foreground">
-                Drop image to send
+                Drop file to send
               </div>
               <div className="text-xs text-muted-foreground">
-                PNG / JPG / WEBP / GIF · max 1.5MB
+                Image · PDF · Document · Audio · max 5MB
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {/* Upload-in-progress chip — shown while a drag-dropped file is being
+          POSTed to /api/upload. Mirrors the drop overlay's bottom-center area
+          but is a small floating badge so it doesn't block the chat. */}
+      {isUploading && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-lg border border-border px-4 py-2">
+          <span className="w-3 h-3 rounded-full border-2 border-[var(--wasl-green)] border-t-transparent animate-spin" />
+          <span className="text-xs font-medium text-foreground">Uploading…</span>
         </div>
       )}
       {/* Pinned message bar — shows the currently pinned message at the top
@@ -1256,16 +1325,25 @@ export function ChatWindow({
           </>
         )}
 
-        {/* Scroll-to-bottom button */}
+        {/* Scroll-to-bottom button — shows a badge with the count of new
+            messages that arrived while the user was scrolled up. */}
         {showScrollBtn && (
           <button
             type="button"
             onClick={scrollToBottom}
-            className="wasl-scroll-btn sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border border-border flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-colors z-10"
+            className="wasl-scroll-btn sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border border-border flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-all hover:scale-110 z-10 relative"
             title="Scroll to latest"
-            aria-label="Scroll to latest"
+            aria-label={`Scroll to latest${unreadSinceScrollUp > 0 ? ` (${unreadSinceScrollUp} new)` : ''}`}
           >
             <ChevronDown className="w-5 h-5" />
+            {unreadSinceScrollUp > 0 && (
+              <span
+                key={unreadSinceScrollUp}
+                className="wasl-badge-bounce absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--wasl-light)] text-white text-[10px] font-bold flex items-center justify-center shadow-md ring-2 ring-white dark:ring-[var(--wasl-sidebar-bg)]"
+              >
+                {unreadSinceScrollUp > 99 ? '99+' : unreadSinceScrollUp}
+              </span>
+            )}
           </button>
         )}
       </div>

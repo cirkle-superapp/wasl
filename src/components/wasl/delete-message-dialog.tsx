@@ -36,12 +36,12 @@ export function DeleteMessageDialog({
 }) {
   const [deleting, setDeleting] = useState(false)
 
-  async function handleDelete(forEveryone: boolean) {
+  async function handleDeleteForEveryone() {
     if (!messageId) return
     setDeleting(true)
     try {
       const res = await fetch(
-        `/api/messages/${messageId}?forEveryone=${forEveryone}`,
+        `/api/messages/${messageId}?forEveryone=true`,
         { method: 'DELETE' }
       )
       if (!res.ok) {
@@ -49,18 +49,39 @@ export function DeleteMessageDialog({
         toast.error(err?.error || 'Failed to delete message')
         return
       }
-      // Emit a socket event so other clients remove the message too
-      // (the chat-window listens for 'message:reacted' which refetches
-      // the message — a 404 triggers local removal)
-      toast.success(
-        forEveryone
-          ? 'Message deleted for everyone'
-          : 'Message deleted'
-      )
+      toast.success('Message deleted for everyone')
       onOpenChange(false)
-      // Trigger a page-level refresh of messages
+      // Broadcast (socket + window event) so all clients remove the message.
       window.dispatchEvent(
         new CustomEvent('wasl:message-deleted', { detail: messageId })
+      )
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleDeleteForMe() {
+    if (!messageId) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/messages/${messageId}/for-me`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error || 'Failed to delete message')
+        return
+      }
+      toast.success('Message deleted for you')
+      onOpenChange(false)
+      // Local-only hide: remove from this user's UI without broadcasting to
+      // other participants. The chat-window listens on
+      // `wasl:message-hidden-for-me` and removes the message from local state
+      // WITHOUT emitting a socket event.
+      window.dispatchEvent(
+        new CustomEvent('wasl:message-hidden-for-me', { detail: messageId })
       )
     } catch {
       toast.error('Network error')
@@ -98,7 +119,7 @@ export function DeleteMessageDialog({
           {isOwnMessage && canDeleteForEveryone && (
             <button
               type="button"
-              onClick={() => handleDelete(true)}
+              onClick={() => handleDeleteForEveryone()}
               disabled={deleting}
               className="w-full flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5 hover:bg-destructive/10 transition-colors text-left disabled:opacity-50"
             >
@@ -123,7 +144,7 @@ export function DeleteMessageDialog({
           {/* Delete for me */}
           <button
             type="button"
-            onClick={() => handleDelete(false)}
+            onClick={() => handleDeleteForMe()}
             disabled={deleting}
             className="w-full flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
           >

@@ -14,6 +14,8 @@ import {
   Trash2,
   Lock,
   LockOpen,
+  FileText,
+  Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -53,11 +55,19 @@ export function MessageInput({
   const [lockOverride, setLockOverride] = useState<boolean | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Hidden input for non-image attachments (PDF / document / audio). Routes
+  // the picked file through /api/upload, then sends a chat message with the
+  // returned URL as the content (and JSON-embeds the filename + size so the
+  // message-bubble can render a proper file-attachment card).
+  const docFileRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingChange = useRef<boolean>(false)
+  // True while a doc/PDF/audio attachment is being uploaded. Drives the
+  // spinner overlay on the attach button + disables the input briefly.
+  const [docUploading, setDocUploading] = useState(false)
   const replyTo = useWaslStore((s) => s.replyTo)
   const setReplyTo = useWaslStore((s) => s.setReplyTo)
   const user = useWaslStore((s) => s.user)
@@ -233,6 +243,49 @@ export function MessageInput({
     e.target.value = ''
   }
 
+  // Attach a non-image file (PDF / document / audio). The file is POSTed to
+  // /api/upload which validates the type + size and writes it to
+  // public/uploads/, then a chat message is sent with the resulting URL
+  // (JSON-embedded with name + size for the bubble's file-card renderer).
+  async function handleDocFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setDocUploading(true)
+    const toastId = toast.loading(`Uploading ${file.name}…`)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        throw new Error(err?.error || `Upload failed (${res.status})`)
+      }
+      const data: {
+        url: string
+        type: 'pdf' | 'document' | 'audio' | 'image'
+        name: string
+        size: number
+      } = await res.json()
+      // Build the message content (JSON for non-image types so the bubble
+      // can render filename + size; image content stays a plain URL to keep
+      // the existing <img> renderer happy — though this branch shouldn't
+      // normally receive images, the upload API may categorise an audio/*
+      // mime as `image` only if the browser is buggy, so we guard anyway).
+      const content =
+        data.type === 'image'
+          ? data.url
+          : JSON.stringify({ url: data.url, name: data.name, size: data.size })
+      await onSend(content, data.type, { protected: effectiveProtect })
+      toast.success(`Sent ${file.name}`, { id: toastId })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload file'
+      toast.error(msg, { id: toastId })
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
   return (
     <div className="relative bg-[var(--wasl-chat-bg)] px-2 sm:px-4 py-2 border-t border-border/60">
       {/* Reply banner */}
@@ -257,7 +310,7 @@ export function MessageInput({
         </div>
       )}
 
-      <div className="flex items-end gap-2 max-w-4xl mx-auto">
+      <div className="flex items-end gap-1 sm:gap-2 max-w-4xl mx-auto overflow-x-auto wasl-scroll sm:overflow-visible pb-1 sm:pb-0">
         {/* Emoji button */}
         <div className="relative shrink-0">
           <button
@@ -283,7 +336,7 @@ export function MessageInput({
           />
         </div>
 
-        {/* Attachment button */}
+        {/* Attachment button — image only (kept as data URL for backward compat) */}
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -298,6 +351,35 @@ export function MessageInput({
           accept="image/*"
           className="hidden"
           onChange={handleFileSelect}
+        />
+
+        {/* Attach file button — PDF / document / audio. Routes through the
+            /api/upload endpoint (max 5MB) and sends a typed chat message. */}
+        <button
+          type="button"
+          onClick={() => docFileRef.current?.click()}
+          disabled={docUploading}
+          className={cn(
+            'w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0',
+            docUploading
+              ? 'text-[var(--wasl-green)] bg-[var(--wasl-green)]/10 cursor-progress'
+              : 'text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10'
+          )}
+          title="Attach PDF / document / audio"
+          aria-label="Attach PDF / document / audio"
+        >
+          {docUploading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <FileText className="w-5 h-5" />
+          )}
+        </button>
+        <input
+          ref={docFileRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,.md,audio/*"
+          className="hidden"
+          onChange={handleDocFileSelect}
         />
 
         {/* Commit button — Cirkle-inspired verified agreements */}

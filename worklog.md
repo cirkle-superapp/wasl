@@ -2125,3 +2125,269 @@ webDevReview job will continue QA in subsequent runs.
 - Add "Reply from notification" quick reply
 - Add per-user "deleted for me" tracking
 - Add "Forward to external app" via Web Share API (DONE in Task 28-a)
+
+---
+Task ID: 29-a
+Agent: general-purpose (deleted-for-me)
+Task: Implement "Deleted for me" message tracking so the "Delete for me" option in DeleteMessageDialog only hides the message from the current user, NOT other participants (the existing "Delete for everyone" behavior is preserved as-is).
+
+Work Log:
+- Read `/home/z/my-project/worklog.md` (Task IDs 26, 27, 28-a, 28-b, 28) to learn the existing patterns: Zustand store + `removeMessage`, shadcn/ui components, the `wasl:message-deleted` window event already wired up in `chat-window.tsx` (removes from local state + broadcasts via socket), and the existing message-list GET handler at `src/app/api/conversations/[id]/messages/route.ts`.
+- Audited `prisma/schema.prisma` (Message model at L119, User model at L13), `src/app/api/messages/[id]/route.ts` (existing DELETE handler — its "delete for me" branch required the caller to be the sender, which is wrong for receivers and doesn't persist), `src/components/wasl/delete-message-dialog.tsx` (a single `handleDelete(forEveryone)` was sending both options to the same endpoint), `src/components/wasl/chat-window.tsx` (the `onMessageDeleted` listener at L382 + `handleDeleteMessage` at L615 that opens the dialog), and `src/components/wasl/message-bubble.tsx` (ToolbarButton + ContextMenuItem "Delete" both wired to `onDelete?.()`, which the chat-window passes as `() => handleDeleteMessage(m.id)` — already correct).
+
+Step 1 — Prisma schema (`prisma/schema.prisma`):
+- Added a new `DeletedForMe` model: `id`, `messageId`, `userId`, `deletedAt`, with `message` + `user` cascade relations, `@@unique([messageId, userId])` (so the same user can't hide the same message twice), and `@@index([userId])` for fast per-user filtering.
+- Added the back-relation `deletedForMe DeletedForMe[]` to the `Message` model (right after `edits MessageEdit[]`).
+- Added the back-relation `deletedForMe DeletedForMe[]` to the `User` model (right before the `// Business` block).
+- Ran `bun run db:push` — succeeded in 26ms, Prisma Client regenerated cleanly to `./node_modules/@prisma/client`.
+
+Step 2 — New API route `src/app/api/messages/[id]/for-me/route.ts`:
+- DELETE handler, `runtime = 'nodejs'`, requires `getSession()` (returns 401 if missing).
+- Verifies the message exists (404 otherwise), verifies the caller is a `Participant` of the message's conversation (403 otherwise) — this prevents a user from creating `DeletedForMe` rows for messages they can't see.
+- Uses `db.deletedForMe.upsert({ where: { messageId_userId: ... }, update: {}, create: { ... } })` — idempotent: if the row already exists, the `update: {}` makes it a no-op (preserving the original `deletedAt`).
+- Wraps the upsert in try/catch to gracefully handle the P2002 (unique constraint) Prisma error — returns `{ ok: true, alreadyHidden: true }` if the row already existed. (Defensive — the upsert should normally prevent P2002, but it's possible under a race.)
+- Returns `{ ok: true }` on the happy path.
+
+Step 3 — Updated messages list API (`src/app/api/conversations/[id]/messages/route.ts`):
+- Added a `db.deletedForMe.findMany({ where: { userId: session.id, message: { conversationId: id } }, select: { messageId: true } })` query (filters by both the current user AND the conversation in a single SQL round-trip via the implicit `message` relation join).
+- Built a `Set<string>` of hidden message IDs and added `.filter((m) => !deletedSet.has(m.id))` BEFORE `.reverse()` in the response mapping, so hidden messages never reach the client.
+
+Step 4 — Updated `DeleteMessageDialog` (`src/components/wasl/delete-message-dialog.tsx`):
+- Split the single `handleDelete(forEveryone)` function into two separate handlers:
+  - `handleDeleteForEveryone()` — calls `/api/messages/${messageId}?forEveryone=true` (the existing "delete for everyone" route, unchanged). On success: shows toast "Message deleted for everyone", closes the dialog, dispatches the existing `wasl:message-deleted` window event (which the chat-window listens to and broadcasts via socket).
+  - `handleDeleteForMe()` — calls the new `/api/messages/${messageId}/for-me` endpoint. On success: shows toast "Message deleted for you", closes the dialog, dispatches a NEW `wasl:message-hidden-for-me` window event with the message ID.
+- Wired the "Delete for everyone" button (which is only rendered when `isOwnMessage && canDeleteForEveryone`) to `handleDeleteForEveryone()`.
+- Wired the "Delete for me" button (always rendered) to `handleDeleteForMe()`.
+
+Step 5 — Updated `chat-window.tsx`:
+- Added a new `onMessageHiddenForMe` window event listener alongside the existing `onMessageDeleted`. Both call `removeMessage(activeConversationId, messageId)` to remove the bubble from local state immediately.
+- The KEY difference: `onMessageDeleted` (full delete) ALSO emits `getSocket().emit('message:reacted', ...)` so other clients remove it too. `onMessageHiddenForMe` deliberately does NOT emit a socket event — the message should remain visible to other participants. The `DeletedForMe` row on the server is what keeps it filtered out of THIS user's future fetches.
+- Added the listener + cleanup pair to the existing `useEffect` block (same dependency array `[activeConversationId, removeMessage]`).
+
+Step 6 — Verified `message-bubble.tsx`:
+- The "Delete" button in the hover toolbar (line 505: `<ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>`) and in the right-click context menu (line 745: `onClick={() => onDelete?.()}`) both call `onDelete?.()`. The chat-window passes `onDelete={() => handleDeleteMessage(m.id)}` (line 1241), which opens the `DeleteMessageDialog`. No changes needed — verified working.
+
+Verification:
+- `bun run lint` → exit 0, no errors or warnings.
+- `bunx tsc --noEmit` → 0 errors in my touched/new files (`for-me/route.ts`, `delete-message-dialog.tsx`, `messages/route.ts`, `chat-window.tsx`). The 2 remaining TS errors in `chat-window.tsx` (lines 497 `otherUser.phone` and 660 `string | null` arg) are pre-existing and unrelated to this task — my edits are at lines 380-409.
+- After `bun run db:push`, the running dev server had a stale PrismaClient instance (created before the schema push) so the new `db.deletedForMe` was `undefined` at runtime. Killed the dev server (`pkill -f "next dev"`) and restarted it with the documented `setsid -f bash -c 'exec ./node_modules/.bin/next dev -p 3000 > /home/z/my-project/dev.log 2>&1'` pattern. Dev.log now shows clean compiles.
+- End-to-end smoke test (curl, logged in as `demo_amira_hassan`):
+  - GET `/api/conversations/{conv}/messages?limit=200` → 8 messages, target message present.
+  - DELETE `/api/messages/{msgId}/for-me` → 200 `{ ok: true }`.
+  - DELETE `/api/messages/{msgId}/for-me` (again, same message) → 200 `{ ok: true }` — idempotent, no P2002 error.
+  - GET `/api/conversations/{conv}/messages?limit=200` → 7 messages, target message FILTERED OUT for this user.
+  - The message is NOT actually deleted from the `Message` table (other participants still see it) — only a `DeletedForMe` row exists.
+
+Stage Summary:
+- Files touched (5):
+  1. `prisma/schema.prisma` — added the `DeletedForMe` model (`@@unique([messageId, userId])` + `@@index([userId])`) and back-relations `deletedForMe DeletedForMe[]` on both `User` and `Message`.
+  2. `src/app/api/messages/[id]/for-me/route.ts` — NEW route, DELETE handler that creates a `DeletedForMe` row (idempotent via upsert + P2002 swallow). Returns 401/403/404 appropriately.
+  3. `src/app/api/conversations/[id]/messages/route.ts` — GET handler now fetches the user's `deletedForMe` IDs for this conversation and filters them out BEFORE `.reverse().map(...)` so hidden messages never reach the client.
+  4. `src/components/wasl/delete-message-dialog.tsx` — split `handleDelete` into `handleDeleteForEveryone` (unchanged behavior, calls `/api/messages/[id]?forEveryone=true`) and `handleDeleteForMe` (calls the new `/api/messages/[id]/for-me` endpoint, dispatches the new `wasl:message-hidden-for-me` window event, shows "Message deleted for you" toast).
+  5. `src/components/wasl/chat-window.tsx` — added an `onMessageHiddenForMe` window event listener that calls `removeMessage` (same as `onMessageDeleted`) but deliberately does NOT emit a socket broadcast, since this is a local-only hide.
+- No tests added (per instructions). No build run (per instructions). No other files touched.
+- Note for future agents: the `wasl:message-hidden-for-me` event is intentionally distinct from `wasl:message-deleted` so the chat-window knows not to broadcast to other clients. If you wire up a future "undo delete for me" feature, you can clear the `DeletedForMe` row via a new DELETE-or-POST endpoint and refetch messages.
+
+---
+Task ID: 29-b
+Agent: general-purpose (drag-drop documents)
+Task: Extend the chat-window drag-and-drop (and the message-input attach button) to support PDF, document, and audio files in addition to images. Add a new `/api/upload` endpoint, render the new message types in `message-bubble.tsx`, and surface friendly preview text in the sidebar.
+
+Work Log:
+- Read `worklog.md` (Task IDs 27, 28-a, 28-b, 28) to understand existing patterns: the chat-window drag-and-drop accepts only images (max 1.5MB, stored as data URLs), the message-input "Paperclip" attach button uses a hidden `<input accept="image/*">`, the message-bubble renders `image` / `voice` (data:audio) / `commit` / `poll` / `system` / `text` types, and the sidebar shows "📷 Photo" for image messages. Confirmed there was NO `/api/upload` route (the spec referenced one but it didn't exist yet).
+- Audited the five target files (`chat-window.tsx`, `message-bubble.tsx`, `message-input.tsx`, `sidebar.tsx`, and the messages POST route) plus the Prisma `Message` schema to confirm: (a) `content` is a plain `String` column with no length cap in schema (works for both data URLs and JSON blobs), (b) the existing image flow stores data URLs directly in the message content, (c) voice messages use `type === 'voice'` + `data:audio/...` content (so a new `audio` type with URL content won't collide), (d) `public/uploads/` was already in `.gitignore` so it's safe to write uploaded files there.
+
+Feature 1 — Upload API (`src/app/api/upload/route.ts`, NEW):
+- POST handler that accepts `multipart/form-data` with a `file` field.
+- Validates auth via `getSession()` (401 if no session).
+- `categorize(mime, ext)` maps the file to one of `image` / `pdf` / `document` / `audio`: images via `image/*` prefix, audio via `audio/*` prefix, PDF via `application/pdf` MIME or `.pdf` extension, documents via `text/plain` / `text/markdown` / `application/msword` / `.docx` MIME or `.doc/.docx/.txt/.md` extension. Extension fallback covers cases where the browser doesn't know the MIME (e.g. `.md`).
+- Size caps: images 1.5MB (matches the existing data-URL cap), others 5MB per the task spec. 400 with a `formatBytes` human-readable message on overflow.
+- Writes the file to `public/uploads/<randomUUID><ext>` (creates the dir on first use), returns `{ url: '/uploads/<uuid><ext>', type, name, size }`.
+- 400 on unsupported types with a clear "allowed: images, PDF, .doc/.docx/.txt/.md, audio" message; 500 on disk errors.
+
+Feature 2 — chat-window drag-and-drop (`src/components/wasl/chat-window.tsx`):
+- Added `isUploading` state + a floating bottom-center "Uploading… ⏳" chip overlay.
+- Rewrote `handleDrop` to accept ALL files (images + PDF + document + audio): for each file, POST a `FormData` to `/api/upload`, then call `handleSend(content, data.type)`. Per-file `toast.loading` → `toast.success`/`toast.error` flow gives per-file feedback during multi-file drops.
+- For images, `content` is the URL string (so the existing `<img src>` renderer keeps working with both data URLs and `/uploads/...` URLs).
+- For PDF / document / audio, `content` is a JSON blob `{ url, name, size }` so the message-bubble can render the original filename + human-readable size (the upload API returns these but they'd otherwise be lost).
+- Drop overlay text changed from "Drop image to send / PNG / JPG / WEBP / GIF · max 1.5MB" → "Drop file to send / Image · PDF · Document · Audio · max 5MB". Welcome-screen hint card updated similarly ("Images, PDF, docs, audio").
+- Existing `handlePaste` (Ctrl+V image) and `handleSendImage` are untouched — they still use the data-URL flow.
+
+Feature 3 — message-bubble rendering (`src/components/wasl/message-bubble.tsx`):
+- Added `FileText`, `Download`, `Music` to the lucide-react imports.
+- Module-level helpers `parseFileContent(content)` (parses the JSON `{ url, name, size }` blob, with a plain-URL fallback for legacy/forwarded payloads), `formatFileSize(bytes)`, and `deriveFilenameFromUrl(url, fallback)`.
+- Added two new helper components rendered inline in the main bubble content switch (so they inherit the lock badge / reply-to / sender-name / hover-toolbar chrome):
+  - `PdfDocumentCardContent` — file-attachment card with a 40×40 coloured icon tile (red for PDF, wasl-teal/green for documents — NO indigo/blue per the rules), original filename (truncated with tooltip), human-readable size (or "PDF"/"Document" label), and a Download button. When the bubble is `blocked` (recipient of a protected message), the Download button is replaced by a disabled button that shows the protected warning toast + records a `'save'` audit attempt (mirrors the existing Copy/Forward/Share2 treatment).
+  - `AudioUrlCardContent` — a `Music` icon + filename + size row, then a native `<audio controls>` element with `controlsList="nodownload noplaybackrate"` (and `pointer-events:none` + reduced opacity when blocked so protected recipients can't play it). Falls back to a "Audio unavailable" notice if the content can't be parsed.
+- The branch chain in the bubble content switch is now: `image → pdf/document → audio (URL, not data:audio) → text (with markdown + highlight + link-preview)`. The existing `voice` (data:audio) early-return at line ~374 is untouched, so voice notes still render via `VoiceMessagePlayer`.
+- Each new branch reuses the standard bubble footer (protection lock icon + timestamp + status ticks with `onOpenReadReceipts` callback).
+
+Feature 4 — message-input attach button (`src/components/wasl/message-input.tsx`):
+- Kept the existing Paperclip image button as-is (data-URL flow, 1.5MB cap) — backward compatible.
+- Added a NEW "Attach file" button (`FileText` icon, lucide-react) right next to it, with a hidden `<input accept=".pdf,.doc,.docx,.txt,.md,audio/*">`. On click it opens the file picker.
+- `handleDocFileSelect` posts the file to `/api/upload`, shows a `toast.loading` → `toast.success`/`toast.error` per the chat-window pattern, then calls `onSend(content, type)` where `content` is the JSON blob (or plain URL for the unlikely `image` case) and `type` is `pdf` / `document` / `audio`.
+- Added `Loader2` import and a `docUploading` state — while uploading, the button shows a spinner + cursor-progress and is disabled.
+
+Feature 5 — sidebar preview text (`src/components/wasl/sidebar.tsx`):
+- Added preview branches: `pdf → "📄 PDF"`, `document → "📄 Document"`, `audio → "🎵 Audio"`, plus `voice → "🎤 Voice message"` (the existing code only handled `image`/`system`).
+
+Verification:
+- Ran `bun run lint` → exit 0, no errors or warnings.
+- Ran `bunx tsc --noEmit` against the project: zero new errors in MY touched files (`upload/route.ts`, `chat-window.tsx`, `message-bubble.tsx`, `message-input.tsx`, `sidebar.tsx`). The two `chat-window.tsx` errors at lines 500 (`otherUser.phone.startsWith`) and 663 (`updateMessage(activeConversationId, …)`) are PRE-EXISTING — confirmed via `git stash` + tsc — they're at lines 486/649 when my changes are stashed, so my edits just shifted them down by 14 lines. (The same goes for the pre-existing errors in `auth/login`, `bot-reply`, `reactions-summary`, `link-preview`, `messages/[id]/edits`, `examples/`, `skills/`, and `ui/sidebar.tsx`.)
+- End-to-end smoke test against the running dev server (port 3000):
+  - Logged in as `demo` / `demo123`.
+  - POSTed `/api/upload` with a `.txt` file → `{"type":"document","url":"/uploads/<uuid>.txt","name":"test-doc.txt","size":17}` ✅
+  - `.pdf` → `type: pdf` ✅
+  - `.png` → `type: image` ✅
+  - `.wav` → `type: audio` ✅
+  - `.md` → `type: document` ✅
+  - `.zip` → 400 "Unsupported file type" ✅
+  - 6MB `.pdf` → 400 "File too large: 6.0 MB (max 5.0 MB for pdf)" ✅
+  - GET `/uploads/<uuid>.txt` → 200, `text/plain`, correct size ✅
+  - Sent real `pdf` / `audio` / `document` chat messages into the Amira Hassan conversation via `/api/conversations/<id>/messages` — all returned 200 with the JSON content correctly persisted. Then deleted the test messages to keep the demo data clean.
+- Dev log shows all `/api/upload` requests returning 200/400/401 as expected, no compile errors, no "Something went wrong".
+
+Stage Summary:
+- NEW: `src/app/api/upload/route.ts` — multipart upload endpoint, validates MIME + extension + size, writes to `public/uploads/`, returns `{ url, type, name, size }`. Categorizes into `image` (1.5MB) / `pdf` / `document` / `audio` (5MB each).
+- `src/components/wasl/chat-window.tsx` — drag-and-drop now accepts all four file types via the upload API; per-file `toast.loading` feedback; floating "Uploading…" chip overlay; drop overlay text updated to "Drop file to send · Image · PDF · Document · Audio · max 5MB"; welcome-screen hint card updated. Image content stored as URL string, others as JSON `{ url, name, size }`.
+- `src/components/wasl/message-bubble.tsx` — added `parseFileContent` / `formatFileSize` / `deriveFilenameFromUrl` helpers, `PdfDocumentCardContent` (red FileText for PDF, wasl-teal/green FileText for documents, filename + size + Download button, blocked-state disabled + audit log), `AudioUrlCardContent` (Music icon + filename + `<audio controls>` with `controlsList="nodownload"`). The existing `voice` (data:audio) early-return is untouched.
+- `src/components/wasl/message-input.tsx` — added a new "Attach file" button (`FileText` icon) next to the existing Paperclip image button. Uses `/api/upload`, shows a `Loader2` spinner while uploading, calls `onSend(content, type)` with the JSON content blob. The existing image button is unchanged (data URL flow).
+- `src/components/wasl/sidebar.tsx` — added preview text for `pdf` ("📄 PDF"), `document` ("📄 Document"), `audio` ("🎵 Audio"), and `voice` ("🎤 Voice message").
+- Storage format note: PDF / document / audio messages store their payload as a JSON string `{ url, name, size }` in the `content` column (instead of a plain URL) so the message-bubble can render the original filename + human-readable size. The parser tolerates plain-URL content as a fallback for forwarded / legacy messages. Image messages store the URL string verbatim for backward compat with the existing `<img src>` renderer (which already handled both data URLs and `/uploads/...` URLs).
+- No tests added (per instructions). No build run (per instructions). No other files touched (per instructions — the parallel `DeletedForMe` schema changes + messages-route filter + delete-message-dialog refactor are a different agent's work on "deleted for me" tracking and were already in the working tree when I started).
+
+---
+Task ID: 29 — Deleted-for-me + Drag-drop documents + Scroll-to-bottom unread badge + composer overflow fix
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing and modification and fixing".
+
+### Phase 1: QA Audit (agent-browser)
+- Logged in as demo user, verified chat app loads, messages send/receive
+- Verified search highlighting works (mark tags appear in chat after clicking search result)
+- Verified "Share externally" button is in the hover toolbar
+- Verified commit creation, settings tabs, command palette all work
+- Confirmed conversations API is fast (1.68s after Task 28 perf fix)
+- Confirmed messages API is fast (0.07s)
+- Confirmed stories API is fast (0.02s)
+
+### Phase 2: "Deleted for me" feature (subagent 29-a)
+**Prisma schema:**
+- Added `DeletedForMe` model with `@@unique([messageId, userId])` + `@@index([userId])`
+- Added back-relations on `User` and `Message`
+- `bun run db:push` applied cleanly
+
+**API route:** `src/app/api/messages/[id]/for-me/route.ts`
+- DELETE handler, verifies session + conversation membership
+- Upserts a `DeletedForMe` row (idempotent — P2002 swallowed)
+- Returns `{ ok: true }`
+
+**Messages API:** `src/app/api/conversations/[id]/messages/route.ts`
+- GET now fetches the user's hidden message IDs and filters them out
+
+**DeleteMessageDialog:** split into `handleDeleteForEveryone` + `handleDeleteForMe`
+- "Delete for me" calls the new endpoint, dispatches `wasl:message-hidden-for-me` event
+- Chat-window listens for this event and removes the message from local state (no socket broadcast)
+
+**E2E verified via curl:**
+- DELETE /api/messages/{id}/for-me → 200 `{ ok: true }`
+- Idempotent (second call also 200)
+- Message filtered from GET messages response (8 → 7 messages)
+
+### Phase 3: Drag-and-drop for PDF/documents/audio (subagent 29-b)
+**Upload API:** `src/app/api/upload/route.ts` (NEW)
+- Accepts multipart/form-data with a `file` field
+- Categorizes into: image (1.5MB cap), pdf, document, audio (5MB cap each)
+- Writes to `public/uploads/<uuid><ext>`
+- Returns `{ url, type, name, size }`
+
+**Chat-window drag-drop:** extended to accept all 4 file types
+- Per-file toast.loading → success/error flow
+- `isUploading` state drives a floating "Uploading… ⏳" chip overlay
+- Drop overlay text: "Drop file to send · Image · PDF · Document · Audio · max 5MB"
+
+**Message-bubble rendering:** added PdfDocumentCardContent + AudioUrlCardContent
+- PDF: red FileText icon, filename, size, download button
+- Document: teal FileText icon, filename, size, download button
+- Audio: Music icon + `<audio controls>` element
+- Blocked state: disabled + audit-log recordAttempt
+
+**Message-input:** added "Attach file" button (FileText icon) next to "Attach image"
+- Accepts `.pdf,.doc,.docx,.txt,.md,audio/*`
+- Routes through /api/upload, shows Loader2 spinner while uploading
+
+**Sidebar preview text:** pdf → "📄 PDF", document → "📄 Document", audio → "🎵 Audio"
+
+**E2E verified via curl:**
+- POST /api/upload with test.txt → 200, returns `{type:"document", url, name, size}`
+- Oversized/unsupported files → 400
+
+### Phase 4: Composer overflow fix (mobile)
+**File:** `src/components/wasl/message-input.tsx`
+- The composer toolbar has many buttons (Emoji, Attach image, Attach file, Commit,
+  Poll, Schedule, Protect) that overflow horizontally on small screens, hiding
+  the new "Attach PDF" button.
+- Changed the toolbar container from `flex items-end gap-2` to
+  `flex items-end gap-1 sm:gap-2 overflow-x-auto wasl-scroll sm:overflow-visible pb-1 sm:pb-0`
+- On mobile: toolbar is horizontally scrollable so all buttons are accessible
+- On desktop (sm+): no overflow, buttons show inline with normal spacing
+
+### Phase 5: Scroll-to-bottom unread badge (new)
+**File:** `src/components/wasl/chat-window.tsx`
+- Added `unreadSinceScrollUp` state — tracks how many NEW messages arrived
+  while the user was scrolled up (away from the bottom)
+- In `onMessageReceived` socket handler: if `!wasNearBottomRef.current`,
+  increment the counter (don't auto-scroll — user deliberately scrolled up)
+- The scroll-to-bottom button now shows a green badge with the unread count
+  (e.g. "3") when there are new messages below the viewport
+- Badge uses `wasl-badge-bounce` animation with `key={count}` so it re-bounces
+  each time the count changes
+- `scrollToBottom()` resets the counter to 0
+- Switching conversations also resets the counter
+- Added `hover:scale-110` transition on the button for a subtle hover effect
+- Badge shows "99+" for counts over 99
+
+### Phase 6: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| GET /api/conversations | 200 ✅ |
+| DELETE /api/messages/{id}/for-me | 200 `{ok:true}` ✅ |
+| Message hidden after delete-for-me | ✅ (8→7 msgs) |
+| POST /api/upload (test.txt) | 200 `{type:"document",...}` ✅ |
+| `bun run lint` | 0 errors ✅ |
+| Agent-browser: search highlight | ✅ (mark tags appear) |
+| Agent-browser: Share externally button | ✅ (in toolbar) |
+| Agent-browser: commit creation | ✅ (renders in chat) |
+| Agent-browser: settings 3 tabs | ✅ (Profile/Privacy/Business) |
+| Agent-browser: command palette | ✅ (Ctrl+K works) |
+
+**Note on agent-browser:** The dev server becomes unresponsive after ~10
+requests in this sandbox (process stays alive but port 3000 stops accepting
+connections). This prevented full client-side hydration verification of the
+"Attach PDF" button in agent-browser. However, the code is verified by:
+1. Source inspection (button exists at line 358 of message-input.tsx)
+2. Lint passes clean
+3. Curl E2E tests for the upload API return 200 with correct response
+
+### Files Touched (Task 29)
+- `prisma/schema.prisma` — DeletedForMe model + relations (subagent 29-a)
+- `src/app/api/messages/[id]/for-me/route.ts` — NEW delete-for-me endpoint (subagent 29-a)
+- `src/app/api/conversations/[id]/messages/route.ts` — filter deleted-for-me (subagent 29-a)
+- `src/components/wasl/delete-message-dialog.tsx` — split delete options (subagent 29-a)
+- `src/components/wasl/chat-window.tsx` — onMessageHiddenForMe + unread badge (subagent 29-a + main)
+- `src/app/api/upload/route.ts` — NEW file upload endpoint (subagent 29-b)
+- `src/components/wasl/message-bubble.tsx` — PDF/document/audio rendering (subagent 29-b)
+- `src/components/wasl/message-input.tsx` — Attach file button + overflow fix (subagent 29-b + main)
+- `src/components/wasl/sidebar.tsx` — preview text for new types (subagent 29-b)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add "Reply from notification" quick reply feature
+- Add message search highlighting improvement (multi-word search)
+- Add voice note playback speed control
+- Add "Forward to multiple chats" bulk selection mode
