@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket'
 import { Sidebar } from './sidebar'
@@ -9,6 +10,7 @@ import { ContactInfoPanel } from './contact-info-panel'
 import { NewChatDialog } from './new-chat-dialog'
 import { SettingsDialog } from './settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
+import { QuickReplyToast } from './quick-reply-toast'
 import type { ChatMessage, Conversation } from '@/lib/store'
 
 export function ChatApp({ user }: { user: any }) {
@@ -224,6 +226,72 @@ export function ChatApp({ user }: { user: any }) {
           } catch {}
         }
       }
+
+      // ---- In-app quick-reply toast ----------------------------------------
+      // When a new message arrives in a conversation that is NOT currently
+      // active (the user is viewing a different chat), show an in-app toast
+      // with the sender name, message preview, and a quick-reply input.
+      // This lets the user reply without switching conversations.
+      const currentActiveId = useWaslStore.getState().activeConversationId
+      if (
+        payload.lastMessage &&
+        payload.lastMessage.senderId !== user.id &&
+        currentActiveId !== payload.conversationId
+      ) {
+        const conv = useWaslStore.getState().conversations.find(
+          (c) => c.id === payload.conversationId
+        )
+        const senderName =
+          conv?.participants.find(
+            (p) => p.userId === payload.lastMessage.senderId
+          )?.name || 'Someone'
+        const msgPreview = payload.lastMessage.content.slice(0, 80)
+        const convId = payload.conversationId
+
+        // Use a unique toast ID per conversation so rapid messages from the
+        // same chat replace the previous toast instead of stacking.
+        const toastId = `quick-reply-${convId}`
+        toast.custom(
+          (t) => (
+            <QuickReplyToast
+              senderName={senderName}
+              messagePreview={msgPreview}
+              onReply={async (text) => {
+                try {
+                  const res = await fetch(
+                    `/api/conversations/${convId}/messages`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ content: text, type: 'text' }),
+                    }
+                  )
+                  if (res.ok) {
+                    toast.success('Reply sent', { id: toastId })
+                    // Emit via socket so the recipient sees it immediately
+                    // and our own sidebar updates.
+                    getSocket().emit('message:send', {
+                      conversationId: convId,
+                      content: text,
+                      type: 'text',
+                    })
+                  } else {
+                    toast.error('Failed to send reply', { id: toastId })
+                  }
+                } catch {
+                  toast.error('Network error', { id: toastId })
+                }
+              }}
+              onOpen={() => {
+                toast.dismiss(t.id)
+                setActiveConversation(convId)
+              }}
+            />
+          ),
+          { id: toastId, duration: 8000 }
+        )
+      }
+
       // Refresh just this conversation to get last message + unread count
       fetch(`/api/conversations`, { cache: 'no-store' })
         .then((r) => r.json())

@@ -1435,6 +1435,13 @@ export function ChatWindow({
         onOpenChange={setForwardOpen}
         messageId={forwardMessage?.id || null}
         messageContent={forwardMessage?.content || ''}
+        messageSenderId={forwardMessage?.senderId}
+        messageSenderName={
+          forwardMessage && conversation
+            ? conversation.participants.find((p) => p.userId === forwardMessage.senderId)?.name
+            : undefined
+        }
+        messageProtected={forwardMessage?.protected}
       />
 
       {/* Delete message dialog (delete for me / for everyone) */}

@@ -1021,6 +1021,20 @@ kbd {
   transform-origin: center;
 }
 
+/* ---- Voice player play-button pulse (Task 30-a) ----
+   A subtle scale pulse on the play/pause button while audio is playing so the
+   user has a clear "this is currently playing" affordance. The component also
+   gates this class behind a prefers-reduced-motion runtime check, but the
+   media query below is a belt-and-braces fallback for any other caller. */
+@keyframes wasl-voice-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 40%, transparent); }
+  50% { transform: scale(1.06); box-shadow: 0 0 0 4px color-mix(in oklab, var(--wasl-green) 0%, transparent); }
+}
+.wasl-voice-pulse {
+  animation: wasl-voice-pulse 1.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
 /* ---- Selected conversation accent bar (3px wide, slides in) ----
    Apply `.wasl-conv-accent` to a 3px-wide absolute-positioned span inside
    the conversation row (which must be `position: relative`). The bar
@@ -1202,7 +1216,8 @@ kbd {
   .wasl-btn-shimmer::after,
   .wasl-feature-pill,
   .wasl-feature-pill > svg,
-  .wasl-conv-row {
+  .wasl-conv-row,
+  .wasl-voice-pulse {
     animation: none !important;
     transition: none !important;
   }

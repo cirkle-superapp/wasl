@@ -10,8 +10,6 @@ import {
   Copy,
   Trash2,
   SmilePlus,
-  Play,
-  Pause,
   Pencil,
   Forward,
   Lock,
@@ -34,6 +32,7 @@ import { LinkPreviewCard } from './link-preview-card'
 import { ReadReceiptsDialog } from './read-receipts-dialog'
 import { EditHistoryDialog } from './edit-history-dialog'
 import { MessageInfoDialog } from './message-info-dialog'
+import { VoicePlayer } from './voice-player'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -47,8 +46,12 @@ const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 // ---- Search highlight helper ---------------------------------------------
 // Splits `text` on case-insensitive occurrences of `query` and wraps each
 // match in a <mark> with a visible yellow background so the user can see why
-// the message was returned by the chat-search dialog. The query is regex-
-// escaped so special characters (`(`, `.`, `*`, …) are matched literally.
+// the message was returned by the chat-search dialog.
+//
+// Supports multi-word queries: if the query contains spaces, each word is
+// highlighted independently (e.g. "welcome wasl" highlights both "Welcome"
+// and "Wasl" separately). Each word is regex-escaped so special characters
+// (`(`, `.`, `*`, …) are matched literally.
 //
 // Returns the original `text` (a single string node) when either the text or
 // query is empty, so plain messages with no active query render with zero
@@ -57,10 +60,21 @@ function highlightText(text: string, query: string): React.ReactNode {
   if (!text) return text
   const q = query.trim()
   if (!q) return text
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  // Split the query into individual words for multi-word highlighting.
+  // Filter out empty strings from multiple consecutive spaces.
+  const words = q.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return text
+
+  // Build a single regex that matches ANY of the words (OR).
+  // Each word is regex-escaped so special characters are literal.
+  const escapedWords = words.map((w) =>
+    w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  )
+  const pattern = escapedWords.join('|')
   let regex: RegExp
   try {
-    regex = new RegExp(`(${escaped})`, 'gi')
+    regex = new RegExp(`(${pattern})`, 'gi')
   } catch {
     // Malformed query — bail to plain text rather than crashing the bubble.
     return text
@@ -432,12 +446,19 @@ export function MessageBubble({
               {senderName}
             </div>
           )}
-          <VoiceMessagePlayer
+          <VoicePlayer
             src={message.content}
             mine={mine}
-            status={message.status}
-            createdAt={message.createdAt}
+            variant="voice"
+            blocked={blocked}
           />
+          <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+            {protection.isProtected && (
+              <Lock className="w-3 h-3 inline opacity-60" />
+            )}
+            {formatChatTimestamp(message.createdAt)}
+            {mine && <StatusTicks status={message.status} className="ml-1" onClick={() => setReadReceiptsOpen(true)} />}
+          </div>
         </div>
       </div>
     )
@@ -893,108 +914,6 @@ function PollMessageWrapper({
   )
 }
 
-// Voice message playback bubble with a simple play/pause + waveform.
-function VoiceMessagePlayer({
-  src,
-  mine,
-  status,
-  createdAt,
-}: {
-  src: string
-  mine: boolean
-  status: string
-  createdAt: string
-}) {
-  const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  function toggle() {
-    if (!audioRef.current) {
-      audioRef.current = new Audio(src)
-      audioRef.current.addEventListener('loadedmetadata', () => {
-        setDuration(audioRef.current?.duration || 0)
-      })
-      audioRef.current.addEventListener('timeupdate', () => {
-        setProgress(audioRef.current?.currentTime || 0)
-      })
-      audioRef.current.addEventListener('ended', () => {
-        setPlaying(false)
-        setProgress(0)
-      })
-    }
-    if (playing) {
-      audioRef.current.pause()
-      setPlaying(false)
-    } else {
-      audioRef.current.play()
-      setPlaying(true)
-    }
-  }
-
-  function formatTime(sec: number) {
-    if (!sec || Number.isNaN(sec)) return '0:00'
-    const m = Math.floor(sec / 60)
-    const s = Math.floor(sec % 60)
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
-
-  const pct = duration > 0 ? (progress / duration) * 100 : 0
-  // Deterministic pseudo-waveform bars
-  const bars = Array.from({ length: 28 }, (_, i) => {
-    const h = 30 + Math.sin(i * 1.3 + src.length) * 20 + Math.cos(i * 2.1) * 15
-    return Math.max(10, Math.min(100, Math.abs(h)))
-  })
-
-  return (
-    <div className="flex items-center gap-2 min-w-[200px]">
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-9 h-9 rounded-full bg-[var(--wasl-green)] text-white flex items-center justify-center shrink-0 hover:opacity-90"
-      >
-        {playing ? (
-          <Pause className="w-4 h-4" />
-        ) : (
-          <Play className="w-4 h-4 ml-0.5" />
-        )}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-0.5 h-8">
-          {bars.map((h, i) => {
-            const barProgress = (i / bars.length) * 100
-            const active = barProgress < pct
-            return (
-              <div
-                key={i}
-                className={cn(
-                  'w-0.5 rounded-full transition-colors',
-                  active
-                    ? 'bg-[var(--wasl-green)]'
-                    : mine
-                    ? 'bg-foreground/30'
-                    : 'bg-foreground/20'
-                )}
-                style={{ height: `${h}%` }}
-              />
-            )
-          })}
-        </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[10px] text-foreground/60">
-            {formatTime(playing ? progress : duration)}
-          </span>
-          <span className="inline-flex items-center gap-1 text-[10px] text-foreground/50">
-            {formatChatTimestamp(createdAt)}
-            {mine && <StatusTicks status={status} />}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ---- File-attachment card (PDF / document) -------------------------------
 // Renders a compact "file card" inside the bubble: a coloured FileText icon
 // (red for PDF, teal/green for documents), the original filename + human-
@@ -1133,19 +1052,50 @@ function AudioUrlCardContent({
         {sizeLabel && (
           <span className="text-[10px] text-foreground/60 shrink-0">{sizeLabel}</span>
         )}
+        {blocked ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toast.error(PROTECTED_WARNING, { duration: 4000 })
+              recordAttempt(message.id, 'save')
+            }}
+            className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground/40 cursor-not-allowed"
+            title="Download disabled — message is protected"
+            aria-label="Download disabled — message is protected"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        ) : (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={name}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              'shrink-0 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+              'bg-[var(--wasl-green)]/10 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/20'
+            )}
+            title="Download"
+            aria-label="Download"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        )}
       </div>
-      {/* `controlsList="nodownload noplaybackrate"` keeps the native UI tidy
-          and discourages trivial screenshotting on protected bubbles (though
-          the only true protection is the audit log). */}
-      <audio
-        controls
+      {/* Custom audio player (Task 30-a) — replaces the bare `<audio controls>`
+          element with the same reusable VoicePlayer used for voice notes.
+          `variant="audio"` makes it show a Music icon and the surface tint
+          matches the bubble (wasl-green for outgoing, wasl-teal for
+          incoming). `blocked` makes the player read-only (pointer-events
+          disabled) for protected recipients. */}
+      <VoicePlayer
         src={url}
-        className="w-full"
-        controlsList="nodownload noplaybackrate"
-        // Protected recipients can't interact with the audio player beyond
-        // viewing the file card (mirrors the image's pointer-events:none
-        // treatment above).
-        style={blocked ? { pointerEvents: 'none', opacity: 0.6 } : undefined}
+        mine={mine}
+        variant="audio"
+        blocked={blocked}
+        label={name ? `Play audio: ${name}` : 'Play audio'}
       />
       <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
         {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}

@@ -28,6 +28,19 @@ export async function GET(
   if (!q) {
     return NextResponse.json({ results: [] })
   }
+
+  // Fetch the user's "deleted for me" message IDs for this conversation so
+  // we can exclude them from search results — a message the user hid from
+  // their view shouldn't appear in search.
+  const deletedForMeRows = await db.deletedForMe.findMany({
+    where: { userId: session.id, message: { conversationId: id } },
+    select: { messageId: true },
+  })
+  const deletedIds = new Set(deletedForMeRows.map((d) => d.messageId))
+
+  // SQLite/libSQL's `contains` is case-insensitive by default for ASCII,
+  // so we don't need `mode: 'insensitive'` (which isn't supported by the
+  // libSQL adapter anyway).
   const messages = await db.message.findMany({
     where: {
       conversationId: id,
@@ -40,13 +53,18 @@ export async function GET(
       reactions: { select: { id: true, userId: true, emoji: true } },
     },
   })
+
+  // Filter out "deleted for me" messages (not supported directly in the
+  // Prisma query because the relation is via DeletedForMe, not a flag on
+  // Message).
+  const visibleMessages = messages.filter((m) => !deletedIds.has(m.id))
   const starredRows = await db.starredMessage.findMany({
     where: { userId: session.id, message: { conversationId: id } },
     select: { messageId: true },
   })
   const starredIds = new Set(starredRows.map((s) => s.messageId))
   return NextResponse.json({
-    results: messages.map((m) => ({
+    results: visibleMessages.map((m) => ({
       id: m.id,
       conversationId: m.conversationId,
       senderId: m.senderId,
