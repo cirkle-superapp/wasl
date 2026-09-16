@@ -471,7 +471,7 @@ export function MessageBubble({
                       e.stopPropagation()
                       setEditHistoryOpen(true)
                     }}
-                    className="italic hover:text-foreground transition-colors"
+                    className="italic hover:text-foreground transition-colors cursor-pointer"
                     title="Edited — click to view edit history"
                   >
                     edited

@@ -47,7 +47,7 @@ export function WaslAvatar({
         <span
           className={cn(
             'absolute bottom-0 right-0 block rounded-full border-2 border-white dark:border-[var(--wasl-sidebar-bg)]',
-            online ? 'bg-[var(--wasl-green)]' : 'bg-gray-400'
+            online ? 'bg-[var(--wasl-green)] wasl-online-dot' : 'bg-gray-400'
           )}
           style={{
             width: Math.max(10, size * 0.25),

@@ -843,6 +843,21 @@ kbd {
   border-left: 4px solid var(--wasl-green);
 }
 
+/* ---- Online pulse dot (sidebar + chat header) ---- */
+@keyframes wasl-online-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 40%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--wasl-green) 10%, transparent); }
+}
+.wasl-online-dot {
+  animation: wasl-online-pulse 2s ease-in-out infinite;
+}
+
+/* ---- Search shortcut hint ---- */
+kbd {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.65rem;
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 

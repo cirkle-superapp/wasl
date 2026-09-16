@@ -193,8 +193,13 @@ export function Sidebar({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search or start a new chat"
-            className="pl-9 bg-muted/50 border-0 h-9 rounded-full"
+            className="pl-9 pr-12 bg-muted/50 border-0 h-9 rounded-full"
           />
+          {!search && (
+            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-medium text-muted-foreground/60 bg-muted-foreground/10 px-1.5 py-0.5 rounded border border-muted-foreground/15 pointer-events-none">
+              ⌘K
+            </kbd>
+          )}
         </div>
         <Button
           size="icon"
