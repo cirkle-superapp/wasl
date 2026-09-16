@@ -107,8 +107,11 @@ export function WaslGroupAvatar({
         {top.map((p, i) => (
           <div
             key={i}
-            className="flex items-center justify-center font-medium text-white overflow-hidden"
-            style={{ backgroundColor: p.avatarColor || '#075E54' }}
+            className="flex items-center justify-center font-medium text-white overflow-hidden wasl-group-avatar-cell"
+            style={{
+              backgroundColor: p.avatarColor || '#075E54',
+              animationDelay: `${i * 80}ms`,
+            }}
           >
             {p.avatar ? (
               <img

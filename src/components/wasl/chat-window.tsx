@@ -878,6 +878,8 @@ export function ChatWindow({
 
   if (!activeConversationId || !conversation) {
     const conversationCount = conversations.length
+    const groupCount = conversations.filter(c => c.isGroup).length
+    const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
     return (
       <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6 overflow-y-auto wasl-scroll">
         <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
@@ -890,6 +892,25 @@ export function ChatWindow({
               ? `You have ${conversationCount} conversation${conversationCount === 1 ? '' : 's'}. Select one to start chatting.`
               : 'Tap the + button to create a new chat.'}
           </p>
+          {/* Stats row */}
+          {conversationCount > 0 && (
+            <div className="flex items-center justify-center gap-4 w-full py-2">
+              <div className="flex flex-col items-center">
+                <span className="text-lg font-bold text-[var(--wasl-green)]">{conversationCount}</span>
+                <span className="text-[10px] text-muted-foreground">Chats</span>
+              </div>
+              <div className="w-px h-8 bg-border" />
+              <div className="flex flex-col items-center">
+                <span className="text-lg font-bold text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">{groupCount}</span>
+                <span className="text-[10px] text-muted-foreground">Groups</span>
+              </div>
+              <div className="w-px h-8 bg-border" />
+              <div className="flex flex-col items-center">
+                <span className="text-lg font-bold text-amber-500">{unreadTotal}</span>
+                <span className="text-[10px] text-muted-foreground">Unread</span>
+              </div>
+            </div>
+          )}
           {/* Feature hint cards */}
           <div className="grid grid-cols-2 gap-2 w-full mt-2">
             <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-green)]/30 transition-colors">

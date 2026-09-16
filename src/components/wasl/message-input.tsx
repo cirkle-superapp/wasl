@@ -237,19 +237,19 @@ export function MessageInput({
     <div className="relative bg-[var(--wasl-chat-bg)] px-2 sm:px-4 py-2 border-t border-border/60">
       {/* Reply banner */}
       {replyTo && (
-        <div className="mb-2 mx-1 flex items-start gap-2 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-lg p-2 shadow-sm border border-border">
+        <div className="mb-2 mx-1 flex items-start gap-2 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-lg p-2 shadow-sm border-l-4 border-[var(--wasl-green)] border-y border-r border-border">
           <Reply className="w-4 h-4 mt-0.5 text-[var(--wasl-green)] shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
               Reply to {replyTo.senderId === user?.id ? 'yourself' : 'message'}
             </div>
-            <div className="text-sm text-muted-foreground truncate">
+            <div className="text-sm text-muted-foreground truncate max-h-10 overflow-hidden">
               {replyTo.content}
             </div>
           </div>
           <button
             onClick={() => setReplyTo(null)}
-            className="p-1 rounded-full hover:bg-muted text-muted-foreground"
+            className="p-1 rounded-full hover:bg-muted text-muted-foreground shrink-0"
             aria-label="Cancel reply"
           >
             <X className="w-4 h-4" />

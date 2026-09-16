@@ -829,6 +829,20 @@ kbd {
   animation: wasl-timeline-pop 0.2s ease-out;
 }
 
+/* ---- Group avatar stacked initials stagger animation ---- */
+@keyframes wasl-group-avatar-cell-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+.wasl-group-avatar-cell {
+  animation: wasl-group-avatar-cell-in 0.25s ease-out backwards;
+}
+
+/* ---- Reply banner left-border accent ---- */
+.wasl-reply-banner {
+  border-left: 4px solid var(--wasl-green);
+}
+
 /* ChunkLoadError auto-recovery: if chunks fail to load, the error boundary
    in layout.tsx will catch it and reload the page. */
 
