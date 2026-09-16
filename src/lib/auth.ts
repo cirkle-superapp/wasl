@@ -15,6 +15,8 @@ export type SessionUser = {
   verified: boolean
   defaultProtectMessages: boolean
   privacyAlwaysAllow: boolean
+  ghostMode: boolean
+  hideLastSeen: boolean
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -35,6 +37,8 @@ export async function getSession(): Promise<SessionUser | null> {
       verified: true,
       defaultProtectMessages: true,
       privacyAlwaysAllow: true,
+      ghostMode: true,
+      hideLastSeen: true,
     },
   })
   return user ?? null

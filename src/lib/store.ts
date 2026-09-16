@@ -23,6 +23,10 @@ export type CurrentUser = {
   // Privacy / message-protection settings
   defaultProtectMessages?: boolean
   privacyAlwaysAllow?: boolean
+  // Ghost Mode — hides online status, last seen, typing indicator
+  ghostMode?: boolean
+  // Hides last seen timestamp from others
+  hideLastSeen?: boolean
 }
 
 export type Participant = {

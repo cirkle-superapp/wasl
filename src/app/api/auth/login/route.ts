@@ -97,6 +97,8 @@ export async function POST(req: NextRequest) {
       verified: user.verified,
       defaultProtectMessages: user.defaultProtectMessages,
       privacyAlwaysAllow: user.privacyAlwaysAllow,
+      ghostMode: user.ghostMode,
+      hideLastSeen: user.hideLastSeen,
     })
   } catch (err) {
     console.error('[auth/login] error', err)

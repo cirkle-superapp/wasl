@@ -22,7 +22,7 @@ import {
 import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
-  UserCircle, Shield, Users, Landmark,
+  UserCircle, Shield, Users, Landmark, Ghost, Clock,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -64,6 +64,8 @@ export function SettingsDialog({
   const [alwaysAllow, setAlwaysAllow] = useState<boolean>(
     !!user?.privacyAlwaysAllow
   )
+  const [ghostMode, setGhostMode] = useState<boolean>(!!user?.ghostMode)
+  const [hideLastSeen, setHideLastSeen] = useState<boolean>(!!user?.hideLastSeen)
 
   useEffect(() => {
     if (open) {
@@ -138,11 +140,13 @@ export function SettingsDialog({
   }
 
   async function togglePrivacy(
-    field: 'defaultProtectMessages' | 'privacyAlwaysAllow',
+    field: 'defaultProtectMessages' | 'privacyAlwaysAllow' | 'ghostMode' | 'hideLastSeen',
     value: boolean
   ) {
     if (field === 'defaultProtectMessages') setDefaultProtect(value)
     if (field === 'privacyAlwaysAllow') setAlwaysAllow(value)
+    if (field === 'ghostMode') setGhostMode(value)
+    if (field === 'hideLastSeen') setHideLastSeen(value)
     try {
       const res = await fetch('/api/privacy', {
         method: 'PATCH',
@@ -162,6 +166,8 @@ export function SettingsDialog({
           ...user,
           defaultProtectMessages: data.defaultProtectMessages,
           privacyAlwaysAllow: data.privacyAlwaysAllow,
+          ghostMode: data.ghostMode,
+          hideLastSeen: data.hideLastSeen,
         })
       }
       toast.success(
@@ -483,6 +489,69 @@ export function SettingsDialog({
                 in the composer before sending. Business accounts have their own
                 protection setting in the business dashboard.
               </p>
+
+              {/* Divider */}
+              <div className="pt-2 border-t border-border">
+                <Label className="flex items-center gap-2 mb-2">
+                  <EyeOff className="w-4 h-4" /> Visibility
+                </Label>
+              </div>
+
+              {/* Ghost Mode */}
+              <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <Ghost
+                      className={cn(
+                        'w-4 h-4 mt-0.5 shrink-0',
+                        ghostMode ? 'text-[var(--wasl-green)]' : 'text-muted-foreground'
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        Ghost Mode
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        Hides your online status, last seen, and typing
+                        indicator from all other users. You appear offline
+                        even when you&apos;re active.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={ghostMode}
+                    onCheckedChange={(v) => togglePrivacy('ghostMode', v)}
+                  />
+                </div>
+              </div>
+
+              {/* Hide Last Seen */}
+              <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/30">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <Clock
+                      className={cn(
+                        'w-4 h-4 mt-0.5 shrink-0',
+                        hideLastSeen ? 'text-[var(--wasl-green)]' : 'text-muted-foreground'
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">
+                        Hide last seen
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        Other users won&apos;t be able to see when you were
+                        last active. Your online status may still show if
+                        Ghost Mode is off.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={hideLastSeen}
+                    onCheckedChange={(v) => togglePrivacy('hideLastSeen', v)}
+                  />
+                </div>
+              </div>
             </div>
           </TabsContent>
 

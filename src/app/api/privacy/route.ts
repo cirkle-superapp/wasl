@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 // PATCH /api/privacy — update the current user's privacy settings.
-// Body: { defaultProtectMessages?: boolean, privacyAlwaysAllow?: boolean }
+// Body: { defaultProtectMessages?, privacyAlwaysAllow?, ghostMode?, hideLastSeen? }
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) {
@@ -42,6 +42,12 @@ export async function PATCH(req: NextRequest) {
   if (typeof body?.privacyAlwaysAllow === 'boolean') {
     data.privacyAlwaysAllow = body.privacyAlwaysAllow
   }
+  if (typeof body?.ghostMode === 'boolean') {
+    data.ghostMode = body.ghostMode
+  }
+  if (typeof body?.hideLastSeen === 'boolean') {
+    data.hideLastSeen = body.hideLastSeen
+  }
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
@@ -52,10 +58,14 @@ export async function PATCH(req: NextRequest) {
       id: true,
       defaultProtectMessages: true,
       privacyAlwaysAllow: true,
+      ghostMode: true,
+      hideLastSeen: true,
     },
   })
   return NextResponse.json({
     defaultProtectMessages: updated.defaultProtectMessages,
     privacyAlwaysAllow: updated.privacyAlwaysAllow,
+    ghostMode: updated.ghostMode,
+    hideLastSeen: updated.hideLastSeen,
   })
 }

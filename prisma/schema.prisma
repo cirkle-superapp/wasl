@@ -42,6 +42,11 @@ model User {
   // receive, regardless of whether the sender protected it. The user has
   // chosen "privacy always allow" — opting out of receiving protection.
   privacyAlwaysAllow     Boolean @default(false)
+  // Ghost Mode — when true, hides the user's online status, last seen,
+  // and typing indicator from all other users.
+  ghostMode             Boolean @default(false)
+  // When true, hides the user's "last seen" timestamp from others.
+  hideLastSeen           Boolean @default(false)
 
   sentMessages      Message[]      @relation("MessageSender")
   conversations     Participant[]
@@ -227,6 +232,23 @@ model StarredMessage {
 
   @@unique([messageId, userId])
   @@index([userId])
+}
+
+/// Forwarding consent request — when a user tries to forward someone else's
+/// message, the original sender must approve. The request contains the
+/// message ID, requester ID, target conversation ID, and approval state.
+/// Status: pending → approved | denied
+model ForwardRequest {
+  id              String   @id @default(cuid())
+  messageId       String
+  requesterId     String   // who wants to forward
+  targetConversationId String // where they want to forward to
+  status          String   @default("pending") // pending | approved | denied
+  createdAt       DateTime @default(now())
+  respondedAt     DateTime?
+
+  @@index([requesterId])
+  @@index([messageId])
 }
 
 /// Chat poll — Cirkle-inspired chat-poll feature. A poll is posted as a

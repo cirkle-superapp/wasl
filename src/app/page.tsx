@@ -24,6 +24,8 @@ export default async function Page() {
         verified: session.verified,
         defaultProtectMessages: session.defaultProtectMessages,
         privacyAlwaysAllow: session.privacyAlwaysAllow,
+        ghostMode: session.ghostMode,
+        hideLastSeen: session.hideLastSeen,
       }}
     />
   )
