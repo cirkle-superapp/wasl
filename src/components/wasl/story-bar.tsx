@@ -135,7 +135,7 @@ export function StoryBar() {
           <button
             type="button"
             onClick={() => setComposerOpen(true)}
-            className="flex flex-col items-center gap-1 shrink-0"
+            className="wasl-story-item flex flex-col items-center gap-1 shrink-0"
             title={myGroup ? 'Add to my status' : 'Add status'}
           >
             <div className="relative">
@@ -160,9 +160,10 @@ export function StoryBar() {
                 const idx = groups.findIndex((g) => g.userId === user?.id)
                 if (idx >= 0) openStory(idx)
               }}
-              className="flex flex-col items-center gap-1 shrink-0"
+              className="wasl-story-item flex flex-col items-center gap-1 shrink-0"
             >
-              <div className="wasl-story-ring">
+              {/* User's own status: dashed ring (no rotation) */}
+              <div className="wasl-story-ring-self">
                 <WaslAvatar
                   name={user?.name || 'Me'}
                   src={user?.avatar}
@@ -185,9 +186,10 @@ export function StoryBar() {
                   const idx = groups.findIndex((gr) => gr.userId === g.userId)
                   if (idx >= 0) openStory(idx)
                 }}
-                className="flex flex-col items-center gap-1 shrink-0"
+                className="wasl-story-item flex flex-col items-center gap-1 shrink-0"
               >
-                <div className={allViewed ? 'wasl-story-ring-viewed' : 'wasl-story-ring'}>
+                {/* Unseen stories: rotating conic-gradient ring; viewed: muted ring */}
+                <div className={allViewed ? 'wasl-story-ring-viewed' : 'wasl-story-ring-unseen'}>
                   <WaslAvatar
                     name={g.userName}
                     src={g.userAvatar}

@@ -352,15 +352,23 @@ export function ChatWindow({
   }
 
   // ---- Scroll to a specific message (by ID) ---------------------------------
-  // Used by the "jump to message" feature from the StarredMessagesDialog.
-  // Listens for a custom window event so any component can trigger it.
+  // Used by the "jump to message" feature from the StarredMessagesDialog
+  // and the ChatSearchDialog. Listens for a custom window event so any
+  // component can trigger it.
   useEffect(() => {
     function onJumpToMessage(e: Event) {
       const messageId = (e as CustomEvent<string>).detail
-      if (!messageId || !scrollRef.current) return
-      const target = scrollRef.current.querySelector(
-        `[data-message-id="${messageId}"]`
-      ) as HTMLElement | null
+      if (!messageId) return
+      // Prefer the scroll container scope, but fall back to a document-wide
+      // search if the ref isn't attached yet (e.g. during a re-render cycle)
+      // or if the message lives outside the current scroll container.
+      const target =
+        (scrollRef.current?.querySelector(
+          `[data-message-id="${messageId}"]`
+        ) as HTMLElement | null) ||
+        (document.querySelector(
+          `[data-message-id="${messageId}"]`
+        ) as HTMLElement | null)
       if (target) {
         // Scroll the message into view (smooth, centered in the container)
         target.scrollIntoView({ behavior: 'smooth', block: 'center' })

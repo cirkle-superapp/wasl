@@ -12,15 +12,20 @@ const LangContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
 const STORAGE_KEY = 'wasl-lang'
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initializer reads localStorage on first client render — no effect needed
-  const [lang, setLangState] = useState<Lang>(() => {
-    if (typeof window === 'undefined') return 'en'
+  // Start from 'en' on both server and client first-render so hydration
+  // markup matches. Read persisted value in an effect after mount.
+  const [lang, setLangState] = useState<Lang>('en')
+
+  // On mount, read the persisted language (client-only).
+  useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Lang | null
-      if (stored === 'ar' || stored === 'en') return stored
+      if (stored === 'ar' || stored === 'en') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLangState(stored)
+      }
     } catch {}
-    return 'en'
-  })
+  }, [])
 
   // Apply the dir/lang attributes whenever lang changes
   useEffect(() => {

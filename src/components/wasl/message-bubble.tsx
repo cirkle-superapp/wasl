@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Check,
   CheckCheck,
@@ -19,6 +19,7 @@ import {
   Pin,
   PinOff,
   Info,
+  Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -39,6 +40,52 @@ import {
 } from '@/components/ui/context-menu'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+// ---- Search highlight helper ---------------------------------------------
+// Splits `text` on case-insensitive occurrences of `query` and wraps each
+// match in a <mark> with a visible yellow background so the user can see why
+// the message was returned by the chat-search dialog. The query is regex-
+// escaped so special characters (`(`, `.`, `*`, …) are matched literally.
+//
+// Returns the original `text` (a single string node) when either the text or
+// query is empty, so plain messages with no active query render with zero
+// overhead and no behavioural change vs. before.
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!text) return text
+  const q = query.trim()
+  if (!q) return text
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let regex: RegExp
+  try {
+    regex = new RegExp(`(${escaped})`, 'gi')
+  } catch {
+    // Malformed query — bail to plain text rather than crashing the bubble.
+    return text
+  }
+  // String.split with a capturing group keeps the matched delimiters in the
+  // result array, so odd indices are the query matches (highlight them) and
+  // even indices are the surrounding plain text.
+  const parts = text.split(regex)
+  if (parts.length === 1) {
+    // No matches — render as a single plain string node.
+    return text
+  }
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark
+        key={i}
+        className="bg-yellow-200 dark:bg-yellow-900/70 text-foreground rounded px-0.5"
+      >
+        {part}
+      </mark>
+    ) : (
+      // Render empty strings as `null` so React doesn't complain about
+      // adjacent text separators. Non-empty even-indexed parts become plain
+      // string nodes (no wrapping element needed).
+      part || null
+    )
+  )
+}
 
 // ---- Protection helpers -------------------------------------------------
 // Resolves whether a message is effectively protected from screenshot /
@@ -101,6 +148,7 @@ export function MessageBubble({
   starred,
   reactions,
   currentUserId,
+  prevSameSender,
 }: {
   message: ChatMessage
   senderName?: string
@@ -117,9 +165,22 @@ export function MessageBubble({
   starred?: boolean
   reactions?: Reaction[]
   currentUserId?: string
+  // When true, this message is a continuation of a previous message from
+  // the same sender. The bubble's connecting corner gets a tighter radius
+  // for a WhatsApp-style "tail" effect. Currently optional — the parent can
+  // opt-in to passing this prop.
+  prevSameSender?: boolean
 }) {
   const me = useWaslStore((s) => s.user)
   const mine = message.senderId === me?.id
+  // Search highlight state — only the message whose id matches
+  // `highlightedMessageId` should wrap query matches in <mark>. Subscribing via
+  // individual selectors keeps re-renders scoped: every other bubble only
+  // re-renders when `highlightedMessageId` flips from null↔its own id.
+  const highlightQuery = useWaslStore((s) => s.highlightQuery)
+  const highlightedMessageId = useWaslStore((s) => s.highlightedMessageId)
+  const isHighlighted =
+    !!highlightQuery && highlightedMessageId === message.id
   const [showReactions, setShowReactions] = useState(false)
   const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
   const [editHistoryOpen, setEditHistoryOpen] = useState(false)
@@ -208,6 +269,64 @@ export function MessageBubble({
     return () => document.removeEventListener('mousedown', onClick)
   }, [showReactions])
 
+  // ---- Share externally (Web Share API) ------------------------------------
+  // Tries the native Web Share sheet first (mobile browsers, some desktop
+  // Chromium builds). Falls back to writing the message to the clipboard and
+  // showing a success toast on desktop browsers where `navigator.share` is
+  // unavailable. Records a `share` audit attempt when the message is
+  // protected and the user is the recipient (mirroring the Copy/Forward
+  // behaviour for protected bubbles).
+  const handleShareExternal = useCallback(async () => {
+    if (blocked) {
+      toast.error(PROTECTED_WARNING, { duration: 4000 })
+      recordAttempt(message.id, 'share')
+      return
+    }
+    const shareText = message.content
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function'
+      ) {
+        await navigator.share({
+          title: 'Wasl message',
+          text: shareText,
+        })
+        return
+      }
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === 'function'
+      ) {
+        await navigator.clipboard.writeText(shareText)
+        toast.success('Message copied to clipboard')
+        return
+      }
+      toast.error('Sharing not supported on this device')
+    } catch (err) {
+      // The user dismissing the native share sheet throws an AbortError — we
+      // shouldn't surface that as an error, just bail silently.
+      const name = (err as { name?: string })?.name
+      if (name === 'AbortError') return
+      // Last-ditch: try clipboard as a fallback before showing the error.
+      try {
+        if (
+          typeof navigator !== 'undefined' &&
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === 'function'
+        ) {
+          await navigator.clipboard.writeText(shareText)
+          toast.success('Message copied to clipboard')
+          return
+        }
+      } catch {
+        // fall through to the error toast
+      }
+      toast.error('Sharing not supported on this device')
+    }
+  }, [blocked, message.id, message.content])
+
   if (message.type === 'system') {
     return (
       <div className="flex justify-center my-2">
@@ -220,7 +339,7 @@ export function MessageBubble({
 
   if (message.type === 'commit' && message.commitId) {
     return (
-      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
             <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
@@ -235,7 +354,7 @@ export function MessageBubble({
 
   if (message.type === 'poll' && message.commitId) {
     return (
-      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
             <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
@@ -254,7 +373,7 @@ export function MessageBubble({
 
   if (message.type === 'voice' && message.content.startsWith('data:audio')) {
     return (
-      <div className={cn('flex w-full wasl-animate-in', mine ? 'justify-end' : 'justify-start')}>
+      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out' : 'wasl-bubble-in')}>
           {isGroup && !mine && senderName && (
             <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
@@ -299,18 +418,19 @@ export function MessageBubble({
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            'flex w-full wasl-animate-in group/msg',
+            'flex w-full wasl-msg-in group/msg',
             mine ? 'justify-end' : 'justify-start'
           )}
         >
           <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
-        {/* Hover toolbar — appears on hover (desktop) */}
+        {/* Hover toolbar — appears on hover (desktop) — slides in smoothly */}
         <div
           ref={toolbarRef}
           className={cn(
-            'wasl-toolbar absolute top-0 z-20 flex items-center gap-0.5 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-md border border-border px-0.5 py-0.5 transition-opacity',
-            mine ? 'left-0 -translate-x-full -ml-1' : 'right-0 translate-x-full -mr-1',
-            'opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100'
+            'wasl-toolbar absolute top-0 z-20 flex items-center gap-0.5 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-md border border-border px-0.5 py-0.5',
+            mine
+              ? 'left-0 -ml-1 -translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:-translate-x-full group-hover/msg:opacity-100 focus-within:-translate-x-full focus-within:opacity-100'
+              : 'right-0 -mr-1 translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:translate-x-full group-hover/msg:opacity-100 focus-within:translate-x-full focus-within:opacity-100'
           )}
         >
           <ToolbarButton title="React" onClick={() => setShowReactions((v) => !v)}>
@@ -359,6 +479,28 @@ export function MessageBubble({
               </ToolbarButton>
             )
           )}
+          {/* Share externally — opens the native Web Share sheet on mobile
+              (and some desktop browsers), otherwise copies the message text
+              to the clipboard. Mirrors the Copy/Forward disabled treatment
+              for protected bubbles. */}
+          {blocked ? (
+            <ToolbarButton
+              title="Share disabled — message is protected"
+              onClick={() => {
+                toast.error(PROTECTED_WARNING, { duration: 4000 })
+                recordAttempt(message.id, 'share')
+              }}
+            >
+              <Share2 className="w-4 h-4 opacity-40" />
+            </ToolbarButton>
+          ) : (
+            <ToolbarButton
+              title="Share externally"
+              onClick={() => { void handleShareExternal(); setShowReactions(false) }}
+            >
+              <Share2 className="w-4 h-4" />
+            </ToolbarButton>
+          )}
           {mine && (
             <ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>
               <Trash2 className="w-4 h-4" />
@@ -395,6 +537,9 @@ export function MessageBubble({
           className={cn(
             'px-2.5 py-1.5 shadow-sm relative',
             mine ? 'wasl-bubble-out' : 'wasl-bubble-in',
+            // WhatsApp-style "tail" — when grouped with the previous message
+            // from the same sender, tighten the connecting corner's radius.
+            prevSameSender && (mine ? 'wasl-bubble-grouped-out' : 'wasl-bubble-grouped-in'),
             blocked && 'wasl-protected-bubble'
           )}
           style={blocked ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
@@ -458,7 +603,9 @@ export function MessageBubble({
                 blocked && 'select-none'
               )}
             >
-              {renderMarkdownLite(message.content)}
+              {isHighlighted
+                ? highlightText(message.content, highlightQuery)
+                : renderMarkdownLite(message.content)}
               <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
                 {protection.isProtected && (
                   <Lock className="w-3 h-3 inline opacity-60" />
@@ -556,6 +703,14 @@ export function MessageBubble({
             Forward
           </ContextMenuItem>
         )}
+        {/* Share externally — Web Share API with clipboard fallback.
+            The context menu never opens on `blocked` bubbles (the bubble's
+            onContextMenu handler preventDefaults + stops propagation), so we
+            don't need a separate disabled state here. */}
+        <ContextMenuItem onClick={() => void handleShareExternal()}>
+          <Share2 className="w-4 h-4 mr-2" />
+          Share externally
+        </ContextMenuItem>
         {onPin && (
           <ContextMenuItem onClick={() => onPin()}>
             {message.pinned ? (

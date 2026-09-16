@@ -285,26 +285,67 @@
 }
 
 /* ---- Wasl-specific styles ------------------------------------------------- */
+
+/* ---- Global custom scrollbars (Task 28-b) ----
+   Thin, rounded, theme-aware scrollbars for the whole app.
+   - Webkit (Chrome / Safari / Edge): 6px wide, rounded, darkens on hover
+   - Firefox: `scrollbar-width: thin` + themed `scrollbar-color`
+   - Color follows --foreground via color-mix so it adapts to light/dark + Cirkle */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease-out;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 38%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in oklab, var(--foreground) 48%, transparent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Legacy .wasl-scroll class kept for backward compat — now inherits the
+   global rules above. We only override the legacy thumb colors (rgba black/
+   white) so older scroll containers stay visually consistent. */
 .wasl-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
 }
 .wasl-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .wasl-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.18);
+  background-color: color-mix(in oklab, var(--foreground) 22%, transparent);
   border-radius: 999px;
+  transition: background-color 0.15s ease-out;
+}
+.wasl-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 38%, transparent);
 }
 .wasl-scroll::-webkit-scrollbar-track {
   background: transparent;
-}
-.dark .wasl-scroll {
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-.dark .wasl-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.18);
 }
 
 /* WhatsApp-like chat background doodle pattern */
@@ -567,14 +608,23 @@
 }
 
 /* ---- Message hover toolbar + reactions ----------------------------------- */
-/* Subtle scale-in for the hover toolbar */
+/* Subtle entrance keyframe for the hover toolbar — kept defined for backward
+   compat, but the actual slide-in now uses CSS transitions (see the
+   .wasl-toolbar rule below) so the toolbar smoothly slides in from the side
+   rather than popping. */
 @keyframes wasl-toolbar-in {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
 }
-.group\/msg:hover .wasl-toolbar,
-.group\/msg:focus-within .wasl-toolbar {
-  animation: wasl-toolbar-in 0.12s ease-out;
+/* Smooth slide-in for the hover toolbar. The toolbar is positioned outside
+   the bubble (left for outgoing, right for incoming) using Tailwind
+   translate utilities; we add a smooth transition on opacity + transform
+   so the toolbar slides in when the parent .group/msg is hovered or has
+   focus-within. */
+.wasl-toolbar {
+  transition:
+    opacity 0.15s ease-out,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Reaction pill pop-in */
@@ -605,6 +655,18 @@
 .group\/msg:hover > div > .wasl-bubble-out,
 .group\/msg:hover > div > .wasl-bubble-in {
   box-shadow: 0 2px 8px rgba(11, 20, 26, 0.12);
+}
+/* Outgoing bubbles get a slightly more pronounced, green-tinted shadow on
+   hover for a premium "raised" feel. (Task 28-b) */
+.group\/msg:hover > div > .wasl-bubble-out {
+  box-shadow:
+    0 4px 14px color-mix(in oklab, var(--wasl-green) 22%, transparent),
+    0 1px 3px rgba(11, 20, 26, 0.10);
+}
+.dark .group\/msg:hover > div > .wasl-bubble-out {
+  box-shadow:
+    0 4px 14px color-mix(in oklab, var(--wasl-green) 30%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 /* ---- Protected message bubble (screen-capture / forwarding protection) ---- */
@@ -843,13 +905,36 @@ kbd {
   border-left: 4px solid var(--wasl-green);
 }
 
-/* ---- Online pulse dot (sidebar + chat header) ---- */
+/* ---- Online pulse ring (sidebar + chat header) ---- */
+/* `pulse-ring` — a true expanding-ring effect: the box-shadow spreads outward
+   from the green dot and fades to transparent, creating a WhatsApp-style
+   "online" ripple. Used by .wasl-online-dot (applied in wasl-avatar.tsx). */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--wasl-green) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 0%, transparent);
+  }
+}
+/* Legacy keyframe name kept as an alias so any other code referencing
+   `wasl-online-pulse` still works. Now renders the same expanding ring. */
 @keyframes wasl-online-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 40%, transparent); }
-  50% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--wasl-green) 10%, transparent); }
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--wasl-green) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 0%, transparent);
+  }
 }
 .wasl-online-dot {
-  animation: wasl-online-pulse 2s ease-in-out infinite;
+  animation: pulse-ring 2s ease-in-out infinite;
 }
 
 /* ---- Search shortcut hint ---- */
@@ -877,3 +962,249 @@ kbd {
 [dir="rtl"] .-ml-1 { margin-right: -0.25rem; margin-left: 0; }
 [dir="rtl"] .-mr-1 { margin-left: -0.25rem; margin-right: 0; }
 [dir="rtl"] .rotate-45 { transform: rotate(-45deg); }
+
+/* ==========================================================================
+   Task 28-b — Visual polish & micro-interactions
+   Adds: message-in entrance, badge bounce-in, conv accent bar, story ring
+   rotation, auth logo float, button shimmer, input focus-ring, feature pills,
+   and bubble grouping tail-radius.
+   ========================================================================== */
+
+/* ---- Message bubble entrance: slide up + fade in ----
+   Applied via `.wasl-msg-in` on the bubble wrapper. CSS animations run
+   once on mount (React doesn't restart them on re-render), so this gives
+   a fast 180ms entrance only when the bubble first appears. */
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.wasl-msg-in {
+  animation: message-in 0.18s ease-out;
+}
+
+/* ---- Bubble grouping: tighter tail radius on the connecting corner ----
+   When `prevSameSender` is true (passed by parent), the corner that meets
+   the previous message from the same sender has a smaller radius so the
+   bubbles visually "tail" together (WhatsApp-style). */
+.wasl-bubble-grouped-out {
+  border-top-right-radius: 0.25rem;
+}
+.wasl-bubble-grouped-in {
+  border-top-left-radius: 0.25rem;
+}
+
+/* ---- Unread badge bounce-in (sidebar) ----
+   Apply `.wasl-badge-bounce` with a `key={count}` prop on the badge span
+   so it remounts (and re-animates) every time the unread count changes. */
+@keyframes badge-bounce-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.wasl-badge-bounce {
+  animation: badge-bounce-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center;
+}
+
+/* ---- Selected conversation accent bar (3px wide, slides in) ----
+   Apply `.wasl-conv-accent` to a 3px-wide absolute-positioned span inside
+   the conversation row (which must be `position: relative`). The bar
+   scales vertically into place when the row becomes active. */
+@keyframes wasl-conv-accent-slide {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.wasl-conv-accent {
+  transform-origin: center;
+  animation: wasl-conv-accent-slide 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- Story ring: rotating conic gradient for unseen stories ----
+   Uses `@property` to animate the conic-gradient's `from` angle. The ring
+   rotates 360° every 4s, giving unseen stories a lively gradient swirl.
+   Falls back gracefully to a static ring in browsers without `@property`
+   support (older Safari / Firefox < 128). */
+@property --story-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes wasl-story-ring-rotate {
+  to {
+    --story-angle: 360deg;
+  }
+}
+.wasl-story-ring-unseen {
+  --story-angle: 0deg;
+  background: conic-gradient(
+    from var(--story-angle),
+    var(--wasl-green),
+    var(--cirkle-gold, #c2a060),
+    var(--wasl-teal),
+    var(--wasl-green)
+  );
+  padding: 2.5px;
+  border-radius: 9999px;
+  animation: wasl-story-ring-rotate 4s linear infinite;
+}
+/* User's own status: a calm dashed ring (no rotation) */
+.wasl-story-ring-self {
+  padding: 2.5px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 2px dashed
+    color-mix(in oklab, var(--wasl-green) 55%, transparent);
+}
+/* Story item hover: gentle scale-up with a springy curve */
+.wasl-story-item {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wasl-story-item:hover {
+  transform: scale(1.05);
+}
+
+/* ---- Auth screen: floating logo (3s loop, gentle up-down) ---- */
+@keyframes wasl-auth-logo-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.wasl-auth-logo-float {
+  animation: wasl-auth-logo-float 3s ease-in-out infinite;
+}
+
+/* ---- Auth primary button: shimmer sweep on hover ----
+   A pseudo-element overlays a diagonal white highlight that sweeps across
+   the button when hovered. Works on top of any existing background. */
+.wasl-btn-shimmer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.wasl-btn-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 80%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  transform: skewX(-18deg);
+  pointer-events: none;
+  z-index: 1;
+}
+.wasl-btn-shimmer:hover::after {
+  animation: wasl-btn-shimmer-sweep 0.9s ease-out;
+}
+@keyframes wasl-btn-shimmer-sweep {
+  from {
+    left: -120%;
+  }
+  to {
+    left: 130%;
+  }
+}
+/* Keep the button label above the shimmer overlay */
+.wasl-btn-shimmer > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---- Auth inputs: smooth focus-ring (border → wasl-green + soft glow) ---- */
+.wasl-auth-input {
+  transition:
+    border-color 0.18s ease-out,
+    box-shadow 0.18s ease-out;
+}
+.wasl-auth-input:focus,
+.wasl-auth-input:focus-visible {
+  border-color: var(--wasl-green);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--wasl-green) 18%, transparent);
+  outline: none;
+}
+
+/* ---- Auth feature pills: hover lift + icon rotate/scale ---- */
+.wasl-feature-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition:
+    transform 0.18s ease-out,
+    color 0.18s ease-out;
+}
+.wasl-feature-pill:hover {
+  transform: translateY(-2px);
+  color: #ffffff;
+}
+.wasl-feature-pill > svg {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wasl-feature-pill:hover > svg {
+  transform: scale(1.18) rotate(-8deg);
+}
+
+/* ---- Conversation row hover micro-interaction ----
+   Subtle scale + shadow when hovering a conversation row in the sidebar.
+   The row's `position: relative` and the wrapper's `overflow-x: hidden`
+   keep the scaled row from causing horizontal scroll. */
+.wasl-conv-row {
+  transition:
+    background-color 0.15s ease-out,
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+.wasl-conv-row:not(.wasl-conv-row-active):hover {
+  transform: scale(1.005);
+  box-shadow: 0 1px 4px rgba(11, 20, 26, 0.08);
+}
+.dark .wasl-conv-row:not(.wasl-conv-row-active):hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- Respect reduced motion for all new animations (Task 28-b) ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-msg-in,
+  .wasl-badge-bounce,
+  .wasl-conv-accent,
+  .wasl-story-ring-unseen,
+  .wasl-story-item,
+  .wasl-auth-logo-float,
+  .wasl-btn-shimmer::after,
+  .wasl-feature-pill,
+  .wasl-feature-pill > svg,
+  .wasl-conv-row {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

@@ -1914,3 +1914,214 @@ responses (which still work, just less intelligent).
 - `.env.example` — documented all AI keys
 - `package.json` — removed z-ai-web-dev-sdk
 - `bun.lock` — updated (z-ai-web-dev-sdk removed)
+
+---
+Task ID: 28-a
+Agent: general-purpose (search-highlighting + web-share)
+Task: Implement two chat-window features — (1) message search highlighting in the chat window when a search result is clicked, and (2) a "Share externally" action that uses the Web Share API (with a clipboard fallback) in the message hover toolbar and context menu.
+
+Work Log:
+- Read `/home/z/my-project/worklog.md` (esp. Task IDs 25–27) to understand the existing patterns: Zustand store in `src/lib/store.ts`, shadcn/ui components, wasl components, the `wasl:jump-to-message` window event already wired up in `chat-window.tsx`, the existing protected-message blocking pattern in `message-bubble.tsx`.
+- Audited the three target files (`store.ts`, `chat-search-dialog.tsx`, `message-bubble.tsx`) plus `markdown.tsx`, `forward-dialog.tsx`, `chat-window.tsx` to confirm: (a) the store had no `highlightQuery`/`highlightedMessageId` yet, (b) the chat-search dialog only highlighted the matched substring inside its own results list but never propagated the query to the underlying message bubble, (c) the hover toolbar already had React/Reply/Star/Copy/Edit/Forward/Delete and the right-click context menu had Reply/Star/Copy/Forward/Pin/Edit/Info/Delete, (d) `blocked` (protected-message) handling needs to mirror the existing Copy/Forward disabled-with-warning-toast treatment.
+
+Feature 1 — Message search highlighting:
+- Added two new fields to the Zustand store (`src/lib/store.ts`): `highlightQuery: string` + setter, and `highlightedMessageId: string | null` + setter, with a documenting comment explaining the data flow.
+- In `chat-search-dialog.tsx` added a `handleResultClick(m)` callback that: sets `highlightQuery` + `highlightedMessageId` in the store, dispatches the existing `wasl:jump-to-message` window event (so `chat-window.tsx` scrolls the bubble into view + flashes it via the existing `wasl-message-flash` animation), closes the dialog, and arms a 4-second `setTimeout` to clear both store fields so the bubble eventually returns to the normal markdown rendering. A `useRef` tracks the active timer so a new click cancels the previous one. Also made each search result row keyboard-focusable (`role="button"`, `tabIndex=0`, Enter/Space handler) and added a focus-visible ring.
+- In `message-bubble.tsx` added a module-level `highlightText(text, query)` helper: escapes regex special chars in the query, splits the text on a case-insensitive `RegExp(query)` capture group, and wraps each match in `<mark className="bg-yellow-200 dark:bg-yellow-900/70 text-foreground rounded px-0.5">`. Returns the plain string unchanged when the query or text is empty (so non-highlighted renders are zero-cost and behaviourally identical to before). Try/catch guards against malformed queries.
+- Subscribed each `MessageBubble` to `highlightQuery` and `highlightedMessageId` via individual Zustand selectors (so re-renders are scoped), computed a local `isHighlighted` boolean, and swapped `renderMarkdownLite(message.content)` for `highlightText(message.content, highlightQuery)` only when `isHighlighted` is true. All other message types (image/voice/system/commit/poll) are unaffected.
+
+Feature 2 — Share externally via Web Share API:
+- Imported `Share2` from `lucide-react`.
+- Added a `handleShareExternal` `useCallback` in `message-bubble.tsx` that:
+  - Records a `'share'` audit attempt + shows the protected-warning toast when the bubble is `blocked` (mirrors Copy/Forward).
+  - Otherwise tries `navigator.share({ title: 'Wasl message', text: message.content })` when the Web Share API is available.
+  - Falls back to `navigator.clipboard.writeText(message.content)` + `toast.success('Message copied to clipboard')` when Web Share is unavailable (e.g. desktop browsers).
+  - Falls back further to the error toast `toast.error('Sharing not supported on this device')` if both fail.
+  - Swallows `AbortError` (user dismissed the native share sheet) silently.
+- Added a `Share2` toolbar button to the hover action bar, right after Forward and before Delete. Two states, matching the Copy/Forward pattern: full-color active button when not blocked, dimmed (`opacity-40`) button that shows the protected warning toast when blocked. Uses `ToolbarButton`'s existing `title`/`aria-label` for accessibility.
+- Added a `Share externally` item to the right-click context menu, right after Forward and before Pin. (Context menu never opens on `blocked` bubbles — the bubble's `onContextMenu` handler already `preventDefault`s + `stopPropagation`s it — so no separate disabled variant needed there.)
+
+Verification:
+- Ran `bun run lint` → exit 0, no errors or warnings.
+- Ran `tsc --noEmit` against the project: zero errors in the three files I touched (`src/lib/store.ts`, `src/components/wasl/chat-search-dialog.tsx`, `src/components/wasl/message-bubble.tsx`). Pre-existing TS errors in other files (auth/login route, reactions-summary route, skills/, examples/) are unrelated to this task.
+- Verified dev server is up on port 3000 (recent `dev.log` shows successful HMR compiles with no errors).
+
+Stage Summary:
+- `src/lib/store.ts` — added `highlightQuery` + `highlightedMessageId` state and their setters.
+- `src/components/wasl/chat-search-dialog.tsx` — search-result rows are now clickable; clicking sets the store highlight state, dispatches `wasl:jump-to-message`, closes the dialog, and arms a 4-second timer to clear the highlight. Rows are keyboard-accessible.
+- `src/components/wasl/message-bubble.tsx` — added module-level `highlightText()` helper, subscribed each bubble to the highlight store fields, conditionally renders `<mark>`-wrapped text in place of the markdown renderer when the bubble is the active search target. Added `Share2` button to the hover toolbar (with blocked-state disabled variant) and a "Share externally" item to the context menu, both wired to a `handleShareExternal` callback that prefers `navigator.share` and falls back to `navigator.clipboard.writeText` + success toast, with a final error toast for unsupported environments.
+- No new files created. No tests added. No other files touched.
+
+---
+Task ID: 28-b
+Agent: frontend-styling-expert (visual polish)
+Task: Premium visual polish + micro-interactions for the Wasl messenger — custom scrollbars, message-bubble entrance & hover polish, conversation-list accent bar + badge bounce, rotating story ring, and auth-screen float/shimmer/focus-ring.
+
+Work Log:
+- Read existing globals.css, sidebar.tsx, message-bubble.tsx, story-bar.tsx, auth-screen.tsx to understand the existing patterns (wasl-green/teal palette, `wasl-*` CSS classes, shadcn Input/Button components, `group/msg` hover pattern in message-bubble).
+- globals.css: replaced the `.wasl-scroll`-only custom scrollbar rules with global ones (using `*` selector + `scrollbar-width: thin` for Firefox, `*::-webkit-scrollbar*` for Webkit). Scrollbars are 6px, rounded, theme-aware via `color-mix(in oklab, var(--foreground) ...)`, and darken on hover/active. Kept `.wasl-scroll` as a legacy alias that inherits the new look. Both light and dark mode handled automatically via the `--foreground` token.
+- globals.css: redefined `wasl-online-pulse` + added a new `pulse-ring` keyframe (true expanding-ring effect using box-shadow spread). `.wasl-online-dot` now uses `pulse-ring`. The pulsing green dot now has a visible expanding ripple for online users.
+- globals.css: added a "Task 28-b" section at the end with all the new keyframes & classes:
+  * `@keyframes message-in` + `.wasl-msg-in` (180ms slide-up + fade-in)
+  * `.wasl-bubble-grouped-out` / `.wasl-bubble-grouped-in` (tighter top-corner radius for the WhatsApp "tail" effect on consecutive same-sender messages)
+  * `@keyframes badge-bounce-in` + `.wasl-badge-bounce` (springy scale-in for unread badges)
+  * `@keyframes wasl-conv-accent-slide` + `.wasl-conv-accent` (vertical slide-in for the selected-conversation accent bar)
+  * `@property --story-angle` + `@keyframes wasl-story-ring-rotate` + `.wasl-story-ring-unseen` (rotating conic-gradient ring using `@property` for graceful browser fallback)
+  * `.wasl-story-ring-self` (dashed ring for the user's own status)
+  * `.wasl-story-item` (1.05 springy hover scale)
+  * `@keyframes wasl-auth-logo-float` + `.wasl-auth-logo-float` (3s gentle up-down float for the auth logo)
+  * `@keyframes wasl-btn-shimmer-sweep` + `.wasl-btn-shimmer` (white-highlight sweep on hover via ::after pseudo-element, preserves existing background)
+  * `.wasl-auth-input` (smooth border-color → wasl-green + soft green glow shadow on focus)
+  * `.wasl-feature-pill` (hover lift + icon scale/rotate)
+  * `.wasl-conv-row` (subtle 1.005 scale + shadow on hover, disabled for active rows)
+  * `@media (prefers-reduced-motion: reduce)` block that disables all the new animations & transitions.
+- globals.css: replaced the existing `.group\/msg:hover .wasl-toolbar` keyframe animation with a `.wasl-toolbar` transition rule (opacity + transform with a springy cubic-bezier). The toolbar now smoothly slides in instead of popping. Kept `wasl-toolbar-in` keyframe defined for backward-compat (unused now).
+- globals.css: added a stronger green-tinted hover shadow for outgoing bubbles specifically (`.group\/msg:hover > div > .wasl-bubble-out` with a `color-mix(in oklab, var(--wasl-green) 22%, transparent)` shadow), with a darker variant for dark mode.
+- message-bubble.tsx: added an optional `prevSameSender?: boolean` prop. When true, the bubble's connecting corner (top-right for outgoing, top-left for incoming) gets a smaller radius via the new `wasl-bubble-grouped-out`/`wasl-bubble-grouped-in` classes — WhatsApp-style "tail" effect. The prop is currently not passed by the parent (chat-view) but is ready for opt-in.
+- message-bubble.tsx: replaced all 4 instances of `wasl-animate-in` with `wasl-msg-in` so the new entrance keyframe applies to commit/poll/voice/text bubbles. CSS animations run once on mount, so this is initial-mount only (no re-trigger on re-render).
+- message-bubble.tsx: rewrote the toolbar className to use slide-in transitions: default state is `-translate-x-[calc(100%_+_8px)] opacity-0` (toolbar 8px further away than its final position, invisible), then `group-hover/msg:-translate-x-full group-hover/msg:opacity-100 focus-within:-translate-x-full focus-within:opacity-100` slides it to its final position with a springy transition (provided by the `.wasl-toolbar` CSS rule).
+- sidebar.tsx: added `relative` + `wasl-conv-row` classes to the conversation row. When `active`, also applies `wasl-conv-row-active` (disables hover scale). Added a 3px-wide absolute accent bar with class `wasl-conv-accent` that slides in vertically when the conversation becomes active.
+- sidebar.tsx: added `key={conversation.unreadCount}` to the unread badge span + the `wasl-badge-bounce` class. React remounts the badge when the count changes, re-triggering the bounce-in animation.
+- sidebar.tsx: added `overflow-x-hidden` to the conversation list scroll container so the 1.005 hover scale doesn't cause horizontal scrollbars.
+- sidebar.tsx: the online pulse-ring is handled automatically — `WaslAvatar` already applies `wasl-online-dot` when `online` is true, and that class now uses the new `pulse-ring` keyframe defined in globals.css.
+- story-bar.tsx: added `wasl-story-item` class to all 3 story buttons (My status / Add, My existing stories, Other stories) for the 1.05 springy hover scale.
+- story-bar.tsx: changed the "My existing stories" wrapper from `wasl-story-ring` to the new `wasl-story-ring-self` (dashed green ring, no rotation).
+- story-bar.tsx: changed the "Other stories" wrapper from `wasl-story-ring`/`wasl-story-ring-viewed` to `wasl-story-ring-unseen` (rotating conic-gradient) for unseen stories, keeping `wasl-story-ring-viewed` for viewed ones.
+- auth-screen.tsx: added `wasl-auth-logo-float` class to the logo wrapper div (alongside the existing `wasl-cirkle-splash-in` for the Cirkle theme).
+- auth-screen.tsx: added `wasl-btn-shimmer` class to the primary submit button (Sign up / Log in). The shimmer is a white-highlight sweep across the button on hover, layered above the existing wasl-green or gold gradient background via a ::after pseudo-element.
+- auth-screen.tsx: added `wasl-feature-pill` class to all 3 trust badges (End-to-end encrypted, Real-time, Verified agreements). On hover, the pill lifts 2px and the icon scales 1.18x + rotates -8deg.
+- auth-screen.tsx: added `wasl-auth-input` class to all 6 form inputs (login identifier, login password, signup name, signup username, signup email/phone, signup password). On focus, the border shifts to wasl-green and a soft 3px green glow appears, with smooth 180ms transitions.
+- Ran `bun run lint` — clean, no errors. Verified the dev server (port 3000) still compiles cleanly and serves HTTP 200. Verified via curl that all new Tailwind classes (calc(100% + 8px), `group-hover/msg:*`, `focus-within:*`, `wasl-msg-in`, `wasl-story-ring-unseen`, `--story-angle`, etc.) are correctly generated in the compiled CSS.
+
+Stage Summary:
+- Files touched (5):
+  1. `src/app/globals.css` — new global scrollbars (whole app), `pulse-ring` keyframe, `message-in` / `badge-bounce-in` / `wasl-conv-accent-slide` / `wasl-story-ring-rotate` / `wasl-auth-logo-float` / `wasl-btn-shimmer-sweep` keyframes + matching classes, `@property --story-angle` for the rotating story ring, outgoing-bubble green-tinted hover shadow, toolbar transition (instead of keyframe animation), and a reduced-motion guard for all new animations.
+  2. `src/components/wasl/message-bubble.tsx` — `wasl-msg-in` entrance class on all bubble types (replaces `wasl-animate-in`), slide-in toolbar via `transition + translate-x-[calc(100%_+_8px)]` + `group-hover/msg:*` + `focus-within:*`, optional `prevSameSender` prop + `wasl-bubble-grouped-out`/`wasl-bubble-grouped-in` classes for the WhatsApp-style tail effect.
+  3. `src/components/wasl/sidebar.tsx` — selected-conversation left accent bar (3px, slides in via `wasl-conv-accent`), `wasl-badge-bounce` + `key={count}` on the unread badge, `wasl-conv-row` class for subtle 1.005 scale + shadow on hover (disabled for active rows), `overflow-x-hidden` on the list container.
+  4. `src/components/wasl/story-bar.tsx` — `wasl-story-ring-unseen` (rotating conic-gradient) for unseen stories, `wasl-story-ring-self` (dashed ring) for the user's own status, `wasl-story-item` (1.05 springy hover scale) on all story buttons.
+  5. `src/components/wasl/auth-screen.tsx` — `wasl-auth-logo-float` on the logo, `wasl-btn-shimmer` on the primary submit button, `wasl-auth-input` on all 6 form inputs (smooth focus ring → wasl-green + glow), `wasl-feature-pill` on all 3 trust badges (hover lift + icon rotate/scale).
+- Visual results: premium micro-interactions across the whole app — WhatsApp-style pulsing online dot, springy unread badge bounce, sliding accent bar on the selected conversation, rotating conic-gradient story ring (with graceful `@property` fallback), floating auth logo, shimmering primary button, glowing focus rings on auth inputs, and a hover-lift on the trust-badge pills. All animations respect `prefers-reduced-motion`. The hover toolbar on message bubbles now slides in (8px offset → final position) instead of popping.
+- No tests added (per instructions). No build run (per instructions). No other files touched (per instructions).
+- Notes for future agents: the `prevSameSender` prop on `MessageBubble` is currently unused by the parent chat-view component — passing it (e.g. comparing `messages[i].senderId === messages[i-1].senderId` and a recent timestamp) will activate the WhatsApp-style grouped-bubble tail effect automatically.
+
+---
+Task ID: 28 — Performance fix + crash fix + hydration fix + search highlighting + Web Share + visual polish
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing and upgrading and fixing".
+
+### Phase 1: QA Audit (agent-browser)
+- Logged in as demo user, opened Amira Hassan conversation
+- Verified chat window renders, messages send/receive, bot replies work
+- Verified smart reply chips, pinned messages, read receipts, reactions all work
+- Found: conversations API taking 6.9s to load (N+1 query problem)
+- Found: Share2 HMR module crash after subagent changes (stale Turbopack cache)
+- Found: React hydration errors from color-theme-provider & language-provider
+  (lazy useState initializers reading localStorage → server/client mismatch)
+
+### Phase 2: Performance Fix (conversations API N+1)
+**File: `src/app/api/conversations/route.ts`**
+- The GET handler ran 2 queries PER conversation (findFirst last message + count
+  unread) inside a `Promise.all` → 2N+1 round-trips to Turso. With ~1s latency
+  per query, 2 conversations = 6.9s.
+- Rewrote to batch into 3 total queries:
+  1. One `findMany` for all messages across conversations (pick latest per conv in JS)
+  2. One `findMany` for all candidate unread messages (count in JS respecting lastReadAt)
+  3. The original conversations query (unchanged)
+- **Result: 6.9s → 1.68s** (4x faster, scales O(1) not O(N) queries)
+
+### Phase 3: Crash Fix (Share2 HMR module error)
+- After subagent A added `Share2` icon import to message-bubble.tsx, the Turbopack
+  HMR cache became stale → "module factory is not available" → global-error boundary
+  crashed the entire ChatApp on every login.
+- Root cause: stale `.next` Turbopack cache from incremental HMR updates.
+- **Fix: `rm -rf .next` + dev server restart** clears the stale module graph.
+- Verified via curl: login 200, page 200, "Welcome to Wasl" renders, 0 crash matches.
+
+### Phase 4: Hydration Error Fixes
+**File: `src/components/wasl/color-theme-provider.tsx`**
+- OLD: `useState(() => readStoredTheme())` — lazy initializer reads localStorage
+  on client first render but DEFAULT_THEME on server → `isCirkle` mismatch →
+  hydration error on the `wasl-cirkle-splash-in` class.
+- NEW: `useState<ColorTheme>(DEFAULT_THEME)` always, then read localStorage in
+  `useEffect` after mount and update. Server + client first render both use
+  DEFAULT_THEME → no mismatch. Added `hydrated` guard for applyTheme.
+
+**File: `src/components/wasl/language-provider.tsx`**
+- Same pattern: lazy initializer reading localStorage → `dir` attribute mismatch.
+- Fixed to `useState<Lang>('en')` + useEffect to read localStorage after mount.
+
+### Phase 5: Jump-to-Message Handler Robustness
+**File: `src/components/wasl/chat-window.tsx`**
+- The `onJumpToMessage` handler required `scrollRef.current` and only searched
+  within the scroll container. If the ref wasn't attached or the message was
+  outside the container, the jump silently failed.
+- Added a `document.querySelector` fallback so the message is found even if
+  the scroll ref isn't ready.
+
+### Phase 6: New Features (subagents)
+
+**Task 28-a (general-purpose agent): Search highlighting + Web Share**
+- Added `highlightQuery` + `highlightedMessageId` to Zustand store
+- `chat-search-dialog.tsx`: clicking a search result sets the highlight query,
+  dispatches `wasl:jump-to-message` event, auto-clears after 4s
+- `message-bubble.tsx`: `highlightText()` helper wraps query matches in
+  `<mark class="bg-yellow-200 dark:bg-yellow-900/70">` (regex-escaped, case-insensitive)
+- `message-bubble.tsx`: added "Share externally" button (Share2 icon) to hover
+  toolbar + context menu. Uses `navigator.share()` → falls back to
+  `navigator.clipboard.writeText()` → falls back to toast error.
+
+**Task 28-b (frontend-styling-expert): Visual polish**
+- `globals.css`: custom 6px scrollbars (theme-aware, webkit+firefox), pulse-ring
+  animation for online dots, message-in entrance animation, badge-bounce-in,
+  conv-accent-slide, story-ring-rotate (conic gradient), auth-logo-float,
+  btn-shimmer-sweep, bubble-grouped tail effect. All respect prefers-reduced-motion.
+- `message-bubble.tsx`: smooth toolbar slide-in (translate-x transition),
+  wasl-msg-in entrance animation, grouped bubble tail effect
+- `sidebar.tsx`: 3px accent bar on active conversation, bounce-in unread badge,
+  subtle hover scale (1.005), overflow-x-hidden
+- `story-bar.tsx`: rotating conic-gradient ring for unseen stories, dashed ring
+  for own status, springy 1.05 hover scale
+- `auth-screen.tsx`: floating logo, shimmer button, focus-glow inputs, hover-lift pills
+
+### Phase 7: Verification (curl E2E — agent-browser blocked by server instability)
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| GET / (chat app) | 200 ✅ |
+| Crash ("Something went wrong") | 0 matches ✅ |
+| Chat content ("Welcome to Wasl") | Present ✅ |
+| GET /api/conversations | 1.68s (was 6.9s) ✅ |
+| POST /api/ai/smart-reply | 200 + contextual replies ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+**Note on agent-browser:** The dev server becomes unresponsive after a few
+requests in this sandbox (process stays alive but stops accepting connections
+on port 3000). This prevented full agent-browser E2E verification of client-
+side hydration. All server-side checks (curl) pass cleanly. The cron
+webDevReview job will continue QA in subsequent runs.
+
+### Files Touched (Task 28)
+- `src/app/api/conversations/route.ts` — N+1 → batched queries
+- `src/app/global-error.tsx` — temp debug added & removed
+- `src/components/wasl/color-theme-provider.tsx` — hydration fix
+- `src/components/wasl/language-provider.tsx` — hydration fix
+- `src/components/wasl/chat-window.tsx` — jump handler fallback
+- `src/components/wasl/chat-search-dialog.tsx` — search result click → highlight (subagent A)
+- `src/components/wasl/message-bubble.tsx` — highlightText + Share2 + visual polish (subagents A+B)
+- `src/components/wasl/sidebar.tsx` — visual polish (subagent B)
+- `src/components/wasl/story-bar.tsx` — visual polish (subagent B)
+- `src/components/wasl/auth-screen.tsx` — visual polish (subagent B)
+- `src/app/globals.css` — scrollbars, animations, keyframes (subagent B)
+- `src/lib/store.ts` — highlightQuery + highlightedMessageId state (subagent A)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Extend drag-and-drop to support PDF/voice notes/documents
+- Add "Reply from notification" quick reply
+- Add per-user "deleted for me" tracking
+- Add "Forward to external app" via Web Share API (DONE in Task 28-a)

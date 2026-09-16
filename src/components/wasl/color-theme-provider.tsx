@@ -33,17 +33,28 @@ function readStoredTheme(): ColorTheme {
 }
 
 export function ColorThemeProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initializer — runs once on the client (SSR returns the default, then the
-  // client picks up the stored value on the very first render, no flash and
-  // no setState-in-effect lint error).
-  const [colorTheme, setColorThemeState] = useState<ColorTheme>(() =>
-    readStoredTheme()
-  )
+  // IMPORTANT: always start from DEFAULT_THEME on both server and the client's
+  // first render so the hydration markup matches. We read the persisted value
+  // from localStorage inside an effect (after mount) and switch if needed.
+  // This is the React-recommended pattern for client-persisted preferences
+  // and avoids "server rendered HTML didn't match the client" errors.
+  const [colorTheme, setColorThemeState] = useState<ColorTheme>(DEFAULT_THEME)
+  const [hydrated, setHydrated] = useState(false)
 
-  // Apply the data-theme attribute whenever the theme changes.
+  // On mount, read the persisted theme (client-only).
   useEffect(() => {
-    applyTheme(colorTheme)
-  }, [colorTheme])
+    const stored = readStoredTheme()
+    if (stored !== DEFAULT_THEME) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setColorThemeState(stored)
+    }
+    setHydrated(true)
+  }, [])
+
+  // Apply the data-theme attribute whenever the theme changes (client-only).
+  useEffect(() => {
+    if (hydrated) applyTheme(colorTheme)
+  }, [colorTheme, hydrated])
 
   const setColorTheme = useCallback((t: ColorTheme) => {
     setColorThemeState(t)

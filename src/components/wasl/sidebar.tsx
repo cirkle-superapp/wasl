@@ -260,7 +260,7 @@ export function Sidebar({
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto wasl-scroll bg-[var(--wasl-sidebar-bg)]">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden wasl-scroll bg-[var(--wasl-sidebar-bg)]">
         <StoryBar />
         {loading && conversations.length === 0 ? (
           // Skeleton placeholders while the conversation list loads.
@@ -393,12 +393,20 @@ function ConversationRow({
     <div
       onClick={onClick}
       className={cn(
-        'group flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border/60 transition-colors',
+        'group relative flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border/60',
+        'wasl-conv-row',
         active
-          ? 'bg-muted/70'
+          ? 'wasl-conv-row-active bg-muted/70'
           : 'hover:bg-muted/40 bg-[var(--wasl-sidebar-bg)]'
       )}
     >
+      {/* Selected conversation: left accent bar (3px wide, slides in) */}
+      {active && (
+        <span
+          aria-hidden
+          className="wasl-conv-accent absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--wasl-green)]"
+        />
+      )}
       {conversation.isGroup ? (
         <WaslGroupAvatar
           name={conversation.name}
@@ -485,7 +493,10 @@ function ConversationRow({
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {conversation.unreadCount > 0 ? (
-              <span className="bg-[var(--wasl-green)] text-white text-xs min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center font-semibold">
+              <span
+                key={conversation.unreadCount}
+                className="wasl-badge-bounce bg-[var(--wasl-green)] text-white text-xs min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center font-semibold"
+              >
                 {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
               </span>
             ) : (

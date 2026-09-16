@@ -244,7 +244,7 @@ export function AuthScreen() {
         )}
       >
         <div className="max-w-md mx-auto text-center space-y-3">
-          <div className={cn('inline-flex items-center justify-center', isCirkle && 'wasl-cirkle-splash-in')}>
+          <div className={cn('inline-flex items-center justify-center wasl-auth-logo-float', isCirkle && 'wasl-cirkle-splash-in')}>
             <WaslLogo size={64} animated />
           </div>
           <h1
@@ -260,13 +260,13 @@ export function AuthScreen() {
           </p>
           {/* Trust badges */}
           <div className="flex items-center justify-center gap-4 mt-3">
-            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+            <div className="wasl-feature-pill text-white/70 text-[10px]">
               <ShieldCheck className="w-3 h-3" /> End-to-end encrypted
             </div>
-            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+            <div className="wasl-feature-pill text-white/70 text-[10px]">
               <Zap className="w-3 h-3" /> Real-time
             </div>
-            <div className="flex items-center gap-1 text-white/70 text-[10px]">
+            <div className="wasl-feature-pill text-white/70 text-[10px]">
               <Users className="w-3 h-3" /> Verified agreements
             </div>
           </div>
@@ -329,7 +329,7 @@ export function AuthScreen() {
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       placeholder="you@cirkle.app, +20..., or @username"
-                      className="pl-9"
+                      className="wasl-auth-input pl-9"
                       autoComplete="username"
                       disabled={loading}
                       autoCapitalize="none"
@@ -348,7 +348,7 @@ export function AuthScreen() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Your password"
-                      className="pl-9 pr-9"
+                      className="wasl-auth-input pl-9 pr-9"
                       autoComplete="current-password"
                       disabled={loading}
                     />
@@ -376,7 +376,7 @@ export function AuthScreen() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="e.g. Ahmad Ali"
-                      className="pl-9"
+                      className="wasl-auth-input pl-9"
                       autoComplete="name"
                       disabled={loading}
                     />
@@ -412,7 +412,7 @@ export function AuthScreen() {
                         setUsernameTouched(true)
                       }}
                       placeholder="ahmad_ali"
-                      className="pl-9"
+                      className="wasl-auth-input pl-9"
                       disabled={loading}
                       autoCapitalize="none"
                       spellCheck={false}
@@ -456,7 +456,7 @@ export function AuthScreen() {
                       value={signupIdentifier}
                       onChange={(e) => setSignupIdentifier(e.target.value)}
                       placeholder="you@cirkle.app or +20 100 123 4567"
-                      className="pl-9"
+                      className="wasl-auth-input pl-9"
                       disabled={loading}
                       autoCapitalize="none"
                       spellCheck={false}
@@ -478,7 +478,7 @@ export function AuthScreen() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="At least 6 characters"
-                      className="pl-9 pr-9"
+                      className="wasl-auth-input pl-9 pr-9"
                       autoComplete="new-password"
                       disabled={loading}
                     />
@@ -498,7 +498,7 @@ export function AuthScreen() {
             <Button
               type="submit"
               className={cn(
-                'w-full font-medium',
+                'wasl-btn-shimmer w-full font-medium',
                 isCirkle
                   ? 'wasl-gradient-gold hover:opacity-90 text-[var(--cirkle-charcoal)]'
                   : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'

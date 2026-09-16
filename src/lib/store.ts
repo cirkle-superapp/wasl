@@ -156,6 +156,19 @@ type WaslState = {
   replyTo: ChatMessage | null
   setReplyTo: (m: ChatMessage | null) => void
 
+  // ---- Search highlight ----------------------------------------------------
+  // When the user clicks a message in the chat-search dialog, we set both
+  // `highlightQuery` (the substring to wrap in <mark>) and
+  // `highlightedMessageId` (the message bubble that should receive the
+  // highlight). The chat-search dialog also dispatches the existing
+  // `wasl:jump-to-message` window event so the chat window scrolls the
+  // target message into view. The dialog is responsible for clearing these
+  // (typically after a short delay) so the highlight naturally fades away.
+  highlightQuery: string
+  setHighlightQuery: (q: string) => void
+  highlightedMessageId: string | null
+  setHighlightedMessageId: (id: string | null) => void
+
   // Commits
   commitsByConversation: Record<string, Commit[]>
   setCommits: (conversationId: string, commits: Commit[]) => void
@@ -307,6 +320,11 @@ export const useWaslStore = create<WaslState>((set) => ({
 
   replyTo: null,
   setReplyTo: (m) => set({ replyTo: m }),
+
+  highlightQuery: '',
+  setHighlightQuery: (q) => set({ highlightQuery: q }),
+  highlightedMessageId: null,
+  setHighlightedMessageId: (id) => set({ highlightedMessageId: id }),
 
   commitsByConversation: {},
   setCommits: (conversationId, commits) =>

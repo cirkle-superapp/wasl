@@ -50,68 +50,117 @@ export async function GET(req: NextRequest) {
     orderBy: { updatedAt: 'desc' },
   })
 
-  // For each conversation, get the last message and unread count
-  const enriched = await Promise.all(
-    conversations.map(async (c) => {
-      const lastMessage = await db.message.findFirst({
-        where: { conversationId: c.id },
-        orderBy: { createdAt: 'desc' },
-      })
-      const myParticipation = c.participants.find((p) => p.userId === session.id)
-      const unreadCount = await db.message.count({
-        where: {
-          conversationId: c.id,
-          senderId: { not: session.id },
-          createdAt: { gt: myParticipation?.lastReadAt ?? new Date(0) },
-        },
-      })
+  if (conversations.length === 0) {
+    return NextResponse.json({ conversations: [] })
+  }
 
-      // For 1-on-1, derive display name + avatar from the other participant
-      let displayName = c.name || ''
-      let displayAvatar = c.avatar
-      let displayAvatarColor = c.avatarColor
-      let otherUser: any = null
-      if (!c.isGroup) {
-        otherUser = c.participants.find((p) => p.userId !== session.id)?.user
-        displayName = otherUser?.name || c.name || 'Unknown'
-        displayAvatar = otherUser?.avatar ?? null
-        displayAvatarColor =
-          otherUser?.avatarColor ?? pickAvatarColor(otherUser?.id || displayName)
-      }
+  // --- Batched queries to avoid the N+1 problem ---
+  // Previously this looped over each conversation and ran 2 queries per
+  // conversation (findFirst last message + count unread) — causing 2N+1
+  // round-trips to Turso. With high-latency DB connections that meant 6-7s
+  // for just a handful of chats. Now we run 3 queries total.
 
-      return {
-        id: c.id,
-        name: displayName,
-        avatar: displayAvatar,
-        avatarColor: displayAvatarColor,
-        isGroup: c.isGroup,
-        participants: c.participants.map((p) => ({
-          userId: p.userId,
-          username: p.user.username,
-          name: p.user.name,
-          phone: p.user.phone,
-          avatar: p.user.avatar,
-          avatarColor: p.user.avatarColor,
-          online: p.user.online,
-          lastSeen: p.user.lastSeen,
-          about: p.user.about,
-          verified: p.user.verified,
-        })),
-        lastMessage: lastMessage
-          ? {
-              id: lastMessage.id,
-              content: lastMessage.content,
-              type: lastMessage.type,
-              senderId: lastMessage.senderId,
-              status: lastMessage.status,
-              createdAt: lastMessage.createdAt,
-            }
-          : null,
-        unreadCount,
-        updatedAt: c.updatedAt,
-      }
-    })
-  )
+  // 1) All latest messages for every conversation in one query.
+  const allMessages = await db.message.findMany({
+    where: { conversationId: { in: conversationIds } },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      content: true,
+      type: true,
+      senderId: true,
+      status: true,
+      createdAt: true,
+      conversationId: true,
+    },
+  })
+  const lastMessageByConv = new Map<
+    string,
+    (typeof allMessages)[number]
+  >()
+  for (const m of allMessages) {
+    // results are ordered desc, so the first one we see per conv is the latest
+    if (!lastMessageByConv.has(m.conversationId)) {
+      lastMessageByConv.set(m.conversationId, m)
+    }
+  }
+
+  // 2) Build a lastReadAt map per conversation from the already-fetched participants.
+  const lastReadMap = new Map<string, Date>()
+  for (const c of conversations) {
+    const mp = c.participants.find((p) => p.userId === session.id)
+    lastReadMap.set(c.id, mp?.lastReadAt ?? new Date(0))
+  }
+
+  // 3) All candidate unread messages (others' messages) in one query,
+  //    then count per conversation in JS respecting lastReadAt.
+  const unreadCandidates = await db.message.findMany({
+    where: {
+      conversationId: { in: conversationIds },
+      senderId: { not: session.id },
+    },
+    select: { conversationId: true, createdAt: true },
+  })
+  const unreadCountMap = new Map<string, number>()
+  for (const c of conversations) unreadCountMap.set(c.id, 0)
+  for (const m of unreadCandidates) {
+    const lr = lastReadMap.get(m.conversationId) ?? new Date(0)
+    if (new Date(m.createdAt) > lr) {
+      unreadCountMap.set(
+        m.conversationId,
+        (unreadCountMap.get(m.conversationId) ?? 0) + 1,
+      )
+    }
+  }
+
+  const enriched = conversations.map((c) => {
+    const lastMessage = lastMessageByConv.get(c.id) ?? null
+
+    // For 1-on-1, derive display name + avatar from the other participant
+    let displayName = c.name || ''
+    let displayAvatar = c.avatar
+    let displayAvatarColor = c.avatarColor
+    let otherUser: any = null
+    if (!c.isGroup) {
+      otherUser = c.participants.find((p) => p.userId !== session.id)?.user
+      displayName = otherUser?.name || c.name || 'Unknown'
+      displayAvatar = otherUser?.avatar ?? null
+      displayAvatarColor =
+        otherUser?.avatarColor ?? pickAvatarColor(otherUser?.id || displayName)
+    }
+
+    return {
+      id: c.id,
+      name: displayName,
+      avatar: displayAvatar,
+      avatarColor: displayAvatarColor,
+      isGroup: c.isGroup,
+      participants: c.participants.map((p) => ({
+        userId: p.userId,
+        username: p.user.username,
+        name: p.user.name,
+        phone: p.user.phone,
+        avatar: p.user.avatar,
+        avatarColor: p.user.avatarColor,
+        online: p.user.online,
+        lastSeen: p.user.lastSeen,
+        about: p.user.about,
+        verified: p.user.verified,
+      })),
+      lastMessage: lastMessage
+        ? {
+            id: lastMessage.id,
+            content: lastMessage.content,
+            type: lastMessage.type,
+            senderId: lastMessage.senderId,
+            status: lastMessage.status,
+            createdAt: lastMessage.createdAt,
+          }
+        : null,
+      unreadCount: unreadCountMap.get(c.id) ?? 0,
+      updatedAt: c.updatedAt,
+    }
+  })
 
   // Sort by last message time if available
   enriched.sort((a, b) => {
