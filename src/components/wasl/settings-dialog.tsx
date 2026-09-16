@@ -22,7 +22,7 @@ import {
 import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
-  UserCircle, Shield, Users,
+  UserCircle, Shield, Users, Landmark,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -31,6 +31,7 @@ import { VerifyPersonDialog } from './verify-person-dialog'
 import { BusinessRegisterDialog } from './business-register-dialog'
 import { BusinessDashboardDialog } from './business-dashboard-dialog'
 import { BusinessSearchDialog } from './business-search-dialog'
+import { ServiceProviderDialog } from './service-provider-dialog'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -52,6 +53,7 @@ export function SettingsDialog({
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [bizRegisterOpen, setBizRegisterOpen] = useState(false)
   const [bizSearchOpen, setBizSearchOpen] = useState(false)
+  const [spOpen, setSpOpen] = useState(false)
   const [myBusinesses, setMyBusinesses] = useState<any[]>([])
   const [activeBizId, setActiveBizId] = useState<string | null>(null)
   const [bizDashOpen, setBizDashOpen] = useState(false)
@@ -586,6 +588,14 @@ export function SettingsDialog({
               >
                 <Search className="w-4 h-4 mr-2" /> Search for businesses
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-[var(--wasl-green)]/30 hover:bg-[var(--wasl-green)]/5"
+                onClick={() => setSpOpen(true)}
+              >
+                <Landmark className="w-4 h-4 mr-2" /> Register as Service Provider
+              </Button>
             </div>
 
             {/* How it works */}
@@ -627,6 +637,9 @@ export function SettingsDialog({
         businessId={activeBizId}
       />
       <BusinessSearchDialog open={bizSearchOpen} onOpenChange={setBizSearchOpen} />
+
+      {/* Service Provider registration dialog */}
+      <ServiceProviderDialog open={spOpen} onOpenChange={setSpOpen} />
     </Dialog>
   )
 }

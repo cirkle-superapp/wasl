@@ -55,6 +55,7 @@ model User {
   // Business
   ownedBusinesses   Business[]     @relation("BusinessOwner")
   businessMemberships BusinessMember[]
+  ownedServiceProviders ServiceProvider[] @relation("ServiceProviderOwner")
 }
 
 /// A phone number attached to a user account. A user can have multiple numbers
@@ -396,6 +397,117 @@ model BusinessGroup {
 
   @@index([businessId])
   @@index([visibility])
+}
+
+// ==========================================================================
+// Official Service Providers — banks, government ministries, utilities.
+// These are manually authenticated and approved by Wasl admin staff.
+// Once approved, they can broadcast official announcements to all users
+// within a specific country.
+//
+// Registration flow:
+//   1. User applies → uploads official registration documents + passes
+//      liveness test (selfie video) + ID document
+//   2. Wasl admin manually reviews → approves or rejects
+//   3. Once approved, the provider gets a verified badge + broadcast rights
+//
+// Broadcast flow:
+//   1. Provider creates an announcement (text/image)
+//   2. System delivers to ALL users whose phone country code matches
+//   3. Users see official announcements in a dedicated "Official" tab
+// ==========================================================================
+
+model ServiceProvider {
+  id                String   @id @default(cuid())
+  name              String   // e.g. "Ministry of Health", "National Bank of Egypt"
+  ownerId           String   // the user who registered the provider
+  type              String   @default("government") // government | bank | utility | telecom | healthcare
+  description       String   @default("")
+  avatarPath        String?
+  avatarColor       String?
+  // Official registration details
+  officialName      String?  // legal entity name
+  registrationNumber String? // government registration number
+  taxNumber         String?
+  // Country code for broadcast targeting (e.g. "+20" for Egypt)
+  // All users whose phone starts with this code receive broadcasts
+  countryCode       String   @default("+20")
+  // Verification documents
+  registrationDocPath String?  // official registration document
+  idDocPath           String?  // ID of the authorized representative
+  livenessVideoPath  String?  // selfie video for liveness check
+  livenessVerified   Boolean  @default(false)
+  // Approval state — manually reviewed by Wasl admin
+  status            String   @default("pending") // pending | approved | rejected
+  rejectionReason   String?
+  verified          Boolean  @default(false)
+  verifiedAt        DateTime?
+  verifiedBy        String?  // admin user ID who approved
+  // Broadcast settings
+  canBroadcast      Boolean  @default(false)  // can send announcements
+  // Contact info
+  contactPhone      String?
+  contactEmail      String?
+  website           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  owner     User                  @relation("ServiceProviderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  broadcasts ServiceProviderMessage[]
+
+  @@index([ownerId])
+  @@index([countryCode])
+  @@index([status])
+  @@index([type])
+}
+
+/// Official announcement from a verified service provider.
+/// Delivered to all users within the provider's country code.
+model ServiceProviderMessage {
+  id              String   @id @default(cuid())
+  providerId      String
+  // The announcement content
+  title           String
+  content         String
+  type            String   @default("announcement") // announcement | alert | notice | update
+  // Optional image attachment (data URL or path)
+  imagePath       String?
+  // Targeting
+  countryCode     String   // which country code this was sent to
+  // Delivery status
+  status          String   @default("sent") // sent | delivered
+  // Priority — higher priority shows at top
+  priority        Int      @default(0)
+  // Allows the provider to mark as "dismissed by users" (future feature)
+  createdAt       DateTime @default(now())
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt])
+  @@index([countryCode])
+}
+
+/// Tracks which users have seen which official announcement.
+/// Used for read receipts on broadcasts.
+model ServiceProviderMessageRead {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+/// Tracks which users have dismissed (closed) an official announcement.
+model ServiceProviderMessageDismissed {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  dismissedAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
 }
 
 /// Scheduled message — send at a future time (Cirkle-inspired scheduled-messages)

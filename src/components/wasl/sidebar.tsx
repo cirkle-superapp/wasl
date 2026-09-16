@@ -14,6 +14,7 @@ import {
   CheckCheck,
   Phone,
   Archive,
+  Landmark,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -24,6 +25,7 @@ import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AnnouncementsDialog } from './announcements-dialog'
 import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -57,6 +59,7 @@ export function Sidebar({
   const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
   const [loading, setLoading] = useState(true)
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
@@ -203,6 +206,20 @@ export function Sidebar({
         </Button>
       </div>
 
+      {/* Official Announcements button */}
+      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)]">
+        <button
+          onClick={() => setAnnouncementsOpen(true)}
+          className="w-full flex items-center gap-2 p-2 rounded-lg border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/5 hover:bg-[var(--wasl-green)]/10 transition-colors text-left"
+        >
+          <Landmark className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-foreground">Official Announcements</div>
+            <div className="text-[10px] text-muted-foreground">Government · Banks · Utilities</div>
+          </div>
+        </button>
+      </div>
+
       {/* Filter tabs */}
       <div className="flex gap-1 px-2 py-2 border-b border-border bg-[var(--wasl-sidebar-bg)]">
         {[
@@ -301,6 +318,7 @@ export function Sidebar({
       </div>
 
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
+      <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
     </div>
   )
 }
