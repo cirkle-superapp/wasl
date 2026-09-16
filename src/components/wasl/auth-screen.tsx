@@ -508,6 +508,22 @@ export function AuthScreen() {
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {mode === 'signup' ? 'Sign up' : 'Log in'}
             </Button>
+
+            {/* Forgot password link (login mode only) */}
+            {mode === 'login' && (
+              <div className="text-right -mt-1">
+                <button
+                  type="button"
+                  onClick={() => toast.info('Password reset coming soon. For demo, use username "demo" and password "demo123".')}
+                  className={cn(
+                    'text-xs hover:underline transition-colors',
+                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+                  )}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Divider */}

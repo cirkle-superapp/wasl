@@ -162,7 +162,7 @@ export function MessageInput({
   useEffect(() => {
     if (!textareaRef.current) return
     textareaRef.current.style.height = 'auto'
-    textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px'
+    textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
   }, [value])
 
   function emitTyping(typing: boolean) {
@@ -417,7 +417,7 @@ export function MessageInput({
               onKeyDown={onKeyDown}
               rows={1}
               placeholder="Type a message"
-              className="w-full resize-none bg-transparent outline-none text-sm leading-relaxed max-h-36 wasl-scroll py-1"
+              className="w-full resize-none bg-transparent outline-none text-sm leading-relaxed max-h-[120px] wasl-scroll py-1"
               disabled={sending}
             />
           )}

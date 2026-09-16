@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChatFast } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -78,7 +78,7 @@ export async function POST(
 
   const userMessage = `Recent conversation:\n${contextMessages}\n\nGenerate a short, natural reply from ${other.user.name}:`
 
-  const aiReply = await aiChat(systemPrompt, userMessage, 100)
+  const aiReply = await aiChatFast(systemPrompt, userMessage, 60)
 
   // Use AI reply if available, otherwise fall back to rule-based
   const reply = aiReply || generateFallbackReply(lastFromMe)

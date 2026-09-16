@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChatFast } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const userMessage = `Here's the recent conversation:\n${context}\n\nGenerate 3 short reply suggestions for "Me" to send next. Each on its own line:`
 
-  const aiResult = await aiChat(systemPrompt, userMessage, 150)
+  const aiResult = await aiChatFast(systemPrompt, userMessage, 100)
 
   if (aiResult) {
     const replies = aiResult

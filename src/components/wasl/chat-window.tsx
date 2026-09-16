@@ -877,6 +877,7 @@ export function ChatWindow({
   }
 
   if (!activeConversationId || !conversation) {
+    const conversationCount = conversations.length
     return (
       <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6 overflow-y-auto wasl-scroll">
         <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
@@ -885,26 +886,28 @@ export function ChatWindow({
             Welcome to Wasl
           </h2>
           <p className="text-sm text-muted-foreground">
-            Select a conversation to start chatting, or tap the + button to create a new chat.
+            {conversationCount > 0
+              ? `You have ${conversationCount} conversation${conversationCount === 1 ? '' : 's'}. Select one to start chatting.`
+              : 'Tap the + button to create a new chat.'}
           </p>
           {/* Feature hint cards */}
           <div className="grid grid-cols-2 gap-2 w-full mt-2">
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-green)]/30 transition-colors">
               <Lock className="w-4 h-4 text-[var(--wasl-green)] mb-1" />
               <div className="text-[11px] font-medium text-foreground">Protected messages</div>
               <div className="text-[10px] text-muted-foreground leading-tight">Lock icon in composer</div>
             </div>
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-teal)]/30 transition-colors">
               <Paperclip className="w-4 h-4 text-[var(--wasl-teal)] mb-1" />
               <div className="text-[11px] font-medium text-foreground">Drag & drop</div>
               <div className="text-[10px] text-muted-foreground leading-tight">Images up to 1.5MB</div>
             </div>
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-amber-500/30 transition-colors">
               <Sparkles className="w-4 h-4 text-amber-500 mb-1" />
-              <div className="text-[11px] font-medium text-foreground">AI summary</div>
-              <div className="text-[10px] text-muted-foreground leading-tight">In chat menu</div>
+              <div className="text-[11px] font-medium text-foreground">AI powered</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">Summary, tone, replies</div>
             </div>
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-sky-500/30 transition-colors">
               <Search className="w-4 h-4 text-sky-500 mb-1" />
               <div className="text-[11px] font-medium text-foreground">Search</div>
               <div className="text-[10px] text-muted-foreground leading-tight">Ctrl+K palette</div>
