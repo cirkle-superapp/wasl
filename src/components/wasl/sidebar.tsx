@@ -13,6 +13,7 @@ import {
   Trash2,
   CheckCheck,
   Phone,
+  Archive,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -112,6 +113,20 @@ export function Sidebar({
     }
   }
 
+  async function handleArchive(id: string) {
+    try {
+      await fetch(`/api/conversations/${id}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      })
+      removeConversation(id)
+      toast.success('Chat archived')
+    } catch {
+      toast.error('Failed to archive')
+    }
+  }
+
   return (
     <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)]">
       {/* Header */}
@@ -191,21 +206,33 @@ export function Sidebar({
       {/* Filter tabs */}
       <div className="flex gap-1 px-2 py-2 border-b border-border bg-[var(--wasl-sidebar-bg)]">
         {[
-          { key: 'all', label: 'All' },
-          { key: 'unread', label: 'Unread' },
-          { key: 'groups', label: 'Groups' },
+          { key: 'all', label: 'All', count: conversations.length },
+          { key: 'unread', label: 'Unread', count: conversations.filter(c => (c.unreadCount || 0) > 0).length },
+          { key: 'groups', label: 'Groups', count: conversations.filter(c => c.isGroup).length },
         ].map((f) => (
           <button
             key={f.key}
             onClick={() => setFilter(f.key as any)}
             className={cn(
-              'px-3 py-1 rounded-full text-xs font-medium transition-colors',
+              'px-3 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5',
               filter === f.key
                 ? 'bg-[var(--wasl-teal)] text-white'
                 : 'bg-muted text-foreground hover:bg-muted/80'
             )}
           >
             {f.label}
+            {f.count > 0 && (
+              <span className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded-full font-semibold',
+                filter === f.key
+                  ? 'bg-white/20 text-white'
+                  : f.key === 'unread'
+                    ? 'bg-[var(--wasl-green)] text-white'
+                    : 'bg-muted-foreground/20 text-muted-foreground'
+              )}>
+                {f.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -238,6 +265,7 @@ export function Sidebar({
               onlineUserIds={onlineUserIds}
               onClick={() => setActiveConversation(c.id)}
               onDelete={() => handleDeleteConversation(c.id)}
+              onArchive={() => handleArchive(c.id)}
             />
           ))
         )}
@@ -283,12 +311,14 @@ function ConversationRow({
   onlineUserIds,
   onClick,
   onDelete,
+  onArchive,
 }: {
   conversation: Conversation
   active: boolean
   onlineUserIds: Set<string>
   onClick: () => void
   onDelete: () => void
+  onArchive: () => void
 }) {
   const last = conversation.lastMessage
   const otherUser = !conversation.isGroup
@@ -446,7 +476,10 @@ function ConversationRow({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }}>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchive() }}>
+                    <Archive className="w-4 h-4 mr-2" /> Archive chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }} className="text-destructive focus:text-destructive">
                     <Trash2 className="w-4 h-4 mr-2" /> Delete chat
                   </DropdownMenuItem>
                 </DropdownMenuContent>

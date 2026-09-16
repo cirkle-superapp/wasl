@@ -100,6 +100,9 @@ model Participant {
   // When true, desktop notifications and unread badge increments are
   // suppressed for this conversation (per-user mute setting).
   muted          Boolean  @default(false)
+  // When true, the conversation is archived (hidden from the main list).
+  // Can be unarchived by searching or visiting the Archived tab.
+  archived        Boolean  @default(false)
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)

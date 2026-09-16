@@ -203,27 +203,27 @@
 
 /* Cirkle dark mode — charcoal background + teal accents (Cirkle app style) */
 .dark[data-theme="cirkle"] {
-  --wasl-green: #00baa7;               /* Cirkle teal-500 — brighter for dark mode */
+  --wasl-green: #14c4a8;               /* Cirkle teal — brighter for better contrast */
   --wasl-green-dark: #009588;
   --wasl-teal: #2a6a7a;
   --wasl-teal-dark: #1a4a5a;
-  --wasl-bubble-out: #1a3a3a;          /* dark teal for outgoing */
-  --wasl-bubble-in: #1f1a14;           /* dark cream/charcoal for incoming */
-  --wasl-chat-bg: #0f0d0a;             /* near-black cream */
-  --wasl-sidebar-bg: #1a1a14;          /* Cirkle charcoal */
+  --wasl-bubble-out: #1a3f3a;          /* dark teal for outgoing — slightly brighter */
+  --wasl-bubble-in: #252018;           /* dark cream — better contrast from bg */
+  --wasl-chat-bg: #0d0b08;             /* near-black with warm tint */
+  --wasl-sidebar-bg: #181712;          /* Cirkle charcoal — slightly warmer */
 
-  --background: oklch(0.10 0.005 70);
-  --foreground: oklch(0.95 0.02 40);
-  --card: oklch(0.14 0.01 70);
-  --card-foreground: oklch(0.95 0.02 40);
-  --popover: oklch(0.14 0.01 70);
-  --popover-foreground: oklch(0.95 0.02 40);
-  --primary: oklch(0.70 0.10 190);            /* Cirkle teal (bright for dark) */
+  --background: oklch(0.09 0.005 70);
+  --foreground: oklch(0.96 0.02 40);          /* brighter text for contrast */
+  --card: oklch(0.15 0.01 70);
+  --card-foreground: oklch(0.96 0.02 40);
+  --popover: oklch(0.15 0.01 70);
+  --popover-foreground: oklch(0.96 0.02 40);
+  --primary: oklch(0.72 0.10 190);            /* Cirkle teal — brighter for dark */
   --primary-foreground: oklch(0.14 0.01 70);
-  --secondary: oklch(0.20 0.01 70);
-  --secondary-foreground: oklch(0.95 0.02 40);
-  --muted: oklch(0.18 0.01 70);
-  --muted-foreground: oklch(0.70 0.03 40);
+  --secondary: oklch(0.22 0.01 70);
+  --secondary-foreground: oklch(0.96 0.02 40);
+  --muted: oklch(0.20 0.01 70);
+  --muted-foreground: oklch(0.72 0.03 40);   /* brighter muted text */
   --accent: oklch(0.62 0.12 350);             /* rose */
   --accent-foreground: oklch(0.98 0.01 40);
   --destructive: oklch(0.65 0.22 25);

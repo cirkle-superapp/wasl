@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const q = (searchParams.get('q') || '').trim()
 
   const participations = await db.participant.findMany({
-    where: { userId: session.id },
+    where: { userId: session.id, archived: false },
     select: { conversationId: true },
   })
   const conversationIds = participations.map((p) => p.conversationId)
