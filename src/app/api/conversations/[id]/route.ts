@@ -61,14 +61,18 @@ export async function GET(
     displayAvatarColor = otherUser?.avatarColor ?? displayAvatarColor
   }
 
+  const me = conversation.participants.find((p) => p.userId === session.id)
+
   return NextResponse.json({
     id: conversation.id,
     name: displayName,
     avatar: displayAvatar,
     avatarColor: displayAvatarColor,
     isGroup: conversation.isGroup,
+    isAdmin: me?.role === 'admin',
     participants: conversation.participants.map((p) => ({
       userId: p.userId,
+      role: p.role,
       name: p.user.name,
       phone: p.user.phone,
       avatar: p.user.avatar,
@@ -82,7 +86,7 @@ export async function GET(
   })
 }
 
-// PATCH /api/conversations/:id - update conversation (rename group)
+// PATCH /api/conversations/:id - update conversation (rename group, admin only)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -107,16 +111,45 @@ export async function PATCH(
       { status: 400 }
     )
   }
-  const isMember = conversation.participants.some(
-    (p) => p.userId === session.id
-  )
-  if (!isMember) {
+  const me = conversation.participants.find((p) => p.userId === session.id)
+  if (!me) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  if (me.role !== 'admin') {
+    return NextResponse.json(
+      { error: 'Only group admins can rename the group' },
+      { status: 403 }
+    )
+  }
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  if (!trimmed) {
+    return NextResponse.json(
+      { error: 'Group name must not be empty' },
+      { status: 400 }
+    )
+  }
+  if (trimmed.length > 100) {
+    return NextResponse.json(
+      { error: 'Group name must be 100 characters or fewer' },
+      { status: 400 }
+    )
   }
   const updated = await db.conversation.update({
     where: { id },
-    data: { name: name ? String(name).trim() : conversation.name },
+    data: { name: trimmed },
   })
+
+  // Emit a system message: "X changed the group name to Y"
+  await db.message.create({
+    data: {
+      conversationId: id,
+      senderId: session.id,
+      content: `${session.name} changed the group name to "${trimmed}"`,
+      type: 'system',
+      status: 'read',
+    },
+  })
+
   return NextResponse.json({ ok: true, conversation: updated })
 }
 

@@ -4,8 +4,20 @@ import { getSession } from '@/lib/auth'
 
 export const runtime = 'nodejs'
 
-// GET /api/conversations/[id]/search?q=...
-// Search messages within a conversation by content.
+// GET /api/conversations/[id]/search?q=...&from=YYYY-MM-DD&to=YYYY-MM-DD
+// Search messages within a conversation by content and/or date range.
+//
+// - `q`    : substring filter (case-insensitive in SQLite/libSQL).
+// - `from` : only messages on or after this date (inclusive lower bound).
+// - `to`   : only messages on or before this date (inclusive upper bound,
+//            extended to end-of-day so a whole-day `to=2026-12-31` includes
+//            messages sent at 23:59 that day).
+//
+// Either `q` or a date bound may be omitted. When ALL of `q`/`from`/`to` are
+// missing the response is an empty `results: []` (no work to do).
+//
+// Invalid date strings are silently ignored rather than rejected with a 400 —
+// this keeps the UI resilient to partial/typo'd `from`/`to` query params.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +37,29 @@ export async function GET(
   }
   const { searchParams } = new URL(req.url)
   const q = (searchParams.get('q') || '').trim()
-  if (!q) {
+  const fromRaw = searchParams.get('from')
+  const toRaw = searchParams.get('to')
+
+  // Parse the date bounds: keep only valid ones. An invalid date string is
+  // silently dropped (per the task spec — we don't 400 on bad input).
+  let from: Date | undefined
+  let to: Date | undefined
+  if (fromRaw) {
+    const d = new Date(fromRaw)
+    if (!Number.isNaN(d.getTime())) from = d
+  }
+  if (toRaw) {
+    const d = new Date(toRaw)
+    if (!Number.isNaN(d.getTime())) {
+      // Inclusive upper bound: extend to the last millisecond of the day so
+      // messages sent at 23:59 on the `to` date are still included.
+      d.setHours(23, 59, 59, 999)
+      to = d
+    }
+  }
+
+  // Nothing to search for: no text query AND no valid date bound.
+  if (!q && !from && !to) {
     return NextResponse.json({ results: [] })
   }
 
@@ -38,14 +72,21 @@ export async function GET(
   })
   const deletedIds = new Set(deletedForMeRows.map((d) => d.messageId))
 
+  // Build the createdAt range clause only with the bounds that were provided
+  // (Prisma happily accepts an empty object, but it's cleaner to omit it).
+  const createdAt: { gte?: Date; lte?: Date } = {}
+  if (from) createdAt.gte = from
+  if (to) createdAt.lte = to
+
   // SQLite/libSQL's `contains` is case-insensitive by default for ASCII,
   // so we don't need `mode: 'insensitive'` (which isn't supported by the
   // libSQL adapter anyway).
   const messages = await db.message.findMany({
     where: {
       conversationId: id,
-      content: { contains: q },
+      ...(q ? { content: { contains: q } } : {}),
       type: { not: 'system' },
+      ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: 50,

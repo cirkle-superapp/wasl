@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
         lastSeen: p.user.lastSeen,
         about: p.user.about,
         verified: p.user.verified,
+        role: p.role,
       })),
       lastMessage: lastMessage
         ? {
@@ -236,6 +237,8 @@ export async function POST(req: NextRequest) {
         participants: {
           create: allParticipantIds.map((uid) => ({
             userId: uid,
+            // The group creator is an admin; everyone else is a regular member.
+            role: uid === session.id ? 'admin' : 'member',
           })),
         },
       },

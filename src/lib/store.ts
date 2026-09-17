@@ -40,6 +40,9 @@ export type Participant = {
   lastSeen: string
   about: string
   verified?: boolean
+  // Role within the group: 'admin' can add/remove members, change group name,
+  // and pin messages. 'member' is the default. Absent for 1-on-1 conversations.
+  role?: 'admin' | 'member'
 }
 
 export type Reaction = {

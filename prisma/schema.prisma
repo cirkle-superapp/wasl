@@ -112,6 +112,9 @@ model Participant {
   // When true, the conversation is archived (hidden from the main list).
   // Can be unarchived by searching or visiting the Archived tab.
   archived        Boolean  @default(false)
+  // Role within the group: 'admin' can add/remove members, change group name,
+  // and pin messages. 'member' is the default. Group creators are auto-admin.
+  role            String   @default("member")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)

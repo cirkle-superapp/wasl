@@ -1999,4 +1999,4 @@
   1999→  2. `src/components/wasl/message-bubble.tsx` — `wasl-msg-in` entrance class on all bubble types (replaces `wasl-animate-in`), slide-in toolbar via `transition + translate-x-[calc(100%_+_8px)]` + `group-hover/msg:*` + `focus-within:*`, optional `prevSameSender` prop + `wasl-bubble-grouped-out`/`wasl-bubble-grouped-in` classes for the WhatsApp-style tail effect.
   2000→  3. `src/components/wasl/sidebar.tsx` — selected-conversation left accent bar (3px, slides in via `wasl-conv-accent`), `wasl-badge-bounce` + `key={count}` on the unread badge, `wasl-conv-row` class for subtle 1.005 scale + shadow on hover (disabled for active rows), `overflow-x-hidden` on the list container.
 
-[showing lines 1-2000 of 2394; use offset=2001 with limit to continue reading]
+[showing lines 1-2000 of 2598; use offset=2001 with limit to continue reading]
