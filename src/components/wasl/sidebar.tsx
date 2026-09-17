@@ -15,6 +15,7 @@ import {
   Phone,
   Archive,
   Landmark,
+  Contact as ContactIcon,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AnnouncementsDialog } from './announcements-dialog'
+import { ContactsDialog } from './contacts-dialog'
 import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -60,6 +62,7 @@ export function Sidebar({
   const [loading, setLoading] = useState(true)
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
+  const [contactsOpen, setContactsOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
@@ -211,8 +214,8 @@ export function Sidebar({
         </Button>
       </div>
 
-      {/* Official Announcements button */}
-      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)]">
+      {/* Official Announcements + Contacts buttons */}
+      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)] space-y-1.5">
         <button
           onClick={() => setAnnouncementsOpen(true)}
           className="w-full flex items-center gap-2 p-2 rounded-lg border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/5 hover:bg-[var(--wasl-green)]/10 transition-colors text-left"
@@ -221,6 +224,16 @@ export function Sidebar({
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-foreground">Official Announcements</div>
             <div className="text-[10px] text-muted-foreground">Government · Banks · Utilities</div>
+          </div>
+        </button>
+        <button
+          onClick={() => setContactsOpen(true)}
+          className="w-full flex items-center gap-2 p-2 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors text-left"
+        >
+          <ContactIcon className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-foreground">Contacts</div>
+            <div className="text-[10px] text-muted-foreground">Address book</div>
           </div>
         </button>
       </div>
@@ -324,6 +337,29 @@ export function Sidebar({
 
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
       <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
+      <ContactsDialog
+        open={contactsOpen}
+        onOpenChange={setContactsOpen}
+        onStartChat={async (userId) => {
+          // Start a 1-on-1 chat with the contact
+          try {
+            const res = await fetch('/api/conversations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ participantIds: [userId] }),
+            })
+            const data = await res.json()
+            if (res.ok && data.id) {
+              setActiveConversation(data.id)
+              setContactsOpen(false)
+              // Refresh conversation list
+              loadConversations()
+            }
+          } catch {
+            toast.error('Failed to start chat')
+          }
+        }}
+      />
     </div>
   )
 }

@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Loader2, Link2, Users } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket'
 import { Sidebar } from './sidebar'
@@ -11,6 +13,15 @@ import { NewChatDialog } from './new-chat-dialog'
 import { SettingsDialog } from './settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 import { QuickReplyToast } from './quick-reply-toast'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import type { ChatMessage, Conversation } from '@/lib/store'
 
 export function ChatApp({ user }: { user: any }) {
@@ -420,6 +431,161 @@ export function ChatApp({ user }: { user: any }) {
       <NewChatDialog open={newChatOpen} onOpenChange={setNewChatOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <KeyboardShortcutsDialog />
+
+      {/* Invite-link join dialog. Reads `?join={token}` from the URL so the
+          same link works whether the visitor is logged in already or signs
+          up / logs in fresh (the URL is preserved across router.refresh()). */}
+      <Suspense fallback={null}>
+        <JoinViaInviteDialog />
+      </Suspense>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// JoinViaInviteDialog — when the URL contains `?join={token}`, prompts the
+// logged-in user to confirm joining the group. On accept, POSTs to
+// /api/conversations/join with the token. After the request resolves (either
+// success or failure), the `?join=` param is stripped from the URL so the
+// dialog doesn't re-show on the next render.
+//
+// State is held by the *inner* component, which is keyed by the token so it
+// remounts cleanly whenever the URL changes (avoids setState-in-effect).
+// ---------------------------------------------------------------------------
+
+function JoinViaInviteDialog() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get('join')
+
+  if (!token) return null
+  return <JoinViaInviteDialogInner key={token} token={token} />
+}
+
+function JoinViaInviteDialogInner({ token }: { token: string }) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const { setActiveConversation, setConversations } = useWaslStore()
+  const [joining, setJoining] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // Strip `?join=...` from the URL without changing anything else (preserves
+  // the rest of the query string if any).
+  const clearJoinParam = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('join')
+    const qs = params.toString()
+    router.replace(qs ? `/?${qs}` : '/', { scroll: false })
+  }, [router, searchParams])
+
+  async function handleAccept() {
+    setJoining(true)
+    setErrorMessage(null)
+    try {
+      const res = await fetch('/api/conversations/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setErrorMessage(data?.error || 'Invalid or expired invite link')
+        setJoining(false)
+        return
+      }
+      // Refresh the conversation list so the newly-joined group appears in
+      // the sidebar, then set it as active so the chat window opens.
+      try {
+        const convRes = await fetch('/api/conversations', { cache: 'no-store' })
+        if (convRes.ok) {
+          const convData = await convRes.json()
+          if (Array.isArray(convData.conversations)) {
+            setConversations(convData.conversations)
+          }
+        }
+      } catch {
+        // ignore — the join itself succeeded
+      }
+      if (data?.conversationId) {
+        setActiveConversation(data.conversationId)
+      }
+      const alreadyMember = !!data?.alreadyMember
+      toast.success(
+        alreadyMember
+          ? "You're already a member of this group"
+          : 'Joined the group via invite link'
+      )
+      // Clearing the URL param unmounts this component naturally.
+      clearJoinParam()
+    } catch {
+      setErrorMessage('Network error')
+      setJoining(false)
+    }
+  }
+
+  function handleDecline() {
+    clearJoinParam()
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) handleDecline()
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-9 h-9 rounded-full bg-[var(--wasl-teal)]/15 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] flex items-center justify-center">
+              <Link2 className="w-4 h-4" />
+            </div>
+            <DialogTitle>Join group?</DialogTitle>
+          </div>
+          <DialogDescription>
+            You&apos;ve been invited to join a Wasl group via an invite link.
+            {errorMessage ? (
+              <span className="block mt-2 text-destructive">{errorMessage}</span>
+            ) : (
+              <>
+                {' '}
+                Once you accept, you&apos;ll be added as a member and can
+                start sending messages.
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-md bg-muted/40 border border-border/60 p-2.5 text-xs text-muted-foreground flex items-center gap-2">
+          <Users className="w-3.5 h-3.5 shrink-0" />
+          <code className="break-all">
+            {typeof window !== 'undefined'
+              ? `${window.location.origin}/?join=${token}`
+              : `/?join=${token}`}
+          </code>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={handleDecline}
+            disabled={joining}
+          >
+            Decline
+          </Button>
+          <Button
+            onClick={handleAccept}
+            disabled={joining}
+            className="bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white"
+          >
+            {joining ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Joining…
+              </>
+            ) : (
+              'Accept'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

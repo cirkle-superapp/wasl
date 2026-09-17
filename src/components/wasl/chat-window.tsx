@@ -132,6 +132,14 @@ export function ChatWindow({
     !!otherUser &&
     (onlineUserIds.has(otherUser.userId) || otherUser.online)
 
+  // Whether the current user is an admin of the active group conversation.
+  // Used to gate the admin-pinning flow (admins can pin/unpin ANY message in
+  // a group, not just their own). 1-on-1 conversations have no admin role —
+  // only the message sender can pin there.
+  const isGroupAdmin = !!conversation?.isGroup && !!conversation.participants.find(
+    (p) => p.userId === user?.id && p.role === 'admin'
+  )
+
   // Typing users (excluding me)
   const typingUsers = activeConversationId
     ? Object.entries(typingByConversation[activeConversationId] || {})
@@ -1055,17 +1063,28 @@ export function ChatWindow({
         </div>
       )}
       {/* Pinned message bar — shows the currently pinned message at the top
-          of the chat. Clicking it scrolls to the pinned message. */}
+          of the chat. Clicking it scrolls to the pinned message. The "Unpin"
+          button is only visible to the message sender and (in groups) to
+          admins — non-admins viewing someone else's message cannot unpin. */}
       {messages.find((m) => m.pinned) && (() => {
         const pinned = messages.find((m) => m.pinned)!
         const pinnedSender = conversation.participants.find((p) => p.userId === pinned.senderId)?.name
+        // Mirror the API's authorization matrix: sender OR (in a group) admin.
+        const canUnpin = pinned.senderId === user?.id || isGroupAdmin
         return (
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => {
               window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: pinned.id }))
             }}
-            className="wasl-pinned-bar w-full flex items-center gap-2.5 px-4 py-2 bg-[var(--wasl-green)]/5 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: pinned.id }))
+              }
+            }}
+            className="wasl-pinned-bar w-full flex items-center gap-2.5 px-4 py-2 bg-[var(--wasl-green)]/5 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin cursor-pointer"
           >
             <Pin className="w-4 h-4 text-[var(--wasl-green)] shrink-0 rotate-45" />
             <div className="flex-1 min-w-0">
@@ -1077,14 +1096,20 @@ export function ChatWindow({
                 {pinned.content.length > 80 ? '…' : ''}
               </div>
             </div>
-            <PinOff
-              className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/pin:opacity-100 transition-opacity shrink-0"
-              onClick={(e) => {
-                e.stopPropagation()
-                handlePinMessage(pinned)
-              }}
-            />
-          </button>
+            {canUnpin && (
+              <button
+                type="button"
+                title="Unpin message"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wasl-green)]/40"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handlePinMessage(pinned)
+                }}
+              >
+                <PinOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         )
       })()}
       {/* Chat header */}
@@ -1314,6 +1339,9 @@ export function ChatWindow({
                       starred={m.starred}
                       reactions={m.reactions}
                       currentUserId={user?.id}
+                      // The sender can always pin/unpin their own message; in a
+                      // group, admins can also pin/unpin anyone's message.
+                      canPin={m.senderId === user?.id || isGroupAdmin}
                     />
                   </div>
                 </div>

@@ -28,6 +28,8 @@ import {
   Loader2,
   Crown,
   Info,
+  Link2,
+  QrCode,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -137,6 +139,16 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarRemoving, setAvatarRemoving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // --- Group invite link (admin generates / revokes; members can view+copy)
+  // `inviteInfo` is null while loading, { inviteUrl: null } when no token has
+  // been generated, and { inviteUrl, token, setAt } when an active link exists.
+  const [inviteInfo, setInviteInfo] = useState<{
+    inviteUrl: string | null
+    token: string | null
+    setAt: string | null
+  } | null>(null)
+  const [inviteBusy, setInviteBusy] = useState<'generate' | 'revoke' | null>(null)
+  const [copiedInvite, setCopiedInvite] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -147,6 +159,9 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     setLocalParticipants(null)
     setLocalDescription(undefined)
     setLocalAvatar(undefined)
+    setInviteInfo(null)
+    setInviteBusy(null)
+    setCopiedInvite(false)
   }, [activeConversationId])
 
   const participants: Participant[] =
@@ -180,6 +195,45 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     }
   }, [activeConversationId])
 
+  const loadMuted = useCallback(async () => {
+    if (!activeConversationId) return
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/mute`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      setMuted(!!data.muted)
+    } catch {
+      // ignore
+    }
+  }, [activeConversationId])
+
+  // Load the current invite link for this conversation (any member can view
+  // it; admins additionally get generate / revoke controls in the UI).
+  const loadInvite = useCallback(async () => {
+    if (!activeConversationId) return
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/invite`,
+        { cache: 'no-store' }
+      )
+      if (!res.ok) {
+        setInviteInfo(null)
+        return
+      }
+      const data = await res.json()
+      setInviteInfo({
+        inviteUrl: data.inviteUrl ?? null,
+        token: data.token ?? null,
+        setAt: data.setAt ?? null,
+      })
+    } catch {
+      setInviteInfo(null)
+    }
+  }, [activeConversationId])
+
   useEffect(() => {
     async function loadMedia() {
       if (!activeConversationId) return
@@ -203,22 +257,8 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     loadMedia()
     loadCapture()
     loadMuted()
-  }, [activeConversationId, loadCapture])
-
-  const loadMuted = useCallback(async () => {
-    if (!activeConversationId) return
-    try {
-      const res = await fetch(
-        `/api/conversations/${activeConversationId}/mute`,
-        { cache: 'no-store' }
-      )
-      if (!res.ok) return
-      const data = await res.json()
-      setMuted(!!data.muted)
-    } catch {
-      // ignore
-    }
-  }, [activeConversationId])
+    loadInvite()
+  }, [activeConversationId, loadCapture, loadMuted, loadInvite])
 
   async function toggleMute() {
     const next = !muted
@@ -511,6 +551,113 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       toast.error('Network error')
     } finally {
       setAvatarRemoving(false)
+    }
+  }
+
+  // Generate (or regenerate) the group invite link (admin only). Generates a
+  // fresh token; any previous link stops working immediately. No confirm for
+  // the first generation — but if a link already exists, we ask the admin to
+  // confirm that the old link should stop working.
+  async function handleGenerateInvite() {
+    if (!activeConversationId) return
+    if (!conversation?.isGroup || !isAdmin) return
+    if (inviteInfo?.inviteUrl) {
+      if (
+        !confirm(
+          'Generate a new invite link? The current link will stop working immediately.'
+        )
+      )
+        return
+    }
+    setInviteBusy('generate')
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/invite`,
+        { method: 'POST' }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to generate invite link')
+        return
+      }
+      const data = await res.json()
+      setInviteInfo({
+        inviteUrl: data.inviteUrl ?? null,
+        token: data.token ?? null,
+        setAt: data.setAt ?? null,
+      })
+      toast.success(
+        inviteInfo?.inviteUrl
+          ? 'New invite link generated'
+          : 'Invite link created'
+      )
+      void refreshConversation()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setInviteBusy(null)
+    }
+  }
+
+  // Revoke the group invite link (admin only). The existing token is cleared
+  // so the link stops working immediately. Requires confirmation.
+  async function handleRevokeInvite() {
+    if (!activeConversationId) return
+    if (!conversation?.isGroup || !isAdmin) return
+    if (!inviteInfo?.token) return
+    if (
+      !confirm(
+        'Revoke this invite link? Anyone who tries to use it will get an "invalid or expired" error.'
+      )
+    )
+      return
+    setInviteBusy('revoke')
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}/invite`,
+        { method: 'DELETE' }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to revoke invite link')
+        return
+      }
+      setInviteInfo({ inviteUrl: null, token: null, setAt: null })
+      toast.success('Invite link revoked')
+      void refreshConversation()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setInviteBusy(null)
+    }
+  }
+
+  // Copy the invite link to the clipboard. Builds the absolute URL from the
+  // token so it works when shared externally (the API returns a relative
+  // "/join/{token}" path; we transform it into "<origin>/?join={token}" so
+  // it loads the join dialog when visited).
+  async function handleCopyInvite() {
+    if (!inviteInfo?.token) return
+    const absolute = `${window.location.origin}/?join=${encodeURIComponent(inviteInfo.token)}`
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(absolute)
+      } else {
+        // Fallback for older browsers / insecure contexts.
+        const ta = document.createElement('textarea')
+        ta.value = absolute
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
+      setCopiedInvite(true)
+      toast.success('Invite link copied to clipboard')
+      setTimeout(() => setCopiedInvite(false), 2000)
+    } catch {
+      toast.error('Failed to copy link')
     }
   }
 
@@ -820,6 +967,117 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
               >
                 <UserPlus className="w-4 h-4 mr-2" /> Add member
               </Button>
+            )}
+          </div>
+        )}
+
+        {/* Invite link (group only — admins can generate / revoke, members
+            can view + copy the active link). */}
+        {conversation.isGroup && (
+          <div className="bg-muted/30 rounded-lg p-3 border border-border/60">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <Link2 className="w-3.5 h-3.5" /> Invite link
+              </div>
+              {inviteInfo?.setAt && (
+                <span className="text-[10px] text-muted-foreground normal-case tracking-normal">
+                  {formatChatTimestamp(inviteInfo.setAt)}
+                </span>
+              )}
+            </div>
+
+            {inviteInfo === null ? (
+              // Loading placeholder — same height as the populated card.
+              <div className="h-9 rounded-md bg-muted/40 animate-pulse" />
+            ) : inviteInfo.inviteUrl && inviteInfo.token ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <QrCode className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+                  <code className="text-xs break-all bg-background/70 dark:bg-background/40 px-1.5 py-0.5 rounded border border-border/60 flex-1 min-w-0">
+                    {`${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${inviteInfo.token}`}
+                  </code>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={handleCopyInvite}
+                    title="Copy invite link"
+                  >
+                    {copiedInvite ? (
+                      <>
+                        <Info className="w-3.5 h-3.5 mr-1.5 text-[var(--wasl-green)]" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 mr-1.5" />
+                        Copy link
+                      </>
+                    )}
+                  </Button>
+                  {isAdmin && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-[var(--wasl-teal)]/10"
+                        onClick={handleGenerateInvite}
+                        disabled={inviteBusy !== null}
+                        title="Generate a new link (old link stops working)"
+                      >
+                        {inviteBusy === 'generate' ? (
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Link2 className="w-3.5 h-3.5 mr-1.5" />
+                        )}
+                        Reset link
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={handleRevokeInvite}
+                        disabled={inviteBusy !== null}
+                        title="Revoke the invite link"
+                      >
+                        {inviteBusy === 'revoke' ? (
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                        )}
+                        Revoke
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : isAdmin ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  No invite link yet. Generate one to let anyone with the link
+                  join this group.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7"
+                  onClick={handleGenerateInvite}
+                  disabled={inviteBusy !== null}
+                >
+                  {inviteBusy === 'generate' ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Link2 className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Generate link
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No active invite link. Ask a group admin to generate one.
+              </p>
             )}
           </div>
         )}

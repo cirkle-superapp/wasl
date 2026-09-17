@@ -3255,3 +3255,235 @@ Improved the typing indicator in the chat window:
 - Add group invite link / QR code
 - Add message star/filter view
 - Add contact list / address book
+
+---
+Task ID: 34-a
+Agent: general-purpose (admin message pinning)
+Task: Extend message pinning so group admins can pin ANY message in a group (not just their own). Update the pin API authorization to use the `Participant.role` field, surface a Pin button + Pinned indicator in the message-bubble, gate the pinned banner Unpin button to admins/sender, and emit system messages ("X pinned/unpinned a message") when an admin acts on someone else's message.
+
+Work Log:
+- Read `worklog.md` (Tasks 31, 32, 33) and confirmed established patterns: `Message.pinned Boolean @default(false)` + `Participant.role String @default("member")` already in `prisma/schema.prisma`; admin-only PATCH at `src/app/api/conversations/[id]/route.ts` (uses `me.role !== 'admin'`); `Conversation.isAdmin` flag returned by `GET /api/conversations/[id]`; `Conversation.participants[].role` returned by both the list and single-conversation endpoints; `ChatMessage.pinned` field on the store type; `wasl:jump-to-message` window-event contract; `message:reacted` socket relay (already broadcast by the chat-service to all clients in a conversation room) re-used as the cross-client pin sync signal (the existing `onMessageReacted` handler in chat-window refetches the single message and updates `pinned` state via `updateMessage`).
+- Verified the dev server was down; restarted it with the worklog's `setsid -f bash -c 'exec ./node_modules/.bin/next dev -p 3000 …'` pattern.
+
+Step 1 — Pin API authorization rewrite (`src/app/api/messages/[id]/pin/route.ts`, MODIFIED):
+- Now fetches the membership row's `role` AND the parent conversation's `isGroup` flag (single extra lightweight `db.conversation.findUnique({ select: { isGroup: true } })` — `select` keeps it to one column).
+- Authorization matrix:
+  - 1-on-1: only the message SENDER can pin/unpin (unchanged behaviour).
+  - Group: the message sender OR any admin (`role === 'admin'`) can pin/unpin ANY message.
+  - Anyone else → 403 with a context-aware error message: `"Only the sender or a group admin can pin this message"` (group) or `"You can only pin your own messages"` (1-on-1).
+- "Only one pinned message per conversation" rule preserved — pinning a new message unpins the previously-pinned one (now also captures the previously-pinned message id via `findFirst` so the client can refresh both rows through the existing `message:reacted` socket relay; the client already optimistically unpins others via `handlePinMessage`).
+- Optional system messages (point #5 of the task): when an admin (`isAdmin && !isSender`) pins/unpins someone ELSE's message in a group AND the target message isn't itself a `system`-type message, the API creates a `type='system'` row with content `"X pinned a message"` / `"X unpinned a message"` so the action is visible to all participants in the chat timeline. Sender-pinning-own-message stays silent (matches the existing 1-on-1 behaviour and avoids log noise for the common case).
+- The POST handler still returns `{ pinned: boolean }` (unchanged contract) so the existing optimistic update + socket relay in chat-window works without modification.
+
+Step 2 — MessageBubble: Pin button + Pinned indicator + canPin prop (`src/components/wasl/message-bubble.tsx`, MODIFIED):
+- Added a `canPin?: boolean` prop. When undefined, behaviour falls back to "show Pin in context menu if `onPin` is set" (back-compat for any future caller) — but chat-window now always passes a computed value.
+- Hover toolbar: added a new Pin/Unpin `ToolbarButton` (lucide `Pin` when not pinned, `PinOff` when pinned) between Delete and the closing `</div>`. Rendered only when `onPin && canPin` so non-admins viewing someone else's message in a group see no Pin affordance.
+- Pinned indicator: added a small rotated-Pin badge at the top corner of the bubble (`absolute -top-1.5 z-10 w-5 h-5 rounded-full`). On outgoing bubbles it sits on the LEFT (mirroring the Lock badge on the right) with a `bg-[var(--wasl-teal)]` fill + white icon; on incoming bubbles it sits on the RIGHT with a white/dark fill + teal/green icon. Visible to EVERYONE (pinned state is a conversation-wide fact, not per-user). Hidden on `system`-type messages so the badge doesn't overlap the system bubble.
+- Context menu: the existing Pin/Unpin `ContextMenuItem` now also requires `canPin` (was `onPin &&` → now `onPin && canPin &&`), so the right-click menu matches the toolbar's authorization gating.
+
+Step 3 — ChatWindow: compute `isGroupAdmin` + pass `canPin` + redesign the pinned banner (`src/components/wasl/chat-window.tsx`, MODIFIED):
+- Added a derived `isGroupAdmin` boolean near the `otherUser`/`isOnline` derivation: `!!conversation?.isGroup && !!conversation.participants.find((p) => p.userId === user?.id && p.role === 'admin')`. Uses the existing `Participant.role` field already populated on the store's `Conversation` type — no API changes needed.
+- Per-message `canPin` prop passed to `<MessageBubble>`: `m.senderId === user?.id || isGroupAdmin`. Mirrors the API's authorization matrix exactly (sender can always pin own; admin can pin anyone's in a group).
+- Pinned banner (top of chat) rewritten:
+  - Changed from a `<button>` to a `<div role="button" tabIndex={0}>` so we can nest an Unpin `<button>` inside without invalid HTML. Added `onKeyDown` (Enter/Space → `wasl:jump-to-message`) for keyboard a11y.
+  - The Unpin control is now an actual `<button>` (was a bare `<PinOff>` icon with `onClick`) with a proper hit area (`w-7 h-7 rounded-full`), hover state (`hover:bg-muted`), focus-visible ring (`focus-visible:ring-[var(--wasl-green)]/40`), and `title="Unpin message"`.
+  - Unpin button visibility gated by `canUnpin = pinned.senderId === user?.id || isGroupAdmin` — non-admins viewing someone else's pinned message see no Unpin affordance (matches the API's authorization matrix).
+  - The "Pinned by {pinnedSender}" wording is kept (where `pinnedSender` is the SENDER of the pinned message — which is also the pinner for the sender-pins-own case; for admin-pins-other, the system message "X pinned a message" emitted by the API provides the audit trail of who pinned it).
+  - Clicking the banner (or pressing Enter/Space when focused) still dispatches the existing `wasl:jump-to-message` window-event with the pinned message id — the chat-window's existing listener scrolls the message into view and flashes it.
+
+Step 4 — Cross-client sync verification (NO new socket events):
+- The existing `message:reacted` socket relay (chat-service `index.ts` line 203-212) already broadcasts to all clients in the conversation room, and the chat-window's `onMessageReacted` callback (lines 289-313) refetches the single message via `GET /api/messages/[id]` (which returns `pinned: message.pinned` at line 53 of that route) and calls `useWaslStore.getState().updateMessage(...)`. The existing `handlePinMessage` in chat-window already emits `message:reacted` after a successful pin/unpin (line 729). So pin/unpin state propagates to all clients in real time WITHOUT any new socket event or service-side change. ✅
+
+Verification (against the running dev server on port 3000):
+- Restarted dev server (was down on first probe). Logged in as `demo` / `demo123`.
+- TEST 1 — Sender pins own message in group (`POST /api/messages/{ownMsgId}/pin { pinned: true }`) → 200 `{ pinned: true }`. ✅
+- TEST 2 — Sender unpins own message (`{ pinned: false }`) → 200 `{ pinned: false }`. ✅
+- TEST 3 — Member (Demo, role='member') tries to pin someone else's message in group → 403 `{ "error": "Only the sender or a group admin can pin this message" }`. ✅
+- Promoted Demo to admin via Prisma (`UPDATE Participant SET role='admin'`) so the admin path could be exercised.
+- TEST 4 — Admin pins someone else's message in group → 200 `{ pinned: true }`. ✅ Verified that the previously-pinned message (TEST 1's, if still pinned) was automatically unpinned by the API's `updateMany`/`update` unpin-previous logic.
+- TEST 5 — Verified a `type='system'` row was emitted with content `"Demo User pinned a message"` immediately after TEST 4. ✅
+- TEST 6 — Admin unpins someone else's message → 200 `{ pinned: false }`. ✅
+- TEST 7 — Verified a second `type='system'` row `"Demo User unpinned a message"` was emitted. ✅
+- Reverted the admin promotion and deleted all test messages + system messages so the DB is back to its pre-test state.
+- `bun run lint` scoped to the three files I modified (`src/app/api/messages/[id]/pin/route.ts`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`) → exit 0, zero errors, zero warnings. (The repo-wide `bun run lint` reports 1 error in `src/components/wasl/chat-app.tsx` line 466 — that file was modified by a PARALLEL sub-agent task — Task 34-b invite links — and is NOT touched by this task; I confirmed via `git diff --stat` that my edits are limited to the three files listed above.)
+- `bunx tsc --noEmit` filtered to my touched files → only pre-existing errors in chat-window.tsx (lines 520, 683 after my edits — `otherUser.phone` null check + a `string | null` arg), which were also present BEFORE my changes (same lines shifted by +8 because I added 8 lines for the `isGroupAdmin` derivation). No new TypeScript errors introduced.
+- No tests added (per instructions). No `bun run build` run (per instructions). No indigo/blue colors introduced — only `var(--wasl-green)`, `var(--wasl-green-dark)`, `var(--wasl-teal)`, `bg-muted`, `text-muted-foreground`, `text-foreground`, `border-border`, and `text-destructive` neutrals.
+
+Stage Summary:
+- `src/app/api/messages/[id]/pin/route.ts` — Rewrote the authorization matrix: in 1-on-1 conversations only the sender can pin/unpin (unchanged); in group conversations the sender OR any admin (`Participant.role === 'admin'`) can pin/unpin ANY message. Captures the previously-pinned message id when unpinning-previous so the client can refresh both rows via the existing `message:reacted` socket relay. Emits `type='system'` rows `"X pinned a message"` / `"X unpinned a message"` when an admin acts on someone else's message in a group (skipped for sender-pinning-own and for `system`-type target messages). Returns `{ pinned: boolean }` (unchanged contract).
+- `src/components/wasl/message-bubble.tsx` — Added a `canPin?: boolean` prop. Added a Pin/Unpin `ToolbarButton` to the hover toolbar (lucide `Pin`/`PinOff`, only rendered when `onPin && canPin`). Added a rotated-Pin "Pinned" indicator badge at the top corner of every pinned non-system bubble (visible to everyone, mirroring the Lock badge styling but with `wasl-teal` accent). Gated the existing Pin/Unpin `ContextMenuItem` on `canPin` too. No new imports (Pin/PinOff already imported).
+- `src/components/wasl/chat-window.tsx` — Added an `isGroupAdmin` derived value (`conversation.participants.find(...).role === 'admin'`). Passes `canPin={m.senderId === user?.id || isGroupAdmin}` to every `<MessageBubble>`. Rewrote the pinned-message banner as a `<div role="button" tabIndex={0}>` (so we can nest an Unpin button) with `onKeyDown` for Enter/Space → jump-to-message. The Unpin button is now a real `<button>` with proper hit area + focus-visible ring, gated by `canUnpin = pinned.senderId === user?.id || isGroupAdmin` so non-admins viewing someone else's pinned message see no Unpin affordance. Clicking the banner still dispatches `wasl:jump-to-message` (unchanged contract).
+- No Prisma schema changes (the existing `pinned Boolean` + `role String` fields are sufficient). No new socket events (re-uses the existing `message:reacted` relay). No new files. No tests. No `bun run build`.
+- All 7 verification tests passed against the running dev server. Lint clean on my files.
+
+---
+Task ID: 34-b
+Agent: general-purpose (group invite link)
+Task: Add a group invite-link / join-via-link feature. Group admins can generate an invite token (which produces a shareable URL); anyone with the link can join the group. Admins can regenerate or revoke the link. A join dialog in chat-app reads `?join={token}` from the URL and lets logged-in users accept/decline. A new `Invite link` section in the contact-info-panel exposes the controls.
+
+Work Log:
+- Read worklog.md (Task 31, 32, 33 sections) to understand existing patterns: Prisma schema in `prisma/schema.prisma`, API routes under `src/app/api/conversations/[id]/`, wasl components under `src/components/wasl/`. Re-used the existing `requireAdmin` helper pattern from `members/route.ts`, the optimistic-local-override pattern from the group-avatar upload (Task 33), and the `loadMuted` / `loadCapture` lazy-fetch pattern from `contact-info-panel.tsx`.
+- Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED): added two fields to the `Conversation` model — `inviteToken String?` and `inviteTokenSetAt DateTime?` — with an inline comment explaining the (re)generate / revoke contract. Ran `bun run db:push` which applied cleanly (21 ms) and regenerated the Prisma client.
+- Step 2 — Invite-link management API (`src/app/api/conversations/[id]/invite/route.ts`, NEW): implements `GET`, `POST`, `DELETE`. All three require auth + group conversation (1-on-1s → 400 `"Only group conversations support invite links"`). GET additionally requires membership (any member — admin or not — can view + share the link); POST and DELETE require the `admin` role (re-uses the `requireAdmin` helper pattern from `members/route.ts`). POST generates a fresh `crypto.randomUUID()` token, stores it alongside `inviteTokenSetAt = now()`, emits a system message (`"X created the group invite link"` on first generation, `"X reset the group invite link"` when regenerating), and returns `{ inviteUrl: "/join/{token}", token, setAt }`. DELETE clears the token (idempotent — returns `{ ok: true, revoked: false }` if there was nothing to revoke, `{ ok: true, revoked: true }` otherwise) and emits `"X revoked the group invite link"`. Regeneration invalidates the old link immediately because `inviteToken` is overwritten in place.
+- Step 3 — Join-via-token API (`src/app/api/conversations/join/route.ts`, NEW): `POST` with body `{ token: string }`. Finds the conversation by `inviteToken` via `findFirst` (a deleted token simply doesn't match). Missing/null token → 404 `"Invalid or expired invite link"`. Empty body → 400 `"token is required"`. Unauthenticated → 401. If the requester is already a participant → 200 `{ ok: true, conversationId, alreadyMember: true }` (no-op, no duplicate Participant row). Otherwise creates a `Participant` row with `role: 'member'`, emits a system message `"X joined via invite link"`, bumps `conversation.updatedAt` so the group floats to the top of the sidebar, and returns `{ ok: true, conversationId, alreadyMember: false }`.
+- Step 4 — Invite-link UI in `contact-info-panel.tsx` (MODIFIED): added a new `Invite link` card (group conversations only), placed right after the `Members` section. Added imports `Link2`, `QrCode` from `lucide-react` (Copy/Trash2/Loader2/Info already imported). Added state: `inviteInfo: { inviteUrl, token, setAt } | null` (null = loading), `inviteBusy: 'generate' | 'revoke' | null`, `copiedInvite: boolean`. Added `loadInvite` `useCallback` that fetches `GET /api/conversations/:id/invite` (called from the existing mount/active-conversation-change `useEffect`, alongside `loadCapture`/`loadMuted`). The three handlers:
+  - `handleGenerateInvite` — `POST /api/conversations/:id/invite`. No confirm on first generation; `confirm()` ("Generate a new invite link? The current link will stop working immediately.") when a token already exists.
+  - `handleRevokeInvite` — `DELETE /api/conversations/:id/invite`. Always `confirm()`s first.
+  - `handleCopyInvite` — copies the absolute URL `${window.location.origin}/?join=${encodeURIComponent(token)}` to the clipboard via `navigator.clipboard.writeText`, with a `document.execCommand('copy')` fallback for older browsers / insecure contexts. Flips `copiedInvite` to true for 2 s so the button shows a "Copied" confirmation.
+  The card renders four states:
+    1. Loading (initial fetch in flight) — pulsing skeleton placeholder.
+    2. Active link exists — `<code>` block showing `${origin}/?join=${token}` with a `QrCode` icon, plus a `Copy link` button (showing "Copied" feedback when `copiedInvite`), and (admin-only) a wasl-teal/green `Reset link` button and a destructive `Revoke` button. Both admin buttons disabled while `inviteBusy !== null` and show a `Loader2` spinner during the request.
+    3. Admin, no link yet — `"No invite link yet. Generate one to let anyone with the link join this group."` + a `Generate link` outline button.
+    4. Non-admin, no link — `"No active invite link. Ask a group admin to generate one."`
+  The card header shows `formatChatTimestamp(setAt)` of the most recent generation. Reset on conversation switch (`setInviteInfo(null)` added to the existing `useEffect(() => {…}, [activeConversationId])` cleanup block, alongside `setLocalAvatar`/`setLocalDescription`). Re-ordered the `useCallback`s (`loadMuted`, `loadInvite`) before the consuming `useEffect` so the deps array doesn't reference forward-declared variables (lint: no-use-before-define / set-state-in-effect).
+- Step 5 — Join dialog in `chat-app.tsx` (MODIFIED): added a `JoinViaInviteDialog` component (rendered inside `<Suspense fallback={null}>` because `useSearchParams` requires a Suspense boundary in Next 16). Reads `?join={token}` from the URL. If no token → renders nothing. If token present → renders a `Dialog` with title "Join group?", description, the invite URL in a `<code>` block (with `Users` icon), and `Decline` / `Accept` buttons. `Accept` POSTs to `/api/conversations/join` with `{ token }`, refreshes the conversation list, sets the joined conversation active so the chat window opens, toasts success (variant message depending on `alreadyMember`), then strips the `?join=` param from the URL via `router.replace` so the dialog doesn't re-show on next render. `Decline` just strips the param. Errors display inline in the description in `text-destructive`. State is held by an *inner* component keyed by `token` so it remounts cleanly whenever the URL changes (avoids the React 19 `react-hooks/set-state-in-effect` lint rule without needing a `useEffect`-based reset). The same shared link works for both logged-in visitors and unauthenticated ones: if the visitor is not logged in, `page.tsx` renders `<AuthScreen />` while the URL still contains `?join={token}`; after `router.refresh()` re-renders the page post-login, `ChatApp` mounts and the dialog pops automatically — no `localStorage` needed.
+- Verification (against the running dev server on port 3000):
+  - `bun run lint` → exit 0, zero errors across the whole repo.
+  - `bunx tsc --noEmit` filtered to my files → zero new type errors in `invite/route.ts`, `join/route.ts`, `contact-info-panel.tsx`, `chat-app.tsx`. The only remaining error in `chat-app.tsx` is the pre-existing `toast.dismiss(t.id)` line inside `onConversationUpdated` (the sonner `t` type narrows to `string | number`), unchanged by me and called out as a pre-existing error in the Task 33 worklog.
+  - End-to-end API smoke test (logged in as the `demo` admin of group `cmu4usji10009skjnmj0eg3ec`):
+    - `GET /api/conversations/{id}/invite` before any token → `{ inviteUrl: null, token: null, setAt: null }` ✅
+    - `POST /api/conversations/{id}/invite` → 200, returns `{ inviteUrl: "/join/<uuid>", token, setAt }` ✅
+    - `GET` after generation → returns the same token ✅
+    - `POST` again → returns a *new* token (old one invalidated) ✅
+    - `POST /api/conversations/join` with the OLD token → 404 `"Invalid or expired invite link"` ✅
+    - `POST /api/conversations/join` with the NEW token as the demo user (already a member) → 200 `{ ok: true, conversationId, alreadyMember: true }` ✅
+    - `POST /api/conversations/join` with no auth → 401 ✅
+    - `POST /api/conversations/join` with bogus token → 404 ✅
+    - `POST /api/conversations/join` with empty body → 400 `"token is required"` ✅
+    - `DELETE /api/conversations/{id}/invite` → 200 `{ ok: true, revoked: true }` ✅
+    - `GET` after revoke → `{ inviteUrl: null, ... }` ✅
+    - `DELETE` again → `{ ok: true, revoked: false }` (idempotent) ✅
+    - As Amira (member, not admin): `GET` succeeds, `POST` and `DELETE` both → 403 `"Only group admins can manage the invite link"` ✅
+    - On a 1-on-1 conversation: `GET` and `POST` both → 400 `"Only group conversations support invite links"` ✅
+    - Signed up a brand-new user `invitee_test_34` (via `/api/auth/signup`), `POST /api/conversations/join` with the valid token → 200 `{ ok: true, conversationId, alreadyMember: false }`, the new user appeared in the group's member list as a `member`, and the system message `"Invitee Test joined via invite link"` was emitted to the conversation (verified by fetching the 3 most-recent messages as the admin). ✅
+- No tests added (per instructions). No `bun run build` run (per instructions). No indigo or blue colors introduced — only `var(--wasl-green)` / `var(--wasl-green-dark)` for the Accept button, `var(--wasl-teal)` / `var(--wasl-green)` for the accent icons and Reset-link button, `text-destructive` for the Revoke button, and standard `bg-muted/40` / `border` / `text-muted-foreground` neutrals for the rest of the card. The join dialog's Accept button is the only wasl-green-filled button (matches the primary action colour convention used elsewhere in the app, e.g. the demo-login button).
+
+Stage Summary:
+- `prisma/schema.prisma` — added `inviteToken String?` and `inviteTokenSetAt DateTime?` fields to the `Conversation` model. Schema pushed to the local SQLite DB via `bun run db:push`.
+- `src/app/api/conversations/[id]/invite/route.ts` — NEW route. `GET` (any member) returns the current invite link or `{ inviteUrl: null }`. `POST` (admin) generates/regenerates the token (old link stops working), emits a system message, returns `{ inviteUrl: "/join/{token}", token, setAt }`. `DELETE` (admin) revokes the token (idempotent), emits a system message.
+- `src/app/api/conversations/join/route.ts` — NEW route. `POST { token }` finds the conversation by `inviteToken`, returns 404 on missing/expired token, 200 with `alreadyMember: true` if the requester is already in the group, otherwise creates a Participant row (role `member`), emits `"X joined via invite link"`, bumps `updatedAt`, and returns `{ ok: true, conversationId, alreadyMember: false }`.
+- `src/components/wasl/contact-info-panel.tsx` — added `Link2` and `QrCode` icon imports, new `inviteInfo` / `inviteBusy` / `copiedInvite` state, a `loadInvite` `useCallback`, three handlers (`handleGenerateInvite` / `handleRevokeInvite` / `handleCopyInvite`), and a new `Invite link` card (group-only) rendered between the `Members` section and the `Capture attempts` section. Admins see generate/reset/revoke controls + copy; non-admin members see the link (if any) and a copy button.
+- `src/components/wasl/chat-app.tsx` — added `Suspense`, `useSearchParams`, `useRouter`, `Dialog`/`Button`, and `Loader2`/`Link2`/`Users` imports. Added a new `JoinViaInviteDialog` component (with an inner stateful `JoinViaInviteDialogInner` keyed by the token to avoid setState-in-effect). Renders inside a `<Suspense>` at the bottom of the ChatApp tree; reads `?join={token}`, prompts the user with Accept/Decline, POSTs to `/api/conversations/join`, refreshes the conversation list, sets the joined conversation active, and strips the `?join=` param from the URL via `router.replace` after success/decline. Works for both logged-in and post-login visitors (the URL is preserved across `router.refresh()`).
+
+---
+Task ID: 34 — Admin message pinning + Group invite link + Contact list/address book
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing, upgrading, and fixing".
+
+### Phase 1: Admin Message Pinning (subagent 34-a)
+**Files:** `src/app/api/messages/[id]/pin/route.ts`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`
+
+**API changes:**
+- Group admins (role='admin') can now pin/unpin ANY message in a group
+- 1-on-1: sender-only pin (unchanged)
+- Emits system messages "X pinned a message" / "X unpinned a message"
+- Still enforces "one pinned per conversation"
+
+**UI changes:**
+- Pin/Unpin button visible to sender + group admins
+- "Pinned" indicator badge on pinned messages (wasl-teal Pin icon)
+- Pinned banner at top of chat with proper Unpin button (admin/sender only)
+- canPin prop passed from chat-window to MessageBubble
+
+### Phase 2: Group Invite Link (subagent 34-b)
+**Files:** `prisma/schema.prisma`, `src/app/api/conversations/[id]/invite/route.ts` (NEW), `src/app/api/conversations/join/route.ts` (NEW), `src/components/wasl/contact-info-panel.tsx`, `src/components/wasl/chat-app.tsx`
+
+**Prisma schema:** Added `inviteToken String?` + `inviteTokenSetAt DateTime?` to Conversation
+
+**API routes:**
+- `GET /api/conversations/{id}/invite` — view current invite link (any member)
+- `POST /api/conversations/{id}/invite` — generate/regenerate token (admin only)
+- `DELETE /api/conversations/{id}/invite` — revoke invite (admin only)
+- `POST /api/conversations/join` — join via token, creates Participant + system message
+
+**UI:**
+- Invite link section in contact-info-panel (group only)
+- Admin: Generate / Copy / Revoke buttons
+- Member: View + Copy only
+- JoinViaInviteDialog in chat-app reads `?join={token}` from URL
+- Shows Accept/Decline dialog, joins on accept
+
+### Phase 3: Contact List / Address Book (main)
+**Files:** `prisma/schema.prisma`, `src/app/api/contacts/route.ts` (NEW), `src/app/api/contacts/[id]/route.ts` (NEW), `src/components/wasl/contacts-dialog.tsx` (NEW), `src/components/wasl/sidebar.tsx`
+
+**Prisma schema:** New `Contact` model:
+- `ownerId` (user who saved the contact)
+- `userId?` (linked Wasl user, nullable for non-Wasl contacts)
+- `nickname?`, `phone?`, `notes?`
+- `@@unique([ownerId, userId])` — no duplicate contacts
+- Back-relations on User: `contacts` + `contactOf`
+
+**API routes:**
+- `GET /api/contacts?q=search` — list contacts with optional search filter
+- `POST /api/contacts` — add by userId or phone, supports nickname + notes
+- `DELETE /api/contacts/[id]` — remove (owner only, 403 if not owner)
+- 409 on duplicate (already a contact)
+
+**UI — ContactsDialog component:**
+- Search bar with debounced filtering
+- "Add new contact" button (dashed outline)
+- Contact list with WaslAvatar, name, username/phone subtitle
+- Verified badge for verified users
+- "Start chat" button on hover (creates 1-on-1 conversation)
+- "Remove" button on hover (with confirmation via toast)
+- Add contact form with two modes:
+  1. Search Wasl users (existing users by name/username/phone)
+  2. Add by phone number (for non-Wasl contacts) with optional nickname + notes
+- Empty states for no contacts / no search results
+
+**Sidebar integration:**
+- New "Contacts" button below "Official Announcements"
+- Contact icon (wasl-teal/green)
+- Opens the ContactsDialog
+- onStartChat creates a 1-on-1 conversation and navigates to it
+
+**E2E verified:**
+- Add contact by userId → 200 ✅
+- Add contact by phone → 200 ✅
+- List contacts → 2 contacts ✅
+- Duplicate → 409 ✅
+- Search filter works ✅
+
+### Phase 4: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| POST /api/messages/{id}/pin (admin) | 200 ✅ |
+| POST /api/messages/{id}/pin (unpin) | 200 ✅ |
+| POST /api/conversations/{id}/invite | 200, returns token ✅ |
+| GET /api/conversations/{id}/invite | 200 ✅ |
+| POST /api/conversations/join | 200 ✅ |
+| Invalid invite token | 404 ✅ |
+| DELETE /api/conversations/{id}/invite | 200 ✅ |
+| GET /api/contacts | 200 ✅ |
+| POST /api/contacts (userId) | 200 ✅ |
+| POST /api/contacts (phone) | 200 ✅ |
+| Duplicate contact | 409 ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 34)
+- `prisma/schema.prisma` — Contact model + inviteToken fields
+- `src/app/api/messages/[id]/pin/route.ts` — admin pinning (subagent 34-a)
+- `src/components/wasl/message-bubble.tsx` — canPin prop + pinned badge (subagent 34-a)
+- `src/components/wasl/chat-window.tsx` — isGroupAdmin + canPin (subagent 34-a)
+- `src/app/api/conversations/[id]/invite/route.ts` — NEW invite link API (subagent 34-b)
+- `src/app/api/conversations/join/route.ts` — NEW join via token (subagent 34-b)
+- `src/components/wasl/contact-info-panel.tsx` — invite link UI (subagent 34-b)
+- `src/components/wasl/chat-app.tsx` — JoinViaInviteDialog (subagent 34-b)
+- `src/app/api/contacts/route.ts` — NEW contacts list + add (main)
+- `src/app/api/contacts/[id]/route.ts` — NEW contact delete (main)
+- `src/components/wasl/contacts-dialog.tsx` — NEW contacts dialog (main)
+- `src/components/wasl/sidebar.tsx` — Contacts button + dialog (main)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add voice note transcription
+- Add message star/filter view (starred messages across all chats)
+- Add contact import (from phone / CSV)
+- Add group invite QR code
+- Add message bookmark/save for later

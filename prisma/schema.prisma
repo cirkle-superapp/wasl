@@ -64,6 +64,34 @@ model User {
   ownedBusinesses   Business[]     @relation("BusinessOwner")
   businessMemberships BusinessMember[]
   ownedServiceProviders ServiceProvider[] @relation("ServiceProviderOwner")
+  // Contacts (address book) — users this person has saved as a contact
+  contacts          Contact[]      @relation("ContactOwner")
+  // When this user appears in someone else's address book
+  contactOf         Contact[]      @relation("ContactTarget")
+}
+
+/// Contact (address book entry) — a saved contact. `ownerId` is the user who
+/// saved the contact, `userId` is the contacted user (nullable for contacts
+/// not yet on Wasl). `nickname` is an optional custom display name.
+model Contact {
+  id          String   @id @default(cuid())
+  ownerId     String
+  userId      String?
+  // Display name as saved by the owner (may differ from the user's actual name)
+  nickname    String?
+  // Phone number (for contacts not yet on Wasl, or to remember which number)
+  phone       String?
+  // Optional notes about this contact (only visible to the owner)
+  notes       String?
+  // When the contact was added
+  addedAt     DateTime @default(now())
+
+  owner User  @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  user  User? @relation("ContactTarget", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerId, userId])
+  @@index([ownerId])
+  @@index([userId])
 }
 
 /// A phone number attached to a user account. A user can have multiple numbers
@@ -95,6 +123,10 @@ model Conversation {
   creator   User?   @relation("ConversationCreator", fields: [createdBy], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Invite token for group join-via-link. When null, no invite link exists.
+  // Generate a new token to (re)generate the link, or set to null to revoke.
+  inviteToken      String?
+  inviteTokenSetAt DateTime?
 
   participants Participant[]
   messages     Message[]

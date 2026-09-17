@@ -216,6 +216,14 @@ export function MessageBubble({
   reactions,
   currentUserId,
   prevSameSender,
+  // Whether the current user is allowed to pin/unpin this message.
+  // - For a 1-on-1 chat: the sender of the message (matches the API's
+  //   "sender-only" authorization rule).
+  // - For a group chat: the message sender OR any group admin (the API
+  //   allows admins to pin ANY message).
+  // When false (a non-admin viewing someone else's message in a group), the
+  // Pin button is hidden from both the hover toolbar and the context menu.
+  canPin,
 }: {
   message: ChatMessage
   senderName?: string
@@ -242,6 +250,7 @@ export function MessageBubble({
   // for a WhatsApp-style "tail" effect. Currently optional — the parent can
   // opt-in to passing this prop.
   prevSameSender?: boolean
+  canPin?: boolean
 }) {
   const me = useWaslStore((s) => s.user)
   const mine = message.senderId === me?.id
@@ -585,6 +594,22 @@ export function MessageBubble({
               <Trash2 className="w-4 h-4" />
             </ToolbarButton>
           )}
+          {/* Pin / Unpin — shown to the message sender (always) and to group
+              admins (for any message). Hidden for non-admins viewing someone
+              else's message in a group. Mirrors the API's authorization
+              matrix (sender-only for 1-on-1, sender+admin for groups). */}
+          {onPin && canPin && (
+            <ToolbarButton
+              title={message.pinned ? 'Unpin' : 'Pin'}
+              onClick={() => { onPin(); setShowReactions(false) }}
+            >
+              {message.pinned ? (
+                <PinOff className="w-4 h-4" />
+              ) : (
+                <Pin className="w-4 h-4" />
+              )}
+            </ToolbarButton>
+          )}
         </div>
 
         {/* Quick reaction popover */}
@@ -643,6 +668,24 @@ export function MessageBubble({
               aria-label="Protected message"
             >
               <Lock className="w-3 h-3" />
+            </div>
+          )}
+          {/* Pinned indicator — a small rotated Pin icon at the top corner of
+              the bubble. Visible to everyone (pinned state is a conversation-
+              wide fact, not per-user) so members can see which message the
+              admin/sender has chosen to highlight. */}
+          {message.pinned && message.type !== 'system' && (
+            <div
+              className={cn(
+                'absolute -top-1.5 z-10 flex items-center justify-center w-5 h-5 rounded-full shadow-sm border',
+                mine
+                  ? 'left-1 bg-[var(--wasl-teal)] border-[var(--wasl-teal)]/70 text-white'
+                  : 'right-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+              )}
+              title="Pinned message"
+              aria-label="Pinned message"
+            >
+              <Pin className="w-3 h-3 rotate-45" />
             </div>
           )}
           {isGroup && !mine && senderName && (
@@ -829,7 +872,7 @@ export function MessageBubble({
           <Share2 className="w-4 h-4 mr-2" />
           Share externally
         </ContextMenuItem>
-        {onPin && (
+        {onPin && canPin && (
           <ContextMenuItem onClick={() => onPin()}>
             {message.pinned ? (
               <>
