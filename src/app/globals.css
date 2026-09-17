@@ -886,6 +886,18 @@ kbd {
   animation: wasl-timeline-pop 0.2s ease-out backwards;
 }
 
+/* ---- Read-receipts breakdown fade-in (subtle slide-up + opacity) ---- */
+@keyframes wasl-read-receipts-pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wasl-read-receipts-pop {
+  animation: wasl-read-receipts-pop 0.18s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wasl-read-receipts-pop { animation: none; }
+}
+
 /* ---- Pinned message indicator (small pin on the bubble) ---- */
 .wasl-pinned-indicator {
   animation: wasl-timeline-pop 0.2s ease-out;

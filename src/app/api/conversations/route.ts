@@ -135,6 +135,8 @@ export async function GET(req: NextRequest) {
       avatar: displayAvatar,
       avatarColor: displayAvatarColor,
       isGroup: c.isGroup,
+      // Only groups have a description; null for 1-on-1 chats.
+      description: c.isGroup ? c.description : null,
       participants: c.participants.map((p) => ({
         userId: p.userId,
         username: p.user.username,

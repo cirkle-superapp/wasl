@@ -109,6 +109,8 @@ export type Conversation = {
   avatar: string | null
   avatarColor: string | null
   isGroup: boolean
+  // Optional group description ("about" text set by admins). Absent for 1-on-1s.
+  description?: string | null
   participants: Participant[]
   lastMessage: ChatMessage | null
   unreadCount: number

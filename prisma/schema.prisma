@@ -89,6 +89,8 @@ model Conversation {
   isGroup   Boolean  @default(false)
   avatar    String?
   avatarColor String?
+  // Optional group description (like WhatsApp group "about"). Only set by admins.
+  description String?
   createdBy String?
   creator   User?   @relation("ConversationCreator", fields: [createdBy], references: [id])
   createdAt DateTime @default(now())
@@ -557,6 +559,10 @@ model ServiceProviderMessageDismissed {
 }
 
 /// Scheduled message — send at a future time (Cirkle-inspired scheduled-messages)
+/// Supports recurring schedules: `repeat` can be 'none' (one-time), 'daily',
+/// 'weekly', or 'monthly'. When a recurring message is sent, `scheduledFor`
+/// is advanced to the next occurrence and `sent`/`sentAt` are reset so the
+/// background scheduler picks it up again at the next time.
 model ScheduledMessage {
   id             String   @id @default(cuid())
   conversationId String
@@ -564,12 +570,20 @@ model ScheduledMessage {
   content        String
   type           String   @default("text")
   scheduledFor   DateTime
-  sent          Boolean  @default(false)
+  sent           Boolean  @default(false)
   sentAt         DateTime?
+  // Recurring schedule: 'none' = one-time, 'daily', 'weekly', 'monthly'.
+  // When non-'none', the scheduler advances `scheduledFor` to the next
+  // occurrence after sending instead of marking `sent=true`.
+  repeat         String   @default("none")
+  // Optional end date for recurring messages. After this date, the schedule
+  // stops (message is marked sent=true so the scheduler skips it).
+  repeatUntil    DateTime?
   createdAt      DateTime @default(now())
 
   @@index([scheduledFor])
   @@index([conversationId])
+  @@index([senderId])
 }
 
 /// Broadcast channel — one-to-many messaging (Cirkle-inspired broadcast-channel)

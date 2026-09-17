@@ -27,10 +27,12 @@ import {
   Search,
   Loader2,
   Crown,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -115,6 +117,11 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   // local override of participants (used right after add/remove so the UI
   // updates immediately without waiting for the global refetch)
   const [localParticipants, setLocalParticipants] = useState<Participant[] | null>(null)
+  // Edit dialog for the group description (admin only). Holds the optimistically
+  // applied description so the panel updates instantly after a save.
+  const [descEditOpen, setDescEditOpen] = useState(false)
+  const [localDescription, setLocalDescription] = useState<string | null | undefined>(undefined)
+  const [deletingDesc, setDeletingDesc] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -123,6 +130,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   // don't accidentally show stale members from a previous chat.
   useEffect(() => {
     setLocalParticipants(null)
+    setLocalDescription(undefined)
   }, [activeConversationId])
 
   const participants: Participant[] =
@@ -310,6 +318,61 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     void refreshConversation()
   }
 
+  // Effective description shown in the panel — uses the optimistic local
+  // override if set, otherwise falls back to the store value.
+  const effectiveDescription: string | null =
+    localDescription !== undefined
+      ? localDescription
+      : conversation?.description ?? null
+
+  // After the description is saved/deleted, update the local + store copy so
+  // the panel reflects the change immediately. The refreshConversation call
+  // afterwards pulls the canonical record so the sidebar/header also update.
+  function handleDescriptionChanged(newDescription: string | null) {
+    setLocalDescription(newDescription)
+    if (conversation) {
+      upsertConversation({
+        ...conversation,
+        description: newDescription,
+      })
+    }
+    void refreshConversation()
+  }
+
+  // Delete the group description (admin only). Confirms before clearing.
+  async function handleDeleteDescription() {
+    if (!activeConversationId) return
+    if (!effectiveDescription) return
+    if (
+      !confirm(
+        'Delete this group description? Members will see a system message noting the change.'
+      )
+    )
+      return
+    setDeletingDesc(true)
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: '' }),
+        }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to delete description')
+        return
+      }
+      toast.success('Description deleted')
+      handleDescriptionChanged(null)
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setDeletingDesc(false)
+    }
+  }
+
   if (!conversation) return null
 
   const otherUser =
@@ -392,6 +455,57 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
             </Button>
           )}
         </div>
+
+        {/* Group description (group only — like WhatsApp "about") */}
+        {conversation.isGroup && (
+          <div className="bg-muted/30 rounded-lg p-3 border border-border/60">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <Info className="w-3.5 h-3.5" /> Description
+              </div>
+              {isAdmin && effectiveDescription && !deletingDesc && (
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-[var(--wasl-teal)]/10"
+                    onClick={() => setDescEditOpen(true)}
+                    title="Edit description"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={handleDeleteDescription}
+                    title="Delete description"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+              {deletingDesc && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {effectiveDescription ? (
+              <p className="text-sm whitespace-pre-wrap break-words">
+                {effectiveDescription}
+              </p>
+            ) : isAdmin ? (
+              <button
+                type="button"
+                onClick={() => setDescEditOpen(true)}
+                className="text-sm text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:underline inline-flex items-center gap-1.5"
+              >
+                <Pencil className="w-3 h-3" /> Add description
+              </button>
+            ) : (
+              <p className="text-sm text-muted-foreground">No description</p>
+            )}
+          </div>
+        )}
 
         {/* About */}
         {!conversation.isGroup && otherUser && (
@@ -809,6 +923,17 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           onRenamed={handleRenamed}
         />
       )}
+
+      {/* Edit-description dialog (admin only) */}
+      {conversation.isGroup && (
+        <EditDescriptionDialog
+          open={descEditOpen}
+          onOpenChange={setDescEditOpen}
+          conversationId={conversation.id}
+          currentDescription={effectiveDescription}
+          onSaved={handleDescriptionChanged}
+        />
+      )}
     </div>
   )
 }
@@ -1113,6 +1238,128 @@ function RenameGroupDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!valid || saving}>
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// EditDescriptionDialog — textarea form to set or clear the group description
+// (admin only). Calls PATCH /api/conversations/:id with { description }.
+// An empty (whitespace-only) textarea is treated as "clear description".
+// ---------------------------------------------------------------------------
+
+function EditDescriptionDialog({
+  open,
+  onOpenChange,
+  conversationId,
+  currentDescription,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  conversationId: string
+  currentDescription: string | null
+  onSaved: (newDescription: string | null) => void
+}) {
+  const [value, setValue] = useState(currentDescription ?? '')
+  const [saving, setSaving] = useState(false)
+
+  // Re-seed the textarea whenever the dialog opens so it always reflects
+  // the canonical description (not a stale draft from a previous open).
+  useEffect(() => {
+    if (open) setValue(currentDescription ?? '')
+  }, [open, currentDescription])
+
+  const trimmed = value.trim()
+  // Valid as long as it's within the 500-char limit. Empty is allowed (clears).
+  const valid = value.length <= 500
+  // Disable Save if nothing changed (same content after trim) or invalid.
+  const previousTrimmed = (currentDescription ?? '').trim()
+  const changed = trimmed !== previousTrimmed
+
+  async function handleSave() {
+    if (!valid || !changed) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: value }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to update description')
+        return
+      }
+      const next = trimmed.length > 0 ? trimmed : null
+      toast.success(
+        next ? 'Description updated' : 'Description deleted'
+      )
+      onSaved(next)
+      onOpenChange(false)
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {currentDescription ? 'Edit description' : 'Add description'}
+          </DialogTitle>
+          <DialogDescription>
+            Group descriptions are visible to all members. Line breaks are
+            preserved. Leave empty to clear the description.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="wasl-group-description-input">Description</Label>
+          <Textarea
+            id="wasl-group-description-input"
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            maxLength={500}
+            placeholder="What is this group about?"
+            className="min-h-24 resize-y"
+          />
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              {trimmed.length === 0 && value.length > 0
+                ? 'Only whitespace — will clear the description'
+                : 'Line breaks are preserved.'}
+            </span>
+            <span className={cn(value.length > 500 && 'text-destructive')}>
+              {value.length}/500
+            </span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!valid || !changed || saving}
+          >
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…

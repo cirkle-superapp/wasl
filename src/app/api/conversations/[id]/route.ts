@@ -69,6 +69,7 @@ export async function GET(
     avatar: displayAvatar,
     avatarColor: displayAvatarColor,
     isGroup: conversation.isGroup,
+    description: conversation.isGroup ? conversation.description : null,
     isAdmin: me?.role === 'admin',
     participants: conversation.participants.map((p) => ({
       userId: p.userId,
@@ -86,7 +87,7 @@ export async function GET(
   })
 }
 
-// PATCH /api/conversations/:id - update conversation (rename group, admin only)
+// PATCH /api/conversations/:id - update conversation (rename group / set description, admin only)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -97,7 +98,15 @@ export async function PATCH(
   }
   const { id } = await params
   const body = await req.json()
-  const { name } = body || {}
+  const { name, description } = body || {}
+  const hasName = typeof name === 'string'
+  const hasDescription = typeof description === 'string'
+  if (!hasName && !hasDescription) {
+    return NextResponse.json(
+      { error: 'Provide a name or description to update' },
+      { status: 400 }
+    )
+  }
   const conversation = await db.conversation.findUnique({
     where: { id },
     include: { participants: true },
@@ -107,7 +116,7 @@ export async function PATCH(
   }
   if (!conversation.isGroup) {
     return NextResponse.json(
-      { error: 'Only group conversations can be renamed' },
+      { error: 'Only group conversations can be updated' },
       { status: 400 }
     )
   }
@@ -117,38 +126,82 @@ export async function PATCH(
   }
   if (me.role !== 'admin') {
     return NextResponse.json(
-      { error: 'Only group admins can rename the group' },
+      { error: 'Only group admins can update the group' },
       { status: 403 }
     )
   }
-  const trimmed = typeof name === 'string' ? name.trim() : ''
-  if (!trimmed) {
-    return NextResponse.json(
-      { error: 'Group name must not be empty' },
-      { status: 400 }
-    )
+
+  // Build the update payload and validation errors incrementally so name
+  // and description can be updated together or independently.
+  const data: { name?: string; description?: string | null } = {}
+  const systemMessages: string[] = []
+
+  if (hasName) {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      return NextResponse.json(
+        { error: 'Group name must not be empty' },
+        { status: 400 }
+      )
+    }
+    if (trimmed.length > 100) {
+      return NextResponse.json(
+        { error: 'Group name must be 100 characters or fewer' },
+        { status: 400 }
+      )
+    }
+    if (trimmed !== conversation.name) {
+      data.name = trimmed
+      systemMessages.push(
+        `${session.name} changed the group name to "${trimmed}"`
+      )
+    }
   }
-  if (trimmed.length > 100) {
-    return NextResponse.json(
-      { error: 'Group name must be 100 characters or fewer' },
-      { status: 400 }
-    )
+
+  if (hasDescription) {
+    // Allow clearing the description by sending an empty string. Cap length at
+    // 500 characters (matches WhatsApp group description limits).
+    if (description.length > 500) {
+      return NextResponse.json(
+        { error: 'Group description must be 500 characters or fewer' },
+        { status: 400 }
+      )
+    }
+    const trimmed = description.trim()
+    const previous = conversation.description ?? ''
+    if (trimmed !== previous) {
+      // Store null instead of an empty string so the column stays "unset".
+      data.description = trimmed.length > 0 ? trimmed : null
+      systemMessages.push(
+        trimmed.length > 0
+          ? `${session.name} changed the group description`
+          : `${session.name} deleted the group description`
+      )
+    }
   }
+
+  if (Object.keys(data).length === 0) {
+    // Nothing actually changed — short-circuit with a no-op success.
+    return NextResponse.json({ ok: true, conversation, unchanged: true })
+  }
+
   const updated = await db.conversation.update({
     where: { id },
-    data: { name: trimmed },
+    data,
   })
 
-  // Emit a system message: "X changed the group name to Y"
-  await db.message.create({
-    data: {
-      conversationId: id,
-      senderId: session.id,
-      content: `${session.name} changed the group name to "${trimmed}"`,
-      type: 'system',
-      status: 'read',
-    },
-  })
+  // Emit a system message for each change (name and/or description).
+  for (const content of systemMessages) {
+    await db.message.create({
+      data: {
+        conversationId: id,
+        senderId: session.id,
+        content,
+        type: 'system',
+        status: 'read',
+      },
+    })
+  }
 
   return NextResponse.json({ ok: true, conversation: updated })
 }

@@ -2802,3 +2802,245 @@ server-side functionality verified via curl E2E tests.
 - Add message pinning by admin (group)
 - Add group description / about field
 - Add read receipts breakdown panel (who read / who didn't)
+
+---
+Task ID: 32-b
+Agent: general-purpose (group description)
+Task: Add a group description / about field (like WhatsApp group descriptions) — Prisma `description` column on `Conversation`, admin-only PATCH support (combined or independent with name), GET endpoints expose the field, and a full Description section in the contact-info-panel with edit/delete dialog for admins.
+
+Work Log:
+- Read `worklog.md` Tasks 30/30-a/30-b/31/31-a/31-b to confirm existing patterns: `Conversation` model in `prisma/schema.prisma` (line 86), PATCH `/api/conversations/[id]` already requires `role === 'admin'` for group rename + emits a "X changed the group name to Y" system message, `Conversation` type in `src/lib/store.ts`, wasl-teal/green CSS vars (`var(--wasl-teal)` / `var(--wasl-green)`), shadcn `Textarea` available at `src/components/ui/textarea.tsx`, sonner toasts, and the existing `ContactInfoPanel` hero / Members / Add-member / Rename-group dialog layout in `src/components/wasl/contact-info-panel.tsx`.
+- Added `description String?` field to the `Conversation` model in `prisma/schema.prisma` (with a doc comment noting it's WhatsApp-style, admin-set). Ran `bun run db:push` (which includes `--accept-data-loss`) — schema applied cleanly in 23ms, existing groups backfilled to `null`, Prisma client regenerated.
+- Updated `GET /api/conversations/[id]` to include `description: conversation.isGroup ? conversation.description : null` in the response (null for 1-on-1s so the field is always defined and typed consistently).
+- Rewrote `PATCH /api/conversations/[id]` to accept an optional `description` field alongside `name`. Body can now contain `{ name }`, `{ description }`, or both — if neither is present, returns 400 "Provide a name or description to update". Validation:
+  - `name` (if present): must be a string, trimmed, 1–100 chars (same as before).
+  - `description` (if present): must be a string, ≤500 chars (allowing empty string to clear). Empty/whitespace-only is stored as `null` (so the column stays "unset").
+  - Only fields whose trimmed value actually differs from the current DB value are included in the Prisma `update` payload — so a no-op PATCH (e.g. re-sending the same name) returns `{ ok: true, conversation, unchanged: true }` without writing or emitting a system message.
+  - Emits one system message per actually-changed field: `${name} changed the group name to "X"` (existing behaviour) and/or `${name} changed the group description` / `${name} deleted the group description` (new). Preserves the existing admin/non-group/forbidden error paths (404, 400, 403).
+- Updated `GET /api/conversations` (list handler) to include `description: c.isGroup ? c.description : null` in each enriched conversation object so the sidebar + chat header can render it without an extra round-trip.
+- Added `description?: string | null` to the `Conversation` type in `src/lib/store.ts` (with a doc comment noting it's group-only).
+- Added a "Description" section to `src/components/wasl/contact-info-panel.tsx` (group-only), placed between the hero and the Members section. Visual + UX details:
+  - Container: `bg-muted/30 rounded-lg p-3 border border-border/60` (subtle muted surface per spec).
+  - Header: `<Info>` icon from lucide-react + "Description" label, uppercase + tracking-wide, matching the existing "Members" / "Shared media" / "Commits" header pattern.
+  - If a description exists: rendered in a `<p className="text-sm whitespace-pre-wrap break-words">` so line breaks are preserved exactly as the admin typed them (WhatsApp behaviour).
+  - If empty + admin: shows an "Add description" button (Pencil icon + label, wasl-teal/green text, hover:underline) that opens the edit dialog.
+  - If empty + non-admin: shows muted "No description" placeholder text.
+  - If a description exists + admin: shows two small ghost icon buttons in the header row — Pencil (Edit) and Trash2 (Delete). Delete is wrapped in `confirm()` and shows a `Loader2` spinner while the PATCH is in flight.
+- Added `EditDescriptionDialog` component (same file) — shadcn `Dialog` + `Textarea` form:
+  - Pre-seeded with the current description (or empty when adding).
+  - `maxLength={500}` enforced both at the textarea level and re-validated on save; char counter "X/500" displayed bottom-right, turns `text-destructive` if over limit (defensive — maxLength already prevents it).
+  - Save button is disabled when the trimmed value equals the current description (no-op) or when invalid (over 500 chars).
+  - On save: PATCH `/api/conversations/{id}` with `{ description: value }` (sends the raw textarea value, not the trimmed one — the server trims and converts empty → null). Toast on success ("Description updated" / "Description deleted"); toast on error.
+  - Calls `onSaved(next)` which updates the local optimistic state AND `upsertConversation` in the store, then triggers the existing `refreshConversation()` callback so the sidebar + chat header pick up the new description from the canonical GET response.
+  - Re-seeds the textarea whenever the dialog re-opens (so a stale draft from a previous open doesn't leak in).
+- Added local state for optimistic UI: `localDescription: string | null | undefined` (undefined = "use store value", null = "explicitly cleared", string = "set to this"). Reset to `undefined` whenever `activeConversationId` changes (matching the existing `localParticipants` pattern). The effective description shown in the panel is computed via `effectiveDescription = localDescription !== undefined ? localDescription : conversation?.description ?? null`.
+
+Verification (against the running dev server on port 3000):
+- `bun run lint` → exit 0, zero errors, zero warnings.
+- `bunx tsc --noEmit` → zero errors in any touched file (`contact-info-panel.tsx`, `conversations/[id]/route.ts`, `conversations/route.ts`, `store.ts`, `schema.prisma`). All remaining TS errors in the repo are pre-existing in files I did not touch (login route, bot-reply, reactions-summary, link-preview, edits, sidebar, chat-app, chat-window).
+- E2E via Node `http` client as `demo` / `demo123`:
+  - `GET /api/conversations` (list) → 200, each group now has `description: null` (was previously absent from the response).
+  - `GET /api/conversations/{groupId}` (single) → 200, includes `description: null` and `isAdmin: true` for the test group.
+  - `PATCH /api/conversations/{groupId}` with `{ description: "This is a test description.\nWith multiple lines.\nGood for testing." }` → 200, response conversation has `description` set with line breaks preserved.
+  - `GET` after-set → `description` matches (multi-line preserved).
+  - `PATCH` with `{ description: "" }` → 200, `description` becomes `null` (cleared).
+  - `PATCH` with `{ description: "x".repeat(501) }` → 400 `{"error":"Group description must be 500 characters or fewer"}`.
+  - `PATCH` with `{ name: "Combo Renamed 32b", description: "Combo desc." }` → 200, both name and description updated atomically.
+  - `PATCH` with `{}` (no fields) → 400 `{"error":"Provide a name or description to update"}`.
+  - `PATCH` with `{ description: "<same as current>" }` → 200 with `unchanged: true` (no-op short-circuit, no system message emitted).
+  - `PATCH` with `{ name: "<same as current>" }` → 200 with `unchanged: true` (no-op short-circuit).
+  - Recent system messages endpoint confirms: `"Demo User changed the group description"` after a set, `"Demo User deleted the group description"` after a clear — both interleaved correctly with the existing `"X changed the group name to Y"` and `"X added/removed Y"` system messages.
+- No tests added (per instructions). No `bun run build` run (per instructions). No indigo/blue colors used — only `var(--wasl-teal)` / `var(--wasl-green)` for actions, `bg-muted/30` for the section surface, `text-muted-foreground` for placeholders, and `text-destructive` for the delete button.
+
+Stage Summary:
+- `prisma/schema.prisma` — added `description String?` field on `Conversation` (WhatsApp-style group "about", admin-set only).
+- `src/app/api/conversations/[id]/route.ts` — GET now returns `description` (null for 1-on-1s); PATCH accepts an optional `description` (≤500 chars, empty clears) in addition to `name`, can update either or both independently, emits separate system messages per actually-changed field, and short-circuits with `{ ok, conversation, unchanged: true }` when nothing changed.
+- `src/app/api/conversations/route.ts` — GET list now includes `description` (null for 1-on-1s) on each conversation object.
+- `src/lib/store.ts` — `Conversation` type now has `description?: string | null`.
+- `src/components/wasl/contact-info-panel.tsx` — added a "Description" section (group-only) between the hero and Members sections, with an `Info` icon header, `bg-muted/30` surface, `whitespace-pre-wrap` rendering, admin-only "Add description" button (when empty) and "Edit" / "Delete" icon buttons (when set), plus a new `EditDescriptionDialog` with a 500-char Textarea + live char counter and no-op detection. Optimistic local override + global `refreshConversation()` so the sidebar/header update after each admin action. All actions show `sonner` toasts on success/error. No indigo/blue colors used (wasl-teal/green + muted + destructive only). No tests added, no build run.
+
+---
+Task ID: 32-a
+Agent: general-purpose (read receipts breakdown)
+Task: Replace the simple "Read by" list shown when the sender clicks the read-ticks on their own message with a full Read receipts breakdown panel showing three buckets — READ (with timestamp), DELIVERED but not read, and PENDING (not delivered). Extend the read-receipts API to return all three buckets, upgrade the dialog UI with sectioned headers + counts, and keep the existing message-bubble wiring.
+
+Work Log:
+- Read worklog Tasks 30/31 context + the existing `read-receipts/route.ts`, `read-receipts-dialog.tsx`, `message-bubble.tsx` (ReadReceiptsDialog wiring on lines 843-847 + StatusTicks onClick on lines 460/669/717 + onOpenReadReceipts props on lines 678/686), `prisma/schema.prisma` (Participant.lastReadAt + User.online/lastSeen, no per-recipient delivery model), `wasl-avatar.tsx`, `lib/time.ts` (formatChatTimestamp / formatLastSeen), and `globals.css` (`--wasl-green`/`--wasl-green-dark` CSS vars, existing `wasl-timeline-pop` animation pattern). Also inspected `message-info-dialog.tsx` to keep the new dialog visually consistent.
+- Confirmed there is NO `ReadReceipt` model — read receipts are derived from `Participant.lastReadAt` vs `Message.createdAt`. There is also no per-recipient delivery record, so "delivered" vs "pending" must be inferred from `User.online` + `User.lastSeen` relative to `Message.createdAt`.
+
+Step 1 — read-receipts API (`src/app/api/messages/[id]/read-receipts/route.ts`, REWRITTEN):
+- Replaced the single `readBy`-only query with a fetch of ALL participants in the conversation (excluding the sender), ordered by `lastReadAt desc`.
+- For each participant, computed `messageCreatedAt = message.createdAt.getTime()` and bucketed:
+  - READ       → `lastReadAt >= message.createdAt`
+  - DELIVERED  → `lastReadAt <  message.createdAt` AND (`user.online === true` OR `user.lastSeen >= message.createdAt`)
+  - PENDING    → `lastReadAt <  message.createdAt` AND `user.online === false` AND `user.lastSeen < message.createdAt`
+- The DELIVERED bucket's `deliveredAt` field uses `user.lastSeen.toISOString()` as the closest proxy for "when the message reached their device" (their last online activity). The READ bucket keeps `readAt` = `lastReadAt`.
+- Response shape is now exactly `{ readBy: [...], deliveredTo: [...], pending: [...], totalParticipants: number }`, where each recipient object carries `{ userId, name, username, avatar, avatarColor, online, lastSeen }` plus the bucket-specific timestamp field (`readAt` / `deliveredAt`). The previous `totalParticipants` semantics (count of other participants) is preserved.
+- Auth/sender checks (401 if no session, 404 if message missing, 403 if caller isn't the sender) are unchanged. `runtime = 'nodejs'` preserved.
+
+Step 2 — read-receipts dialog (`src/components/wasl/read-receipts-dialog.tsx`, REWRITTEN):
+- New `Breakdown` type + `EMPTY` constant; replaced `readBy`/`totalParticipants` state with a single `data: Breakdown` state.
+- `load()` now reads `readBy` / `deliveredTo` / `pending` / `totalParticipants` from the JSON and populates `data`. Reset to EMPTY on dialog close (after a 150ms delay so the closing animation isn't interrupted by stale data).
+- Title changed from "Read by" → "Read receipts" with a `CheckCheck` icon in wasl-green (`text-[var(--wasl-green-dark)] dark:text-[var(--wasl-green)]`) — replaces the previous `text-sky-500` blue.
+- Description: `"${readCount} of ${totalParticipants} recipient(s) read this message"` (or fallback when totalParticipants === 0).
+- Body: `max-h-96 overflow-y-auto wasl-scroll` (was `max-h-[50vh]`) with a new `wasl-read-receipts-pop` class for the subtle fade-in animation.
+- Three sectioned groups, each rendered only when non-empty, each with an uppercase header + count badge:
+  - `READ (N)` — `CheckCheck` icon, wasl-green accent (`text-[var(--wasl-green-dark)] dark:text-[var(--wasl-green)]`); each row has `WaslAvatar`, name, `"Read HH:MM"` timestamp, and a trailing wasl-green `CheckCheck`.
+  - `DELIVERED (N)` — `CheckCheck` icon, muted-foreground accent; each row has `WaslAvatar`, name, `"Delivered HH:MM"` timestamp, trailing muted `CheckCheck`.
+  - `PENDING (N)` — `Clock` icon, muted-foreground accent; each row has `WaslAvatar`, name, `"Not delivered yet"` label, trailing muted `Clock`.
+- Each row reuses `WaslAvatar` with `showStatus`, online dot derived from `useWaslStore(s => s.onlineUserIds)` OR the recipient's `online` flag. Offline rows show last-seen via `formatLastSeen(p.lastSeen, false)`.
+- Two empty states:
+  - `totalParticipants === 0` → `Users` icon + "No other recipients" + explanatory copy.
+  - All three buckets empty (shouldn't normally happen, but defensive) → `Clock` icon + "Waiting to deliver".
+- Loading state preserved (`Loader2` spinner).
+- Extracted `Section` + `RecipientRow` sub-components for clarity. Removed all `text-sky-*` / blue usage from this file.
+
+Step 3 — animation CSS (`src/app/globals.css`, MODIFIED):
+- Added `@keyframes wasl-read-receipts-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }` and the `.wasl-read-receipts-pop { animation: wasl-read-receipts-pop 0.18s ease-out backwards; }` class, placed right after the existing `.wasl-timeline-pop` block for thematic grouping. Added a `@media (prefers-reduced-motion: reduce)` guard to disable the animation for accessibility.
+
+Step 4 — message-bubble.tsx wiring verification (NO CHANGES):
+- Confirmed `ReadReceiptsDialog` is already wired with `messageId={message.id}` (lines 843-847). The API derives `conversationId` + `senderId` from the message itself, so no `conversationParticipants` prop is needed.
+- Confirmed the three call sites that open the dialog (`StatusTicks` onClick on lines 460/669/717 for text/image, and `onOpenReadReceipts` props on lines 678/686 for PDF/audio cards) all funnel into `setReadReceiptsOpen(true)`. No changes needed.
+
+Verification:
+- `bun run lint` → exit 0, zero errors/warnings across the whole repo.
+- `bunx tsc --noEmit | grep -E 'read-receipts|globals'` → no matches (no type errors in the touched files).
+- Dev server smoke test (server was down on first probe — restarted it with the worklog's `setsid -f bash -c 'exec ./node_modules/.bin/next dev -p 3000 ...'` pattern):
+  - Login as `demo` (`identifier=demo`, `password=demo123`) → 200.
+  - GET `/api/messages/{id}/read-receipts` on Demo's own system message in the "Renamed Real Group" group → 200 with `readBy:[Layla]`, `deliveredTo:[]`, `pending:[Amira]`, `totalParticipants:2`. Layla correctly bucketed as READ (her `lastReadAt` >= message.createdAt); Amira correctly bucketed as PENDING (offline, lastSeen older than the message).
+  - POSTed a fresh text message ("Testing the new read-receipts breakdown panel …") → 200. GET read-receipts → 200 with both recipients in PENDING (both offline, lastSeen older than the new message).
+  - Logged in as Layla (`demo_layla_mostafa` / `demo123`) → 200. POST `/api/profile` with `{ online: true }` → 200 (updates her `online=true` + `lastSeen=now`).
+  - GET read-receipts on the fresh message (as Demo) → 200 with `readBy:[]`, `deliveredTo:[Layla]` (online=true → matches DELIVERED bucket), `pending:[Amira]`. Layla's `deliveredAt` = her lastSeen timestamp. ✅
+  - Restored demo state: POST `/api/profile` as Layla with `{ online: false }` → 200.
+- All three buckets verified end-to-end against live data. No tests added (per instructions). No `bun run build` run (per instructions). No indigo/blue colors introduced — only wasl-green/teal CSS vars + muted-foreground neutrals + standard border/background tokens.
+
+Stage Summary:
+- `src/app/api/messages/[id]/read-receipts/route.ts` — rewritten to fetch ALL conversation participants (excluding sender) and bucket each into READ / DELIVERED / PENDING based on `Participant.lastReadAt` vs `Message.createdAt` AND `User.online` / `User.lastSeen`. Returns `{ readBy, deliveredTo, pending, totalParticipants }`; each recipient carries `{ userId, name, username, avatar, avatarColor, online, lastSeen }` plus a bucket-specific timestamp (`readAt` / `deliveredAt`). Auth/sender checks unchanged.
+- `src/components/wasl/read-receipts-dialog.tsx` — rewritten as a 3-section breakdown panel. Each section (READ / DELIVERED / PENDING) shows a header with count, the relevant icon (CheckCheck / CheckCheck / Clock), and a list of recipient rows (`WaslAvatar` + name + timestamp + trailing status icon). Added two empty states (no other recipients / waiting to deliver), `max-h-96 overflow-y-auto wasl-scroll` body, and a `wasl-read-receipts-pop` fade-in animation class. Removed all `text-sky-*` blue usage; replaced with `--wasl-green` / `--wasl-green-dark` for the READ accent.
+- `src/app/globals.css` — added `@keyframes wasl-read-receipts-pop` (translateY(6px) → 0 + opacity 0 → 1, 0.18s ease-out) + `.wasl-read-receipts-pop` class, with a `prefers-reduced-motion: reduce` guard.
+- `src/components/wasl/message-bubble.tsx` — NO changes (existing `ReadReceiptsDialog open/onOpenChange/messageId` wiring already correct).
+- Left a fresh "Testing the new read-receipts breakdown panel …" message (id `cmu4sxobb0001skuewx7n5l30`) in the "Renamed Real Group" conversation so the user can manually verify the new UI by logging in as `demo` / `demo123`, opening that group, and clicking the read-ticks on their own message.
+
+---
+Task ID: 32 — Read receipts breakdown + Group description + Recurring scheduled messages
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing upgrading and fixing".
+
+### Phase 1: Read Receipts Breakdown Panel (subagent 32-a)
+**API:** `src/app/api/messages/[id]/read-receipts/route.ts`
+- Rewrote GET to return a full breakdown: `{ readBy, deliveredTo, pending, totalParticipants }`
+- `readBy`: participants whose lastReadAt >= message.createdAt
+- `deliveredTo`: lastReadAt < createdAt but user has been online since
+- `pending`: offline and lastSeen older than the message
+
+**UI:** `src/components/wasl/read-receipts-dialog.tsx`
+- Three-section panel: READ (green), DELIVERED (gray), PENDING (clock)
+- Each section has a count header + avatar rows with timestamps
+- `WaslAvatar` for each user, online/last-seen indicators
+- Fade-in animation (wasl-read-receipts-pop)
+- max-h-96 overflow-y-auto with wasl-scroll
+- Two empty states (no recipients / waiting to deliver)
+
+**CSS:** `src/app/globals.css` — added wasl-read-receipts-pop keyframe
+
+### Phase 2: Group Description (subagent 32-b)
+**Prisma schema:** Added `description String?` to `Conversation` model
+
+**API:** `src/app/api/conversations/[id]/route.ts`
+- GET returns `description`
+- PATCH accepts optional `description` (≤500 chars)
+- Emits system message "X changed/deleted the group description"
+- No-op short-circuit: `{ unchanged: true }`
+
+**Store:** `src/lib/store.ts` — Conversation type now has `description?: string | null`
+
+**UI:** `src/components/wasl/contact-info-panel.tsx`
+- "Description" section (group-only, between hero and Members)
+- Info icon header, bg-muted/30 surface, whitespace-pre-wrap rendering
+- Admin-only "Add description" button (empty state)
+- Admin-only "Edit"/"Delete" icon buttons (when set)
+- EditDescriptionDialog with Textarea + 500-char counter
+
+**E2E verified:**
+- Create group → 200, creator=admin ✅
+- Set description → 200, desc persists ✅
+- Get conversation returns description ✅
+
+### Phase 3: Recurring Scheduled Messages (main)
+**Prisma schema:** `prisma/schema.prisma` — ScheduledMessage model extended:
+- `repeat String @default("none")` — 'none'|'daily'|'weekly'|'monthly'
+- `repeatUntil DateTime?` — optional end date for recurring schedules
+
+**API:** `src/app/api/scheduled-messages/route.ts`
+- POST now accepts `repeat` and `repeatUntil` params
+- Validates repeat against ['none','daily','weekly','monthly']
+- Validates repeatUntil > scheduledFor
+
+**New API:** `src/app/api/scheduled-messages/process/route.ts`
+- POST processes all due scheduled messages (scheduledFor <= now)
+- For one-time: sends message, marks sent=true
+- For recurring: sends message, advances scheduledFor to next occurrence
+- If next occurrence > repeatUntil: marks sent=true (stops recurring)
+- `computeNextOccurrence()` advances from prev scheduledFor for consistent intervals
+- Returns `{ processed, sent, advanced, completed, errors? }`
+- Idempotent — safe to call multiple times
+
+**UI:** `src/components/wasl/schedule-dialog.tsx`
+- Added "Repeat" section with 4 options: One-time, Daily, Weekly, Monthly
+- Each option is a clickable card with label + description
+- When repeat != 'none': shows "End date (optional)" date input
+- Button label changes: "Schedule" → "Schedule Recurring"
+- Toast shows repeat mode: "Message scheduled for ... (daily)"
+
+**Client-side scheduler:** `src/components/wasl/chat-app.tsx`
+- Added useEffect that polls /api/scheduled-messages/process every 60s
+- Fires once immediately on mount
+- If messages were sent, refreshes the conversation list
+- Idempotent endpoint makes this safe across multiple tabs
+
+**E2E verified:**
+- One-time schedule → 200, repeat="none" ✅
+- Daily recurring → 200, repeat="daily" ✅
+- List shows both with correct repeat values ✅
+- Past-due rejection → 400 "Scheduled time must be in the future" ✅
+- Process endpoint → 200 with summary ✅
+
+### Phase 4: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| PATCH /api/conversations/{id} (description) | 200 ✅ |
+| GET /api/conversations/{id} (returns desc) | 200 ✅ |
+| GET /api/messages/{id}/read-receipts | 200, breakdown ✅ |
+| POST /api/scheduled-messages (one-time) | 200 ✅ |
+| POST /api/scheduled-messages (recurring) | 200 ✅ |
+| POST /api/scheduled-messages/process | 200 ✅ |
+| Past-due schedule rejected | 400 ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 32)
+- `prisma/schema.prisma` — Conversation.description + ScheduledMessage.repeat/repeatUntil
+- `src/app/api/messages/[id]/read-receipts/route.ts` — breakdown (subagent 32-a)
+- `src/components/wasl/read-receipts-dialog.tsx` — 3-section panel (subagent 32-a)
+- `src/app/globals.css` — wasl-read-receipts-pop (subagent 32-a)
+- `src/app/api/conversations/[id]/route.ts` — description PATCH (subagent 32-b)
+- `src/app/api/conversations/route.ts` — description in list (subagent 32-b)
+- `src/lib/store.ts` — Conversation.description type (subagent 32-b)
+- `src/components/wasl/contact-info-panel.tsx` — description UI (subagent 32-b)
+- `src/app/api/scheduled-messages/route.ts` — recurring support (main)
+- `src/app/api/scheduled-messages/process/route.ts` — NEW processor (main)
+- `src/components/wasl/schedule-dialog.tsx` — repeat UI (main)
+- `src/components/wasl/chat-app.tsx` — scheduler polling (main)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add voice note transcription
+- Add message pinning by admin (group)
+- Add group avatar upload
+- Add typing indicator in group (show who is typing)
+- Add message reply with quote preview in composer

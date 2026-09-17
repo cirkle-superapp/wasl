@@ -82,6 +82,34 @@ export function ChatApp({ user }: { user: any }) {
     }
   }, [])
 
+  // ---- Scheduled message processor ----------------------------------------
+  // Polls /api/scheduled-messages/process every 60s to send due messages.
+  // This is a lightweight client-side scheduler — the endpoint is idempotent
+  // so multiple clients calling it is safe. Also fires once on mount.
+  useEffect(() => {
+    const processScheduled = () => {
+      fetch('/api/scheduled-messages/process', { method: 'POST' })
+        .then((r) => r.json())
+        .then((data) => {
+          // If any messages were sent, refresh the conversation list so the
+          // sidebar updates with the new last-message previews.
+          if (data?.sent > 0) {
+            fetch('/api/conversations', { cache: 'no-store' })
+              .then((r) => r.json())
+              .then((d) => {
+                if (d.conversations) setConversations(d.conversations)
+              })
+              .catch(() => {})
+          }
+        })
+        .catch(() => {})
+    }
+    // Fire once immediately on mount, then every 60s.
+    processScheduled()
+    const interval = setInterval(processScheduled, 60_000)
+    return () => clearInterval(interval)
+  }, [setConversations])
+
   // Mark offline on tab close — use a Blob with explicit application/json
   // content-type so the Next.js route handler's req.json() can parse the body.
   // (navigator.sendBeacon defaults to text/plain;charset=UTF-8 which makes
