@@ -73,6 +73,10 @@ export type ChatMessage = {
   edited?: boolean
   // When true, the message is pinned to the top of the conversation.
   pinned?: boolean
+  // Optional AI-generated transcription for voice messages. Populated by
+  // POST /api/ai/transcribe. Null/undefined when no transcription is
+  // available yet (the bubble then shows a "Transcribe" CTA).
+  transcription?: string | null
 }
 
 // Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.

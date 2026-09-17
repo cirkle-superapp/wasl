@@ -3715,3 +3715,227 @@ conversations for the current user. Batch-fetches conversations + participants
 - Add message search across all conversations
 - Add typing indicator in group (show who is typing) — DONE in Task 33
 - Add group avatar upload — DONE in Task 33
+
+---
+Task ID: 36-b
+Agent: general-purpose (voice note transcription)
+Task: Add a voice-note transcription feature. Voice notes are stored as base64 `data:audio/*` data URLs in `Message.content` (type `'voice'`). The available AI providers in `src/lib/ai.ts` (Nvidia DeepSeek, Groq, OpenRouter, Gemini) are text-only chat-completion LLMs and cannot decode audio, so the implementation uses a transparent placeholder transcription persisted on a new `Message.transcription` column, plus a full client-side UI (Transcribe / Show / Hide toggle, loading spinner, smooth expand/collapse, "Transcription available" indicator).
+
+Work Log:
+- Read `worklog.md` (Tasks 34, 35, 27 — AI providers) to confirm: AI router at `src/lib/ai.ts` is text-only; voice notes are stored as base64 data URLs in `Message.content` with `type: 'voice'`; `VoicePlayer` at `src/components/wasl/voice-player.tsx`; voice rendering branch in `src/components/wasl/message-bubble.tsx` (around the `message.type === 'voice' && message.content.startsWith('data:audio')` early-return).
+- Inspected `src/app/api/ai/summary/route.ts` + `src/app/api/bookmarks/route.ts` to mirror the established auth + membership-check pattern (`getSession()`, `db.participant.findUnique({ where: { conversationId_userId: … } })`).
+- Inspected `src/lib/store.ts` `ChatMessage` type and `src/app/api/conversations/[id]/messages/route.ts` GET handler to wire the new `transcription` field through to the client.
+
+Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED):
+- Added `transcription String?` to the `Message` model (after `pinned`, before `createdAt`). Comment explains it is populated by `POST /api/ai/transcribe`.
+- Ran `bun run db:push` — schema applied successfully (no data loss, Prisma client regenerated).
+
+Step 2 — Transcription API (`src/app/api/ai/transcribe/route.ts`, NEW):
+- POST handler. Body: `{ messageId }`.
+- Auth check (`getSession()` → 401 if missing).
+- Looks up the message (selecting `id, conversationId, type, content, transcription`).
+- Membership check via `db.participant.findUnique({ where: { conversationId_userId } })` → 403 if the user is not in the message's conversation (prevents cross-conversation ID probing).
+- Verifies `type === 'voice' && content.startsWith('data:audio')` → 404 otherwise.
+- If `message.transcription` is already set, returns `{ transcription, cached: true }` (no re-computation).
+- Otherwise, generates an honest placeholder — `"🎤 Voice message — automatic transcription is not available. Play to listen."` — persists it on the row (`db.message.update`), and returns `{ transcription, cached: false }`. The block is clearly commented so a future agent can swap in a real ASR provider (Whisper / Deepgram) by replacing just the placeholder block.
+
+Step 3 — Store type (`src/lib/store.ts`, MODIFIED):
+- Added `transcription?: string | null` to `ChatMessage`. Documented that it is populated by `POST /api/ai/transcribe` and that null/undefined means "no transcription yet — bubble shows the Transcribe CTA".
+
+Step 4 — Messages API (`src/app/api/conversations/[id]/messages/route.ts`, MODIFIED):
+- Added `transcription: m.transcription` to the GET message mapper so the field flows through to the client. (The query already uses `include: { reactions: … }` rather than `select`, so the new scalar column is already returned by Prisma — only the explicit mapper line needed updating.)
+
+Step 5 — VoicePlayer UI (`src/components/wasl/voice-player.tsx`, MODIFIED):
+- Added `FileText` to the lucide-react import list.
+- Added two new optional props to `VoicePlayerProps`: `transcription?: string | null` (initial/server-provided transcription) and `messageId?: string` (enables the transcription UI for voice notes; absent for uploaded audio files).
+- Added local state: `transcription` (initialised from `initialTranscription`), `transcribing` (in-flight fetch flag), `showTranscription` (toggle), `transcriptionError`.
+- Added `supportsTranscription` derived flag (`!!messageId && variant === 'voice'`).
+- Added `handleToggleTranscription()` async handler: on first open with no cached transcription, POSTs `/api/ai/transcribe` with `{ messageId }`, shows a spinner, parses `{ transcription }` from the JSON response, sets local state, and surfaces network/server errors inline in the transcription box.
+- Wrapped the existing player `<div>` in an outer `flex flex-col gap-1` container that also holds the transcription UI when `supportsTranscription` is true.
+- Transcription toggle button: small pill (`text-[11px]`, `px-2 py-1`, `rounded-md`), `FileText` icon, `Loader2` spinner while transcribing. Label cycles through `Transcribe` / `Show transcription` / `Hide transcription` / `Transcribing…` based on state. `aria-expanded` + `aria-controls` for a11y. No indigo/blue — uses `text-muted-foreground` + `hover:bg-black/[0.04] dark:hover:bg-white/[0.06]` to stay on-theme.
+- Transcription box: smooth expand/collapse via CSS grid-rows transition (`grid-rows-[0fr]` → `grid-rows-[1fr]` over 200ms) wrapped around an `overflow-hidden` inner div so the content isn't clipped when expanded. The inner transcription text container uses `bg-muted/30`, italic `text-muted-foreground`, `text-[11px]`, with `role="region"` + `aria-label`. Inner content state: spinner + "Transcribing audio…" during fetch, error message in `text-foreground/70` on failure, the transcription text on success, or a muted "No transcription yet." fallback.
+
+Step 6 — Message-bubble wiring (`src/components/wasl/message-bubble.tsx`, MODIFIED):
+- The voice-message rendering branch now passes `messageId={message.id}` and `transcription={message.transcription ?? null}` to `<VoicePlayer />`.
+- Added a small `FileText` indicator (w-3 h-3, `text-foreground/50`, `title="Transcription available"`) inside the timestamp footer row, shown only when `message.transcription` is truthy — so users can see at a glance which voice notes already have a transcript cached before opening them. (`FileText` was already in the file's lucide-react import list — no new import needed.)
+
+Step 7 — Verification:
+- `bun run lint` → 0 errors (clean output, just the `$ eslint .` banner).
+- `bunx tsc --noEmit` filtered to my touched files (`voice-player`, `message-bubble`, `transcribe`, `store.ts`, `messages/route.ts`) → no errors reported in any of them.
+- Dev server already running on port 3000; verified `GET /` → 200 and `POST /api/ai/transcribe` with no auth → 401 (auth check working). The route compiles cleanly on first hit (no Next.js build errors in `dev.log`).
+
+Stage Summary:
+- **Prisma**: `prisma/schema.prisma` — added `transcription String?` to the `Message` model. Applied with `bun run db:push`.
+- **API** (new): `src/app/api/ai/transcribe/route.ts` — POST `{ messageId }` → `{ transcription, cached }`. Auth + conversation-membership checks; only operates on `type: 'voice'` rows with `data:audio` content. Returns a transparent placeholder transcription (the available AI providers are text-only LLMs and cannot decode audio) and persists it on the message row so subsequent requests are cached. The block is isolated and clearly commented for a future real-ASR swap-in.
+- **Store**: `src/lib/store.ts` — added `transcription?: string | null` to `ChatMessage`.
+- **Messages API**: `src/app/api/conversations/[id]/messages/route.ts` — added `transcription: m.transcription` to the GET mapper.
+- **VoicePlayer**: `src/components/wasl/voice-player.tsx` — added `transcription` + `messageId` props; new `handleToggleTranscription` async handler that calls the API on first open; toggle button with `FileText` icon + spinner + state-aware label; transcription box with `bg-muted/30` + italic muted text + smooth `grid-rows` expand/collapse animation. No indigo/blue.
+- **Message-bubble**: `src/components/wasl/message-bubble.tsx` — passes `messageId` + `transcription` to `VoicePlayer` for voice notes; renders a small `FileText` indicator next to the timestamp when a transcription is already cached.
+- TypeScript-strict, no test files created, did NOT run `bun run build`. All UI uses the wasl color palette + theme tokens (no indigo/blue).
+
+---
+Task ID: 36-a
+Agent: general-purpose (global message search)
+Task: Add a GLOBAL message search that searches across ALL of the user's conversations at once (existing search was per-conversation only via chat-search-dialog). Includes a new /api/search route, a GlobalSearchDialog component, and sidebar entry points (MoreVertical menu item, Enter-to-search from the sidebar search box, and a Ctrl/Cmd+Shift+F keyboard shortcut).
+
+Work Log:
+- Read `worklog.md` (Tasks 34, 35, 35-a, 35-b) to understand established patterns: `GlobalStarredDialog` retry-poll jump-to-message pattern; `/api/starred` 3-query batch fetch (memberships → conversations+participants → senders); per-conversation `/api/conversations/[id]/search` with `q` / `from` / `to` params; `pickAvatarColor` fallback for missing avatar colors; `WaslAvatar` / `WaslGroupAvatar` props.
+- Verified dev server was already running on port 3000 (`curl /` → 200).
+- Confirmed the existing per-conversation search route (`src/app/api/conversations/[id]/search/route.ts`) — mirrored its `q`/`from`/`to` semantics (silent drop of invalid dates, end-of-day extension on `to`, ASCII case-insensitive `contains`) into the new global search.
+
+Step 1 — API route (`src/app/api/search/route.ts`, NEW):
+- `GET /api/search?q=...&from=YYYY-MM-DD&to=YYYY-MM-DD` — searches messages across ALL conversations the current user is a member of.
+- Implementation:
+  1. `getSession()` → 401 if unauthenticated.
+  2. Parse `q`, `from`, `to` query params. Invalid date strings are silently dropped (no 400) — same behaviour as the per-conversation search route. `to` is extended to `23:59:59.999` for an inclusive upper bound.
+  3. If no `q` AND no date bound → return empty `{ results: [], total: 0, conversationCount: 0 }` so the UI can render its "Type to search…" empty state.
+  4. Find all conversation IDs the user is a member of via `db.participant.findMany({ where: { userId } })`. Empty list → return empty results.
+  5. Fetch "deleted for me" message IDs (`db.deletedForMe.findMany`) scoped to those conversations — these are excluded from results.
+  6. `db.message.findMany({ where: { conversationId: { in: [...] }, content: { contains: q }, type: { not: 'system' }, createdAt: {...} }, orderBy: { createdAt: 'desc' }, take: 200 })` — fetch 200 (headroom for the deleted-for-me filter), then JS-filter deleted IDs, then `.slice(0, 50)` for the final cap.
+  7. Non-ASCII safety net: re-filter results in JS using `content.toLowerCase().includes(q.toLowerCase())` so Arabic / Cyrillic / etc. case variants are caught (SQLite's `contains` is ASCII-only case-insensitive).
+  8. Bulk-fetch conversations + participants + senders in 3 queries (same pattern as `/api/starred`). For each message, derive display name + avatar + avatarColor per conversation: 1-on-1 → other participant's user info; group → stored fields with `pickAvatarColor` fallback.
+  9. Return `{ results: [{ messageId, content, type, createdAt, senderId, senderName, conversationId, conversationName, conversationAvatar, conversationAvatarColor, isGroup }], total, conversationCount }`.
+
+Step 2 — Dialog (`src/components/wasl/global-search-dialog.tsx`, NEW):
+- `'use client'` shadcn `Dialog` with header "Search messages" + count subtitle ("X results in Y conversations").
+- Auto-focus `<Input>` at the top with 250ms debounce (separate `query` for the input, `debouncedQ` for the fetch — same pattern as `GlobalStarredDialog`).
+- Enter key forces an immediate (non-debounced) search.
+- Optional `initialQuery` prop — when the dialog is opened from the sidebar search box (Enter pressed with text), the typed text is forwarded so the global search starts with that query.
+- Results grouped by conversationId via `useMemo` (Map preserves first-seen order, which is implicit "most recent match" order since `results` is already sorted by createdAt desc).
+- Each conversation group has a **sticky header** showing avatar + name + group icon + match count, followed by the matching messages under it.
+- Each message row shows: sender name + timestamp on top, then the message content with the first occurrence of the query highlighted via `<mark className="bg-yellow-200 dark:bg-yellow-900/70">`. Image messages render a thumbnail. Content longer than 220 chars is truncated with "…".
+- Hover reveals a "Jump" hint with an `ArrowDown` icon.
+- Clicking a row: `setActiveConversation(conversationId)` → `onOpenChange(false)` → retry-poll dispatch of `wasl:jump-to-message` (same retry-poll pattern as `GlobalStarredDialog`: DOM poll for up to 1.5s, dispatch when the message element exists or on timeout). Lets the chat window load the target conversation's messages async before scrolling/flashing the bubble.
+- Empty states:
+  - No query → "Type to search across all your conversations." (with a `MessageCircle` icon in a `wasl-green` circle).
+  - Query with no results → "No messages found for '{query}'." (with a `Search` icon in a muted circle).
+- Result count line at the top of the scroll area: "X results in Y conversations".
+- Scrollable list: `max-h-96 overflow-y-auto wasl-scroll`. Rows use `wasl-msg-in` entrance animation.
+- All colors are from the wasl palette (`--wasl-teal`, `--wasl-green`) and the yellow `<mark>` highlight. No indigo/blue anywhere.
+
+Step 3 — Sidebar wiring (`src/components/wasl/sidebar.tsx`, MODIFIED):
+- Imported `TextSearch` from lucide-react (chose `TextSearch` over `MessageSearch` because the latter does not exist in the installed lucide-react version — verified via `node -e "require('lucide-react')"`).
+- Imported `GlobalSearchDialog`.
+- Added `globalSearchOpen` + `globalSearchInitialQuery` state.
+- Added a **global keyboard shortcut** `useEffect` listening for `Ctrl/Cmd+Shift+F` → opens the dialog with empty initial query. (Kept separate from the existing `Ctrl+K` command palette so the two shortcuts don't collide.)
+- Added a "Search messages" item to the MoreVertical dropdown (between "New chat" and "Starred messages") with a `TextSearch` icon in `wasl-teal`/`wasl-green` and a `⌘⇧F` kbd hint on the right.
+- Added `onKeyDown={Enter}` handler to the sidebar conversation-search `<Input>` — pressing Enter with a non-empty query opens the global search dialog pre-seeded with the typed text (mirrors WhatsApp's "press Enter in the search box to search messages" UX).
+- Added a small `TextSearch` button inside the search input that appears when the input is non-empty (next to the existing ⌘K kbd hint) — clicking it opens the global search pre-seeded with the typed text.
+- Mounted `<GlobalSearchDialog open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} initialQuery={globalSearchInitialQuery} />` alongside the other sidebar dialogs.
+
+Step 4 — Verification:
+- `bun run lint` → exit 0, zero errors, zero warnings across the whole project.
+- `bunx tsc --noEmit` filtered to my touched files → no errors in `src/app/api/search/route.ts`, `src/components/wasl/global-search-dialog.tsx`, or `src/components/wasl/sidebar.tsx`. (One pre-existing TS error in `src/components/ui/sidebar.tsx` — the shadcn UI primitive, NOT my touched `src/components/wasl/sidebar.tsx` — confirmed unrelated to this task.)
+- Manual API smoke tests with a real logged-in user (set `wasl_session` cookie to the demo user's ID):
+  - `GET /api/search` (no q, no dates) → `{ results: [], total: 0, conversationCount: 0 }` ✅
+  - `GET /api/search?q=Welcome` → returned 2 results across 2 conversations (a 1-on-1 + a group), with correctly resolved display names ("Amira Hassan" for 1-on-1, "Friends on Wasl" for the group) and `isGroup` flag set correctly ✅
+  - `GET /api/search?from=2026-01-01&to=2026-12-31` → returned messages within the date range ✅
+  - `GET /api/search?q=Welcome&from=2026-01-01` → returned text+date-filtered results ✅
+  - `GET /api/search` (unauthenticated) → 401 ✅
+  - `GET /api/search?q=Welcome` as a user NOT in demo's conversations → 0 results (correctly excluded non-member conversations) ✅
+
+Stage Summary:
+- New file: `src/app/api/search/route.ts` — global message search API (`GET /api/search?q=…&from=…&to=…`). Searches across all conversations the user is a member of; excludes "deleted for me" messages; returns up to 50 results sorted by createdAt desc; bulk-fetches conversations + senders (no N+1); returns `{ results, total, conversationCount }` per the task spec.
+- New file: `src/components/wasl/global-search-dialog.tsx` — full shadcn Dialog with debounced auto-focus search, results grouped by conversation (sticky avatar + name headers), highlighted matches via `<mark className="bg-yellow-200 dark:bg-yellow-900/70">`, sender + timestamp + jump hint per row, retry-poll cross-conversation jump-to-message, empty states, wasl palette (no indigo/blue).
+- Modified file: `src/components/wasl/sidebar.tsx` — added `TextSearch` icon import, `GlobalSearchDialog` import, `globalSearchOpen`/`globalSearchInitialQuery` state, `Ctrl/Cmd+Shift+F` keyboard shortcut, "Search messages" MoreVertical menu item with `⌘⇧F` hint, Enter-to-search on the sidebar search input (pre-seeds the dialog with the typed text), inline `TextSearch` button inside the search input when it's non-empty, and the dialog mount.
+- All UI uses the wasl color palette + yellow `<mark>` highlight (no indigo/blue). TypeScript-strict. No test files created. Did NOT run `bun run build`. No Prisma schema changes needed (reuses existing `Message`, `Participant`, `DeletedForMe`, `User`, `Conversation` models).
+
+---
+Task ID: 36 — Global message search + Voice note transcription
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing, upgrading, and fixing".
+
+### Phase 1: Global Message Search Across All Conversations (subagent 36-a)
+**Files:** `src/app/api/search/route.ts` (NEW), `src/components/wasl/global-search-dialog.tsx` (NEW), `src/components/wasl/sidebar.tsx`
+
+**API:** `GET /api/search?q=text&from=&to=` — searches messages across ALL conversations the user is a member of:
+- Batch-fetches conversations + senders in 3 queries (no N+1)
+- Excludes "deleted for me" messages
+- Supports optional date filters (from/to, inclusive)
+- Returns results with conversation info (name, avatar, isGroup)
+- Sorted by createdAt desc, capped at 50 results
+- Returns `{ results, total, conversationCount }`
+
+**UI — GlobalSearchDialog:**
+- Auto-focus debounced search input
+- Results grouped by conversation (sticky headers with avatar + name + match count)
+- Each result shows sender name, timestamp, content with highlighted match (`<mark>`)
+- Click → sets conversation active + dispatches wasl:jump-to-message with retry-poll
+- Empty states: "Type to search across all your conversations." / "No messages found for '{query}'."
+- Header: "X results in Y conversations"
+
+**Sidebar integration:**
+- Ctrl+Shift+F (Cmd+Shift+F) keyboard shortcut to open global search
+- "Search messages" menu item in MoreVertical dropdown with ⌘⇧F hint
+- Enter in sidebar search box opens global search with pre-seeded query
+- TextSearch icon button inside sidebar search input when non-empty
+
+**E2E verified:**
+- Search "Welcome" → 2 results across 2 conversations ✅
+- Date filter → correct results ✅
+
+### Phase 2: Voice Note Transcription (subagent 36-b)
+**Files:** `prisma/schema.prisma`, `src/app/api/ai/transcribe/route.ts` (NEW), `src/components/wasl/voice-player.tsx`, `src/components/wasl/message-bubble.tsx`, `src/lib/store.ts`, `src/app/api/conversations/[id]/messages/route.ts`
+
+**Prisma schema:** Added `transcription String?` to Message model
+
+**API:** `POST /api/ai/transcribe { messageId }`:
+- Auth + conversation-membership checks
+- Only operates on `type: 'voice'` messages with `data:audio` content
+- Returns `{ transcription, cached }`
+- Persists transcription so subsequent calls return cached=true
+- Currently returns a placeholder: "🎤 Voice message — automatic transcription is not available. Play to listen."
+  (The available AI providers are text-only LLMs, not speech-to-text models)
+
+**UI — VoicePlayer:**
+- "Show transcription" / "Transcribe" toggle button below audio player
+- Loading spinner during transcription request
+- Transcription box with bg-muted/30, italic muted text
+- Smooth CSS grid-rows expand/collapse animation
+- State-aware button label (Transcribe / Show / Hide)
+
+**Message-bubble:**
+- Passes `messageId` + `transcription` to VoicePlayer
+- Shows FileText indicator next to timestamp when transcription is cached
+
+**Store:** `ChatMessage` type now has `transcription?: string | null`
+
+**E2E verified:**
+- Send voice message → 200 ✅
+- POST /api/ai/transcribe → 200, returns transcription ✅
+- Invalid message ID → 404 ✅
+- Messages API includes transcription field ✅
+
+### Phase 3: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| GET /api/search?q=Welcome | 200, 2 results across 2 convs ✅ |
+| GET /api/search?q=Welcome&from=...&to=... | 200, date-filtered ✅ |
+| POST /api/ai/transcribe (valid) | 200, returns transcription ✅ |
+| POST /api/ai/transcribe (invalid ID) | 404 ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 36)
+- `src/app/api/search/route.ts` — NEW global search API (subagent 36-a)
+- `src/components/wasl/global-search-dialog.tsx` — NEW (subagent 36-a)
+- `src/components/wasl/sidebar.tsx` — global search integration (subagent 36-a)
+- `prisma/schema.prisma` — transcription field (subagent 36-b)
+- `src/app/api/ai/transcribe/route.ts` — NEW transcribe API (subagent 36-b)
+- `src/components/wasl/voice-player.tsx` — transcription UI (subagent 36-b)
+- `src/components/wasl/message-bubble.tsx` — pass transcription props (subagent 36-b)
+- `src/lib/store.ts` — ChatMessage.transcription type (subagent 36-b)
+- `src/app/api/conversations/[id]/messages/route.ts` — include transcription (subagent 36-b)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add contact import (from phone / CSV)
+- Add real speech-to-text for voice transcription (when a suitable API is available)
+- Add message draft persistence (save unsent messages per conversation)
+- Add read-by-everyone indicator
+- Add message edit time limit indicator

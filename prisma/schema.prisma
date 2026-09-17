@@ -187,6 +187,11 @@ model Message {
   // When true, the message is pinned to the top of the conversation by the
   // sender. Only one message per conversation can be pinned at a time.
   pinned         Boolean  @default(false)
+  // Optional AI-generated transcription for voice messages. Populated by
+  // POST /api/ai/transcribe when the user requests transcription of a voice
+  // note. Null for non-voice messages or voice messages that haven't been
+  // transcribed yet.
+  transcription  String?
   createdAt      DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

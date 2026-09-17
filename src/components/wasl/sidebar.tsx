@@ -18,6 +18,7 @@ import {
   Contact as ContactIcon,
   Star,
   Bookmark as BookmarkIcon,
+  TextSearch,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -32,6 +33,7 @@ import { AnnouncementsDialog } from './announcements-dialog'
 import { ContactsDialog } from './contacts-dialog'
 import { BookmarksDialog } from './bookmarks-dialog'
 import { GlobalStarredDialog } from './global-starred-dialog'
+import { GlobalSearchDialog } from './global-search-dialog'
 import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -74,6 +76,11 @@ export function Sidebar({
     (s) => s.bookmarkedMessageIds.size
   )
   const [starredOpen, setStarredOpen] = useState(false)
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+  // When the user opens global search from the sidebar search box (by
+  // pressing Enter with a non-empty query), the typed text is forwarded
+  // to the dialog as its initial query so they don't have to re-type it.
+  const [globalSearchInitialQuery, setGlobalSearchInitialQuery] = useState('')
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
@@ -98,6 +105,21 @@ export function Sidebar({
     loadConversations()
      
   }, [search])
+
+  // Global keyboard shortcut: Ctrl/Cmd+Shift+F opens the global message
+  // search dialog from anywhere in the app. (Ctrl/Cmd+K already opens the
+  // command palette, so we use Shift+F to keep the two distinct.)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setGlobalSearchInitialQuery('')
+        setGlobalSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const filtered = conversations.filter((c) => {
     if (filter === 'unread' && c.unreadCount === 0) return false
@@ -187,6 +209,18 @@ export function Sidebar({
               <DropdownMenuItem onClick={onNewChat}>
                 <Plus className="w-4 h-4 mr-2" /> New chat
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setGlobalSearchInitialQuery('')
+                  setGlobalSearchOpen(true)
+                }}
+              >
+                <TextSearch className="w-4 h-4 mr-2 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" />
+                Search messages
+                <kbd className="ml-auto text-[10px] text-muted-foreground">
+                  ⌘⇧F
+                </kbd>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setStarredOpen(true)}>
                 <Star className="w-4 h-4 mr-2 fill-amber-400 text-amber-400" />
                 Starred messages
@@ -210,6 +244,18 @@ export function Sidebar({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter with a non-empty query opens the global message
+              // search (across ALL conversations) pre-seeded with the
+              // typed text — mirrors WhatsApp's "search messages" UX
+              // where pressing Enter in the sidebar search jumps into
+              // full-text message search.
+              if (e.key === 'Enter' && search.trim()) {
+                e.preventDefault()
+                setGlobalSearchInitialQuery(search.trim())
+                setGlobalSearchOpen(true)
+              }
+            }}
             placeholder="Search or start a new chat"
             className="pl-9 pr-12 bg-muted/50 border-0 h-9 rounded-full"
           />
@@ -217,6 +263,19 @@ export function Sidebar({
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-medium text-muted-foreground/60 bg-muted-foreground/10 px-1.5 py-0.5 rounded border border-muted-foreground/15 pointer-events-none">
               ⌘K
             </kbd>
+          )}
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setGlobalSearchInitialQuery(search.trim())
+                setGlobalSearchOpen(true)
+              }}
+              title="Search messages in all chats"
+              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-[var(--wasl-teal)] dark:hover:text-[var(--wasl-green)] hover:bg-muted transition-colors"
+            >
+              <TextSearch className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
         <Button
@@ -370,6 +429,11 @@ export function Sidebar({
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
       <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
       <GlobalStarredDialog open={starredOpen} onOpenChange={setStarredOpen} />
+      <GlobalSearchDialog
+        open={globalSearchOpen}
+        onOpenChange={setGlobalSearchOpen}
+        initialQuery={globalSearchInitialQuery}
+      />
       <ContactsDialog
         open={contactsOpen}
         onOpenChange={setContactsOpen}

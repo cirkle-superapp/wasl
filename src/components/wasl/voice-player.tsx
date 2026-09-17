@@ -20,11 +20,21 @@
  *  - Keyboard a11y: Space/Enter toggles play, Enter cycles speed,
  *    ArrowLeft/Right seek 5s.
  *  - Mic icon for voice notes, Music icon for uploaded audio files.
+ *  - Optional voice-note transcription (Task 36-b):
+ *      • When `messageId` is provided (voice notes only), renders a
+ *        "Transcribe" / "Show transcription" toggle below the player.
+ *      • If `transcription` is already present (server-provided), it is
+ *        shown immediately when toggled open — no API call needed.
+ *      • Otherwise, the toggle triggers POST /api/ai/transcribe, shows a
+ *        "Transcribing…" spinner, and caches the result locally so future
+ *        toggles don't re-fetch.
+ *      • Transcription box uses bg-muted/30 + italic muted text, with a
+ *        smooth expand/collapse animation via a CSS grid-rows transition.
  *  - No indigo/blue — only wasl-green / wasl-teal / theme tokens.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Mic, Music, Pause, Play } from 'lucide-react'
+import { FileText, Loader2, Mic, Music, Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Speed cycle: 1x → 1.5x → 2x → 0.5x → 1x (loops). */
@@ -48,6 +58,14 @@ export interface VoicePlayerProps {
   /** Optional aria-label override for the play/pause button. */
   label?: string
   className?: string
+  /** Voice-note transcription (Task 36-b). When provided (and `messageId`
+   *  is set), the toggle reveals the transcription immediately without an
+   *  API call. The parent passes `message.transcription` straight through. */
+  transcription?: string | null
+  /** Message ID for the underlying voice note. Required to enable the
+   *  "Transcribe" CTA — when omitted (e.g. for uploaded audio files), no
+   *  transcription UI is rendered at all. */
+  messageId?: string
 }
 
 /** Format seconds as `m:ss` (e.g. 73 → "1:13"). Returns "0:00" for NaN/0. */
@@ -65,6 +83,8 @@ export function VoicePlayer({
   variant = 'voice',
   label,
   className,
+  transcription: initialTranscription,
+  messageId,
 }: VoicePlayerProps) {
   // The audio element is created lazily on first play so we don't fetch the
   // media (esp. large base64 data URLs) until the user actually wants to
@@ -110,6 +130,26 @@ export function VoicePlayer({
     mq.addListener(onChange)
     return () => mq.removeListener(onChange)
   }, [])
+
+  // ---- Transcription state (Task 36-b) ------------------------------------
+  // `transcription` is the locally-cached value: initialised from the
+  // server-provided `initialTranscription` prop, then updated when the user
+  // triggers the POST /api/ai/transcribe call. `transcribing` is the
+  // in-flight flag for the spinner. `showTranscription` controls the
+  // expand/collapse of the transcription box.
+  const [transcription, setTranscription] = useState<string | null>(
+    initialTranscription ?? null
+  )
+  const [transcribing, setTranscribing] = useState(false)
+  const [showTranscription, setShowTranscription] = useState(false)
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(
+    null
+  )
+
+  // The transcription UI only makes sense for in-browser voice notes —
+  // uploaded audio files (variant === 'audio') don't carry a `messageId`
+  // and the API only transcribes `type: 'voice'` rows.
+  const supportsTranscription = !!messageId && variant === 'voice'
 
   // Lazily instantiate the HTMLAudioElement and wire up its event listeners
   // once. Subsequent calls return the cached element from the ref. Not
@@ -212,6 +252,46 @@ export function VoicePlayer({
     }
   }
 
+  // Toggle the transcription panel open/closed. On the first open, if no
+  // transcription is cached locally, kick off POST /api/ai/transcribe and
+  // show a spinner while we wait. Re-opening afterwards is instant because
+  // the result is stored in `transcription` state.
+  async function handleToggleTranscription() {
+    if (blocked || !messageId) return
+    if (showTranscription) {
+      setShowTranscription(false)
+      return
+    }
+    setShowTranscription(true)
+    setTranscriptionError(null)
+    if (transcription) return
+    setTranscribing(true)
+    try {
+      const res = await fetch('/api/ai/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setTranscriptionError(
+          (data && typeof data === 'object' && 'error' in data
+            ? String((data as { error: unknown }).error)
+            : null) || 'Transcription failed'
+        )
+        return
+      }
+      const data = (await res.json()) as { transcription?: string }
+      if (typeof data.transcription === 'string') {
+        setTranscription(data.transcription)
+      }
+    } catch {
+      setTranscriptionError('Network error — try again')
+    } finally {
+      setTranscribing(false)
+    }
+  }
+
   // Outgoing → wasl-green accent. Incoming → wasl-teal accent.
   // (No indigo/blue per project rules.)
   const accentColor = mine ? 'var(--wasl-green)' : 'var(--wasl-teal)'
@@ -235,114 +315,192 @@ export function VoicePlayer({
   const Icon = variant === 'audio' ? Music : Mic
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-2 min-w-[220px] max-w-[300px]',
-        'rounded-lg px-2 py-1.5',
-        surfaceBg,
-        blocked && 'opacity-60 pointer-events-none',
-        className
-      )}
-    >
-      <Icon
-        className="w-4 h-4 shrink-0"
-        style={{ color: accentColor }}
-        aria-hidden
-      />
-      <button
-        type="button"
-        onClick={togglePlay}
-        disabled={blocked}
-        aria-label={label ?? (playing ? 'Pause audio' : 'Play audio')}
-        aria-pressed={playing}
+    <div className="flex flex-col gap-1">
+      <div
         className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-          'text-white shadow-sm transition-opacity hover:opacity-90',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-          'focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed',
-          playing && !reducedMotion && 'wasl-voice-pulse'
+          'flex items-center gap-2 min-w-[220px] max-w-[300px]',
+          'rounded-lg px-2 py-1.5',
+          surfaceBg,
+          blocked && 'opacity-60 pointer-events-none',
+          className
         )}
-        style={{ backgroundColor: accentColor }}
       >
-        {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : playing ? (
-          <Pause className="w-4 h-4" />
-        ) : (
-          <Play className="w-4 h-4 ml-0.5" />
-        )}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div
+        <Icon
+          className="w-4 h-4 shrink-0"
+          style={{ color: accentColor }}
+          aria-hidden
+        />
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={blocked}
+          aria-label={label ?? (playing ? 'Pause audio' : 'Play audio')}
+          aria-pressed={playing}
           className={cn(
-            'relative flex items-center gap-0.5 h-7 rounded group',
-            !blocked && 'focus-within:ring-2 focus-within:ring-[var(--ring)]/40 focus-within:ring-offset-1'
+            'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
+            'text-white shadow-sm transition-opacity hover:opacity-90',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
+            'focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed',
+            playing && !reducedMotion && 'wasl-voice-pulse'
           )}
+          style={{ backgroundColor: accentColor }}
         >
-          {bars.map((h, i) => {
-            const barProgress = (i / bars.length) * 100
-            const active = barProgress < pct
-            return (
-              <div
-                key={i}
-                className="w-0.5 rounded-full transition-colors"
-                style={{
-                  height: `${h}%`,
-                  backgroundColor: active
-                    ? accentColor
-                    : mine
-                    ? 'color-mix(in oklab, var(--foreground) 30%, transparent)'
-                    : 'color-mix(in oklab, var(--foreground) 22%, transparent)',
-                }}
-              />
-            )
-          })}
-          {/* Transparent range input overlay — provides seek + keyboard
-              a11y on top of the visual waveform bars. opacity-0 keeps the
-              bars visible while the input still receives clicks + focus. */}
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={progress}
-            onChange={handleSeek}
-            onKeyDown={handleSeekKey}
-            disabled={blocked || loading || duration === 0}
-            aria-label="Seek audio position"
-            aria-valuemin={0}
-            aria-valuemax={Math.round(duration)}
-            aria-valuenow={Math.round(progress)}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-          />
-        </div>
-        <div className="flex items-center justify-between mt-0.5 gap-2">
-          <span className="text-[10px] text-foreground/70 tabular-nums">
-            {formatTime(playing ? progress : duration)}
-            {duration > 0 ? ` / ${formatTime(duration)}` : ''}
-          </span>
-          <button
-            type="button"
-            onClick={cycleSpeed}
-            disabled={blocked || loading}
-            aria-label={`Playback speed ${SPEED_LABEL[speed]} — click to change`}
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : playing ? (
+            <Pause className="w-4 h-4" />
+          ) : (
+            <Play className="w-4 h-4 ml-0.5" />
+          )}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div
             className={cn(
-              'shrink-0 inline-flex items-center justify-center',
-              'text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded-full',
-              'transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]',
-              'disabled:cursor-not-allowed'
+              'relative flex items-center gap-0.5 h-7 rounded group',
+              !blocked && 'focus-within:ring-2 focus-within:ring-[var(--ring)]/40 focus-within:ring-offset-1'
             )}
-            style={{
-              backgroundColor: `color-mix(in oklab, ${accentColor} 18%, transparent)`,
-              color: accentColor,
-            }}
-            title="Playback speed"
           >
-            {SPEED_LABEL[speed]}
-          </button>
+            {bars.map((h, i) => {
+              const barProgress = (i / bars.length) * 100
+              const active = barProgress < pct
+              return (
+                <div
+                  key={i}
+                  className="w-0.5 rounded-full transition-colors"
+                  style={{
+                    height: `${h}%`,
+                    backgroundColor: active
+                      ? accentColor
+                      : mine
+                      ? 'color-mix(in oklab, var(--foreground) 30%, transparent)'
+                      : 'color-mix(in oklab, var(--foreground) 22%, transparent)',
+                  }}
+                />
+              )
+            })}
+            {/* Transparent range input overlay — provides seek + keyboard
+                a11y on top of the visual waveform bars. opacity-0 keeps the
+                bars visible while the input still receives clicks + focus. */}
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={progress}
+              onChange={handleSeek}
+              onKeyDown={handleSeekKey}
+              disabled={blocked || loading || duration === 0}
+              aria-label="Seek audio position"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(duration)}
+              aria-valuenow={Math.round(progress)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+            />
+          </div>
+          <div className="flex items-center justify-between mt-0.5 gap-2">
+            <span className="text-[10px] text-foreground/70 tabular-nums">
+              {formatTime(playing ? progress : duration)}
+              {duration > 0 ? ` / ${formatTime(duration)}` : ''}
+            </span>
+            <button
+              type="button"
+              onClick={cycleSpeed}
+              disabled={blocked || loading}
+              aria-label={`Playback speed ${SPEED_LABEL[speed]} — click to change`}
+              className={cn(
+                'shrink-0 inline-flex items-center justify-center',
+                'text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded-full',
+                'transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]',
+                'disabled:cursor-not-allowed'
+              )}
+              style={{
+                backgroundColor: `color-mix(in oklab, ${accentColor} 18%, transparent)`,
+                color: accentColor,
+              }}
+              title="Playback speed"
+            >
+              {SPEED_LABEL[speed]}
+            </button>
+          </div>
         </div>
       </div>
+      {supportsTranscription && (
+        <div className="flex flex-col gap-1 min-w-[220px] max-w-[300px]">
+          <button
+            type="button"
+            onClick={handleToggleTranscription}
+            disabled={blocked || transcribing}
+            aria-expanded={showTranscription}
+            aria-controls={
+              messageId ? `wasl-transcription-${messageId}` : undefined
+            }
+            className={cn(
+              'self-start inline-flex items-center gap-1',
+              'text-[11px] font-medium leading-none px-2 py-1 rounded-md',
+              'transition-colors text-muted-foreground',
+              'hover:text-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.06]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]',
+              'disabled:cursor-not-allowed disabled:opacity-60'
+            )}
+          >
+            {transcribing ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <FileText className="w-3 h-3" />
+            )}
+            <span>
+              {transcribing
+                ? 'Transcribing…'
+                : transcription
+                ? showTranscription
+                  ? 'Hide transcription'
+                  : 'Show transcription'
+                : 'Transcribe'}
+            </span>
+          </button>
+          {/* Smooth expand/collapse using a CSS grid-rows transition. The
+              container animates from 0fr → 1fr, giving a height-based
+              reveal without measuring the content with JS. */}
+          <div
+            className={cn(
+              'grid transition-[grid-template-rows] duration-200 ease-out',
+              showTranscription ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            )}
+          >
+            <div className="overflow-hidden">
+              <div
+                id={
+                  messageId ? `wasl-transcription-${messageId}` : undefined
+                }
+                role="region"
+                aria-label="Voice message transcription"
+                className={cn(
+                  'rounded-md bg-muted/30 px-2 py-1.5',
+                  'text-[11px] italic text-muted-foreground leading-snug'
+                )}
+              >
+                {transcribing ? (
+                  <span className="inline-flex items-center gap-1.5 not-italic">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Transcribing audio…
+                  </span>
+                ) : transcriptionError ? (
+                  <span className="not-italic text-foreground/70">
+                    {transcriptionError}
+                  </span>
+                ) : transcription ? (
+                  transcription
+                ) : (
+                  <span className="not-italic text-foreground/40">
+                    No transcription yet.
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -87,6 +87,7 @@ export async function GET(
         protected: m.protected,
         edited: m.edited,
         pinned: m.pinned,
+        transcription: m.transcription,
         starred: starredIds.has(m.id),
         reactions: m.reactions.map((r) => ({
           id: r.id,

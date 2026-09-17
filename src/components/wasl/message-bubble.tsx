@@ -471,8 +471,23 @@ export function MessageBubble({
             mine={mine}
             variant="voice"
             blocked={blocked}
+            messageId={message.id}
+            transcription={message.transcription ?? null}
           />
           <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+            {/* If a transcription is already cached on the message (either
+                from a previous request or pre-populated by the server),
+                show a small indicator next to the timestamp so the user
+                knows the bubble has a transcript available before they
+                open it. */}
+            {message.transcription && (
+              <span
+                className="inline-flex items-center gap-0.5 text-foreground/50"
+                title="Transcription available"
+              >
+                <FileText className="w-3 h-3" aria-hidden />
+              </span>
+            )}
             {protection.isProtected && (
               <Lock className="w-3 h-3 inline opacity-60" />
             )}
