@@ -37,6 +37,7 @@ export function ChatApp({ user }: { user: any }) {
     setSocketStatus,
     setShowProfilePanel,
     showProfilePanel,
+    setBookmarkedIds,
   } = useWaslStore()
   const [newChatOpen, setNewChatOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -71,8 +72,20 @@ export function ChatApp({ user }: { user: any }) {
         }
       })
       .catch((e) => console.error(e))
+    // Load my bookmarked message IDs — used by the message-bubble toolbar to
+    // show a filled bookmark icon on already-saved messages. We only need
+    // the IDs (not the full bookmark objects) here; the bookmarks dialog
+    // fetches the full list when opened.
+    fetch('/api/bookmarks', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.bookmarks)) {
+          setBookmarkedIds(data.bookmarks.map((b: { message: { id: string } }) => b.message.id))
+        }
+      })
+      .catch((e) => console.error(e))
      
-  }, [user.id])
+  }, [user.id, setBookmarkedIds, setUser])
 
   // Close contact info panel when conversation changes
   useEffect(() => {

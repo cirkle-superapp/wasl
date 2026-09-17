@@ -7,6 +7,7 @@ import {
   Clock,
   Reply,
   Star,
+  Bookmark,
   Copy,
   Trash2,
   SmilePlus,
@@ -207,12 +208,14 @@ export function MessageBubble({
   onReact,
   onReply,
   onStar,
+  onBookmark,
   onCopy,
   onDelete,
   onEdit,
   onForward,
   onPin,
   starred,
+  bookmarked,
   reactions,
   currentUserId,
   prevSameSender,
@@ -237,12 +240,14 @@ export function MessageBubble({
   onReact?: (emoji: string) => void
   onReply?: () => void
   onStar?: () => void
+  onBookmark?: () => void
   onCopy?: () => void
   onDelete?: () => void
   onEdit?: () => void
   onForward?: () => void
   onPin?: () => void
   starred?: boolean
+  bookmarked?: boolean
   reactions?: Reaction[]
   currentUserId?: string
   // When true, this message is a continuation of a previous message from
@@ -530,6 +535,20 @@ export function MessageBubble({
           <ToolbarButton title={starred ? 'Unstar' : 'Star'} onClick={() => onStar?.()}>
             <Star className={cn('w-4 h-4', starred && 'fill-amber-400 text-amber-400')} />
           </ToolbarButton>
+          {/* Bookmark (Save for later) — a personal reminder to follow up on
+              this message. Mirrors the Star toolbar button but uses the
+              amber-500 palette so the two don't look identical at a glance. */}
+          <ToolbarButton
+            title={bookmarked ? 'Remove bookmark' : 'Bookmark for later'}
+            onClick={() => onBookmark?.()}
+          >
+            <Bookmark
+              className={cn(
+                'w-4 h-4',
+                bookmarked && 'fill-amber-500 text-amber-500'
+              )}
+            />
+          </ToolbarButton>
           {blocked ? (
             <ToolbarButton
               title="Copy disabled — message is protected"
@@ -772,6 +791,9 @@ export function MessageBubble({
                   <Lock className="w-3 h-3 inline opacity-60" />
                 )}
                 {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                {bookmarked && (
+                  <Bookmark className="w-3 h-3 fill-amber-500 text-amber-500" />
+                )}
                 {message.edited && (
                   <button
                     type="button"
@@ -853,6 +875,15 @@ export function MessageBubble({
         <ContextMenuItem onClick={() => onStar?.()}>
           <Star className={cn('w-4 h-4 mr-2', starred && 'fill-amber-400 text-amber-400')} />
           {starred ? 'Unstar' : 'Star'}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onBookmark?.()}>
+          <Bookmark
+            className={cn(
+              'w-4 h-4 mr-2',
+              bookmarked && 'fill-amber-500 text-amber-500'
+            )}
+          />
+          {bookmarked ? 'Remove bookmark' : 'Bookmark for later'}
         </ContextMenuItem>
         <ContextMenuItem onClick={() => onCopy?.()}>
           <Copy className="w-4 h-4 mr-2" />

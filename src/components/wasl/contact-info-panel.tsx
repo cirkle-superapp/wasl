@@ -50,6 +50,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { WaslAvatar } from './wasl-avatar'
+import { QRCodeDisplay } from './qr-code-display'
 import { useWaslStore, type Commit, type Participant } from '@/lib/store'
 import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
 import { toast } from 'sonner'
@@ -149,6 +150,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   } | null>(null)
   const [inviteBusy, setInviteBusy] = useState<'generate' | 'revoke' | null>(null)
   const [copiedInvite, setCopiedInvite] = useState(false)
+  const [showInviteQR, setShowInviteQR] = useState(false)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -623,6 +625,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
         return
       }
       setInviteInfo({ inviteUrl: null, token: null, setAt: null })
+      setShowInviteQR(false)
       toast.success('Invite link revoked')
       void refreshConversation()
     } catch {
@@ -1017,6 +1020,16 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
                       </>
                     )}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => setShowInviteQR((v) => !v)}
+                    title={showInviteQR ? 'Hide QR code' : 'Show QR code'}
+                  >
+                    <QrCode className="w-3.5 h-3.5 mr-1.5" />
+                    {showInviteQR ? 'Hide QR' : 'Show QR'}
+                  </Button>
                   {isAdmin && (
                     <>
                       <Button
@@ -1052,6 +1065,18 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
                     </>
                   )}
                 </div>
+                {/* QR code display — shown when "Show QR" is toggled */}
+                {showInviteQR && inviteInfo.inviteUrl && inviteInfo.token && (
+                  <div className="flex flex-col items-center gap-2 pt-2 pb-1 wasl-msg-in">
+                    <QRCodeDisplay
+                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${inviteInfo.token}`}
+                      size={192}
+                    />
+                    <p className="text-xs text-muted-foreground text-center max-w-[220px]">
+                      Scan with phone camera to join this group
+                    </p>
+                  </div>
+                )}
               </div>
             ) : isAdmin ? (
               <div className="space-y-2">

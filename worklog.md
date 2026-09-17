@@ -3487,3 +3487,231 @@ said "proceed implementing, upgrading, and fixing".
 - Add contact import (from phone / CSV)
 - Add group invite QR code
 - Add message bookmark/save for later
+
+---
+Task ID: 35-a
+Agent: general-purpose (starred messages global view)
+Task: Add a global "Starred messages" view that shows all starred messages across ALL conversations in one place (today starred messages are only viewable per-conversation via the contact-info-panel). Includes a new global starred API, a global starred dialog, and a sidebar entry point to open it.
+
+Work Log:
+- Read `worklog.md` (Tasks 33, 34, 21) to confirm the existing `StarredMessage` model (userId + messageId, with `createdAt` used as `starredAt`), the existing per-conversation endpoint `src/app/api/conversations/[id]/starred/route.ts`, the per-conversation `StarredMessagesDialog` component, and the `wasl:jump-to-message` window-event contract used by `chat-window.tsx` (which queries `[data-message-id="…"]` and flashes the bubble).
+- Inspected `src/lib/store.ts` to confirm `setActiveConversation(id)` is the canonical way to switch chats from anywhere, and that messages are loaded asynchronously by `chat-window.tsx`'s `loadMessages()` on `activeConversationId` change — so a jump-to-message dispatch needs to wait for the target bubble to appear in the DOM.
+- Inspected `src/app/api/conversations/route.ts` to mirror its display-name + display-avatar derivation pattern (for 1-on-1 chats use the OTHER participant's name/avatar/avatarColor; for groups use the stored `conversation.avatar`/`avatarColor` with a `pickAvatarColor` fallback).
+- Created `src/app/api/starred/route.ts`:
+  - `GET /api/starred` returns ALL of the current user's `StarredMessage` rows across every conversation they are a member of (filters by a `participant` lookup so leaving a chat hides its stars).
+  - Bulk-fetches conversations + participants + senders in 3 queries (no N+1) — uses Prisma `include` on `participants.user` for the conversations, and `findMany` with `id: { in: ... }` for the senders.
+  - Derives display name/avatar/avatarColor per conversation (1-on-1 → other participant; group → stored fields + `pickAvatarColor` fallback).
+  - Optional `?q=search` query param filters by message content. Filtering is done in JS (`content.toLowerCase().includes(q)`) so it works for non-ASCII text — SQLite's default `LIKE` is ASCII-only case-insensitive.
+  - Sorted by `starredMessage.createdAt desc` (most recently starred first), capped at 200.
+  - Returns `{ starred: [...], count }` where each item has `{ id, starredAt, message: {...content, senderId, sender, type, createdAt, protected}, conversation: {id, name, avatar, avatarColor, isGroup} }`.
+- Created `src/components/wasl/global-starred-dialog.tsx`:
+  - Full shadcn `Dialog` with header "Starred messages" + count subtitle ("X starred messages").
+  - Search input at the top with 250ms debounce (separate `query` for the input, `debouncedQ` for the fetch).
+  - Scrollable list (`max-h-96 overflow-y-auto wasl-scroll`).
+  - Each entry shows: conversation badge (avatar + name + group icon, with "Starred Xmin ago" relative timestamp on the right), sender row (avatar + name + chat timestamp + lock icon if protected), message content (with a subtle amber left-border accent), and a footer with the starred timestamp + "Jump to message" hover hint.
+  - Image messages render the image thumbnail; text/system/audio/etc. render the raw content.
+  - Clicking an entry: calls `setActiveConversation(conversationId)`, closes the dialog, then polls the DOM every 100ms for up to 1.5s for `[data-message-id="…"]` to appear (chat window loads messages async after the conversation switch) — once found (or after timeout) dispatches the existing `wasl:jump-to-message` window event so `chat-window.tsx` scrolls to + flashes the bubble.
+  - Empty state: amber star icon in a circle, "No starred messages yet", "Tap the star icon on any message to save it here." (or a "no matches" variant when a search is active).
+  - Amber/gold star icons throughout (no indigo/blue).
+- Updated `src/components/wasl/sidebar.tsx`:
+  - Added `Star` to the lucide-react import list and imported `GlobalStarredDialog`.
+  - Added a `starredOpen` state.
+  - Added a "Starred messages" item to the MoreVertical dropdown menu (between "New chat" and "Settings") with an amber-filled Star icon.
+  - Rendered `<GlobalStarredDialog open={starredOpen} onOpenChange={setStarredOpen} />` alongside the other sidebar dialogs.
+- Verified: `bun run lint` passes with no errors; `curl /api/starred` returns 401 (auth check working); `curl /` returns 200 (sidebar + dialog compile cleanly on the dev server).
+
+Stage Summary:
+- New file: `src/app/api/starred/route.ts` — global starred-messages API (`GET /api/starred?q=…`).
+- New file: `src/components/wasl/global-starred-dialog.tsx` — global starred messages dialog with search, conversation badges, jump-to-message, empty state.
+- Modified file: `src/components/wasl/sidebar.tsx` — added "Starred messages" menu item + dialog wiring.
+- All UI uses amber/gold for star icons and the wasl color palette (no indigo/blue). No DB schema changes needed — reuses the existing `StarredMessage` model.
+
+---
+Task ID: 35-b
+Agent: general-purpose (message bookmark)
+Task: Add a "Bookmark / Save for later" feature for messages. Distinct from "starred" — bookmarks are personal reminders to follow up on a message later, with optional notes and a "done" state. Includes Prisma Bookmark model, REST API (list/create/update/delete), a Bookmark toolbar + context-menu button on the message-bubble, a bookmarks dialog with filter tabs / search / done toggle / inline note editing, and a sidebar entry point.
+
+Work Log:
+- Read `worklog.md` (Tasks 33, 34) and confirmed established patterns: Prisma `StarredMessage` model + `@@unique([messageId, userId])`; `/api/messages/[id]/star` (toggle POST); `/api/conversations/[id]/starred` (list per conversation); `StarredMessagesDialog` and `GlobalStarredDialog` (with retry-based cross-conversation jump-to-message pattern); `Sidebar` "Contacts" + "Starred messages" buttons; Zustand `setStarred` action; `WaslAvatar` props (`name`, `src`, `color`, `size`); amber palette for star.
+- Verified dev server was down; restarted with `setsid -f bash -c 'exec ./node_modules/.bin/next dev -p 3000 > /home/z/my-project/dev.log 2>&1' < /dev/null > /dev/null 2>&1`.
+
+Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED):
+- Added new `Bookmark` model: `id`, `userId`, `messageId`, `note String?`, `done Boolean @default(false)`, `doneAt DateTime?`, `createdAt`. Back-relations: `user User @relation(...) onDelete: Cascade`, `message Message @relation(...) onDelete: Cascade`. `@@unique([userId, messageId])` (one bookmark per user per message) + `@@index([userId])`.
+- Added `bookmarks Bookmark[]` to `User`.
+- Added `bookmarkedBy Bookmark[]` to `Message`.
+- Ran `bun run db:push` — schema applied successfully (no data loss, no errors). Prisma client regenerated.
+
+Step 2 — API routes:
+- New `src/app/api/bookmarks/route.ts`:
+  - **GET** — list current user's bookmarks, include message + conversation + sender. Batched lookups (one query for conversations, one for senders) to avoid N+1. Supports `?done=true|false` filter and `?q=search` substring match against `note` OR `message.content`. Sort by `createdAt desc`, capped at 200 rows.
+  - **POST** — create a bookmark. Body: `{ messageId, note? }`. Verifies the message exists AND the user is a member of the parent conversation (prevents bookmarking messages you can't see). Returns 409 if already bookmarked (manually checked for a clean response). Returns `{ ok: true, id }`.
+- New `src/app/api/bookmarks/[id]/route.ts`:
+  - **PATCH** — update a bookmark's `done` and/or `note`. When `done === true` → also set `doneAt = now()`; when `done === false` → clear `doneAt`. Empty `note` strings are stored as `null`. Authorization: bookmark must belong to the current user.
+  - **DELETE** — idempotent delete. Returns `{ ok: true, deleted, messageId }` so the client can update its store without re-fetching.
+
+Step 3 — Store (`src/lib/store.ts`, MODIFIED):
+- Added `bookmarkedMessageIds: Set<string>` to the WaslState type, with `setBookmarkedIds(ids)` (bulk replace) and `setBookmarked(messageId, bool)` (single add/remove). The `setBookmarked` action always builds a fresh `Set` instance (instead of mutating) so Zustand consumers subscribed to the set re-render correctly — mirrors the existing `onlineUserIds` / `setOnlineUsers` pattern.
+
+Step 4 — Bootstrap fetch (`src/components/wasl/chat-app.tsx`, MODIFIED):
+- On mount, `GET /api/bookmarks` once and call `setBookmarkedIds([...])` so every `MessageBubble` can render a filled bookmark icon on already-saved messages without a per-conversation fetch. Added `setBookmarkedIds` to the `useWaslStore` destructure and the bootstrap effect's dependency array.
+
+Step 5 — Message-bubble wiring (`src/components/wasl/chat-window.tsx`, MODIFIED):
+- Destructured `bookmarkedMessageIds` and `setBookmarked` from the store.
+- Added `handleBookmark(messageId)` callback: optimistic store update → POST `/api/bookmarks` (or DELETE-by-lookup when removing, since we only store messageIds in the client). Shows toast "Message bookmarked" / "Bookmark removed" / error states. Reverts on failure.
+- Passed `onBookmark={() => handleBookmark(m.id)}` and `bookmarked={bookmarkedMessageIds.has(m.id)}` to every `<MessageBubble />` instance.
+
+Step 6 — Message-bubble UI (`src/components/wasl/message-bubble.tsx`, MODIFIED):
+- Imported `Bookmark` icon from lucide-react.
+- Added `onBookmark?: () => void` and `bookmarked?: boolean` props.
+- Added a **Bookmark** toolbar button immediately after the Star button. Uses `fill-amber-500 text-amber-500` when active (deliberately one shade darker than Star's amber-400 so the two are visually distinguishable) and `text-muted-foreground` outline when inactive. Title: "Bookmark for later" / "Remove bookmark".
+- Added a **Bookmark** item to the right-click context menu, immediately after the Star item, mirroring the same amber-500 styling and "Bookmark for later" / "Remove bookmark" labels.
+- Added a small filled `Bookmark` indicator next to the existing `Star` indicator in the message footer (the inline status row next to the timestamp), so bookmarked messages are recognizable even when the toolbar isn't hovered.
+
+Step 7 — Bookmarks dialog (`src/components/wasl/bookmarks-dialog.tsx`, NEW):
+- Full `BookmarksDialog` component, opened from the sidebar.
+- **Filter tabs**: All / Pending / Done (using shadcn `Tabs`). Each tab shows a count badge. Filtering is client-side for instant tab switches.
+- **Search bar**: filters by note text OR message content (case-insensitive).
+- Each row shows: conversation name + avatar, sender name + timestamp, message content (truncated to 220 chars with ellipsis, or rendered as a thumbnail for image messages), personal note (italic when present, "Add a note" pencil button when absent), inline note editor (Textarea + Save/Cancel), done Checkbox, edit-note pencil, remove (Trash2) button.
+- **Done state visuals**: done rows render with `opacity-75`, a subtle border, and the message content is rendered with `line-through` + `text-muted-foreground` to visually mark resolution. Pending rows use a soft amber accent (`border-amber-500/30 bg-amber-500/5`).
+- **Jump to message**: clicking the conversation name or message body switches the active conversation and dispatches the existing `wasl:jump-to-message` window event using the same retry-poll pattern as `GlobalStarredDialog` (DOM poll for up to 1.5s, dispatch when the message element exists or on timeout). Closes the dialog.
+- **Empty state**: "No bookmarks yet. Tap the bookmark icon on any message to save it for later." (or "No bookmarks match this filter" when the user is filtering).
+- Uses amber/gold palette throughout (no indigo/blue).
+
+Step 8 — Sidebar entry (`src/components/wasl/sidebar.tsx`, MODIFIED):
+- Imported `Bookmark as BookmarkIcon` from lucide-react and `BookmarksDialog` from `./bookmarks-dialog`.
+- Added `bookmarksOpen` state and subscribed to `bookmarkedMessageIds.size` so a count badge updates reactively when bookmarks are added/removed from anywhere in the app.
+- Added a "Bookmarks" button in the existing announcements/contacts button stack (after Contacts). Amber accent (`border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10`), `Bookmark` icon, subtitle "Save for later", and a count badge (`bg-amber-500 text-white`) when > 0.
+- Mounted `<BookmarksDialog open={bookmarksOpen} onOpenChange={setBookmarksOpen} />` at the bottom of the Sidebar component.
+
+Step 9 — Verification:
+- `bun run lint` → passes with no errors.
+- `bunx tsc --noEmit` → no new errors in any file I touched (`bookmarks/route.ts`, `bookmarks/[id]/route.ts`, `bookmarks-dialog.tsx`, `message-bubble.tsx`, `lib/store.ts`, `chat-app.tsx`, `chat-window.tsx`, `sidebar.tsx`). Remaining tsc errors in the codebase are all pre-existing (auth/login, contacts-dialog prop mismatch on `WaslAvatar`, sidebar UI primitive, etc.) and unrelated to this task.
+- Dev server restarted; `GET /` returns 200, `GET /api/bookmarks` returns 401 (correct — no session) and compiles cleanly.
+
+Stage Summary:
+- **Prisma**: `prisma/schema.prisma` — added `Bookmark` model (`id, userId, messageId, note?, done, doneAt?, createdAt`, `@@unique([userId, messageId])`, `@@index([userId])`), `User.bookmarks Bookmark[]`, `Message.bookmarkedBy Bookmark[]`. Schema applied with `bun run db:push`.
+- **API** (new files): `src/app/api/bookmarks/route.ts` (GET list with `done`/`q` filters + POST create with membership check + 409 dedupe). `src/app/api/bookmarks/[id]/route.ts` (PATCH `done`/`note` with doneAt auto-set/clear + DELETE).
+- **Store**: `src/lib/store.ts` — `bookmarkedMessageIds: Set<string>`, `setBookmarkedIds`, `setBookmarked`.
+- **Bootstrap**: `src/components/wasl/chat-app.tsx` — fetches bookmark IDs on mount, populates the store set.
+- **Chat window**: `src/components/wasl/chat-window.tsx` — `handleBookmark` callback (optimistic + toast + revert), passes `onBookmark`/`bookmarked` to every `MessageBubble`.
+- **Message bubble**: `src/components/wasl/message-bubble.tsx` — `Bookmark` icon added to imports; toolbar button + context-menu item + footer indicator; amber-500 active state.
+- **Bookmarks dialog** (new): `src/components/wasl/bookmarks-dialog.tsx` — filter tabs (All/Pending/Done), search, inline note editing, done toggle, remove, jump-to-message with retry-poll, empty state, amber palette.
+- **Sidebar**: `src/components/wasl/sidebar.tsx` — `Bookmarks` button with count badge, opens the dialog.
+- All UI uses the wasl color palette + amber/gold for bookmark accents (no indigo/blue). TypeScript-strict. No test files created. Did NOT run `bun run build`.
+
+---
+Task ID: 35 — Global starred view + Message bookmarks + Group invite QR code
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing, upgrading, and fixing".
+
+### Phase 1: Global Starred Messages View (subagent 35-a)
+**Files:** `src/app/api/starred/route.ts` (NEW), `src/components/wasl/global-starred-dialog.tsx` (NEW), `src/components/wasl/sidebar.tsx`
+
+**API:** `GET /api/starred?q=search` — lists ALL starred messages across all
+conversations for the current user. Batch-fetches conversations + participants
++ senders in 3 queries (no N+1). Sorted by starredAt desc. Optional search.
+
+**UI:** GlobalStarredDialog with:
+- Debounced search bar
+- Count header ("X starred messages")
+- Scrollable list with conversation badge (avatar + name), sender, content
+- Click → sets conversation active + dispatches wasl:jump-to-message
+- Retry-poll pattern for async message load after conversation switch
+- Empty state with amber star icon
+
+**Sidebar:** "Starred messages" menu item in MoreVertical dropdown
+
+### Phase 2: Message Bookmark / Save for Later (subagent 35-b)
+**Files:** `prisma/schema.prisma`, `src/app/api/bookmarks/route.ts` (NEW), `src/app/api/bookmarks/[id]/route.ts` (NEW), `src/components/wasl/bookmarks-dialog.tsx` (NEW), `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`, `src/components/wasl/chat-app.tsx`, `src/components/wasl/sidebar.tsx`, `src/lib/store.ts`
+
+**Prisma schema:** New `Bookmark` model:
+- `note?`, `done Boolean`, `doneAt?`
+- `@@unique([userId, messageId])`
+
+**API routes:**
+- `GET /api/bookmarks?done=&q=` — list with filters
+- `POST /api/bookmarks` — create (409 on duplicate)
+- `PATCH /api/bookmarks/[id]` — toggle done / update note
+- `DELETE /api/bookmarks/[id]` — remove
+
+**UI:**
+- Bookmark button in message hover toolbar (after Star)
+- BookmarksDialog with filter tabs (All/Pending/Done), search, inline note editor
+- Done checkbox, remove button
+- Cross-conversation jump-to-message
+- Sidebar "Bookmarks" button with count badge
+
+**Store:** `bookmarkedMessageIds: Set<string>` for optimistic UI updates
+**Chat-app:** Bootstrap fetch of bookmark IDs on mount
+
+**E2E verified:**
+- Create bookmark → 200 ✅
+- Mark as done → 200, doneAt set ✅
+- Update note → 200 ✅
+- List with done filter → correct ✅
+- Delete → 200 ✅
+- Duplicate → 409 ✅
+
+### Phase 3: Group Invite QR Code (main)
+**Files:** `src/components/wasl/qr-code-display.tsx` (NEW), `src/components/wasl/contact-info-panel.tsx`
+
+**New component:** `QRCodeDisplay`
+- Uses `qrcode` library to generate QR codes as data URLs
+- Wasl-green QR pattern on white background
+- Configurable size (default 200px)
+- Loading spinner while generating
+- Error handling
+- Rounded border with wasl-green accent
+
+**Integration in contact-info-panel:**
+- "Show QR" / "Hide QR" toggle button next to "Copy link"
+- When toggled on, renders the QR code below the invite link buttons
+- QR encodes the full invite URL (`https://host/?join=token`)
+- Caption: "Scan with phone camera to join this group"
+- `wasl-msg-in` entrance animation
+- Auto-hides when invite is revoked
+
+**Package:** Installed `qrcode@1.5.4` + `@types/qrcode@1.5.6`
+
+### Phase 4: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| GET /api/starred | 200, returns starred messages ✅ |
+| GET /api/starred?q=search | 200 ✅ |
+| GET /api/bookmarks | 200 ✅ |
+| POST /api/bookmarks | 200 ✅ |
+| PATCH /api/bookmarks/[id] (done) | 200, doneAt set ✅ |
+| PATCH /api/bookmarks/[id] (note) | 200 ✅ |
+| DELETE /api/bookmarks/[id] | 200 ✅ |
+| Duplicate bookmark | 409 ✅ |
+| QR code component | Lint clean ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 35)
+- `src/app/api/starred/route.ts` — NEW global starred API (subagent 35-a)
+- `src/components/wasl/global-starred-dialog.tsx` — NEW (subagent 35-a)
+- `src/components/wasl/sidebar.tsx` — Starred menu item (subagent 35-a) + Bookmarks button (subagent 35-b)
+- `prisma/schema.prisma` — Bookmark model (subagent 35-b)
+- `src/app/api/bookmarks/route.ts` — NEW (subagent 35-b)
+- `src/app/api/bookmarks/[id]/route.ts` — NEW (subagent 35-b)
+- `src/components/wasl/bookmarks-dialog.tsx` — NEW (subagent 35-b)
+- `src/components/wasl/message-bubble.tsx` — bookmark button (subagent 35-b)
+- `src/components/wasl/chat-window.tsx` — handleBookmark (subagent 35-b)
+- `src/components/wasl/chat-app.tsx` — bookmark bootstrap (subagent 35-b)
+- `src/lib/store.ts` — bookmarkedMessageIds (subagent 35-b)
+- `src/components/wasl/qr-code-display.tsx` — NEW QR component (main)
+- `src/components/wasl/contact-info-panel.tsx` — QR code in invite section (main)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add voice note transcription
+- Add contact import (from phone / CSV)
+- Add message search across all conversations
+- Add typing indicator in group (show who is typing) — DONE in Task 33
+- Add group avatar upload — DONE in Task 33

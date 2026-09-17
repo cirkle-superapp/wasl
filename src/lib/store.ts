@@ -196,6 +196,15 @@ type WaslState = {
     messageId: string,
     patch: Partial<ChatMessage>
   ) => void
+
+  // ---- Bookmark (Save for later) -------------------------------------------
+  // Set of message IDs the current user has bookmarked. Kept in sync with the
+  // /api/bookmarks endpoint — fetched once on app load and updated whenever
+  // the user adds/removes a bookmark from the message-bubble toolbar or the
+  // bookmarks dialog.
+  bookmarkedMessageIds: Set<string>
+  setBookmarkedIds: (ids: string[]) => void
+  setBookmarked: (messageId: string, bookmarked: boolean) => void
 }
 
 export const useWaslStore = create<WaslState>((set) => ({
@@ -410,6 +419,18 @@ export const useWaslStore = create<WaslState>((set) => ({
           [conversationId]: next,
         },
       }
+    }),
+
+  // ---- Bookmark (Save for later) -------------------------------------------
+  bookmarkedMessageIds: new Set<string>(),
+  setBookmarkedIds: (ids) =>
+    set({ bookmarkedMessageIds: new Set(ids) }),
+  setBookmarked: (messageId, bookmarked) =>
+    set((state) => {
+      const next = new Set(state.bookmarkedMessageIds)
+      if (bookmarked) next.add(messageId)
+      else next.delete(messageId)
+      return { bookmarkedMessageIds: next }
     }),
 }))
 

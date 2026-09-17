@@ -16,6 +16,8 @@ import {
   Archive,
   Landmark,
   Contact as ContactIcon,
+  Star,
+  Bookmark as BookmarkIcon,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -28,6 +30,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AnnouncementsDialog } from './announcements-dialog'
 import { ContactsDialog } from './contacts-dialog'
+import { BookmarksDialog } from './bookmarks-dialog'
+import { GlobalStarredDialog } from './global-starred-dialog'
 import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
@@ -63,6 +67,13 @@ export function Sidebar({
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
   const [contactsOpen, setContactsOpen] = useState(false)
+  const [bookmarksOpen, setBookmarksOpen] = useState(false)
+  // Subscribe to the bookmarked-message-ids set so the sidebar badge updates
+  // when the user adds/removes a bookmark from the message toolbar or dialog.
+  const bookmarksCount = useWaslStore(
+    (s) => s.bookmarkedMessageIds.size
+  )
+  const [starredOpen, setStarredOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
@@ -176,6 +187,10 @@ export function Sidebar({
               <DropdownMenuItem onClick={onNewChat}>
                 <Plus className="w-4 h-4 mr-2" /> New chat
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStarredOpen(true)}>
+                <Star className="w-4 h-4 mr-2 fill-amber-400 text-amber-400" />
+                Starred messages
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onOpenSettings}>
                 <Settings className="w-4 h-4 mr-2" /> Settings
               </DropdownMenuItem>
@@ -235,6 +250,23 @@ export function Sidebar({
             <div className="text-xs font-medium text-foreground">Contacts</div>
             <div className="text-[10px] text-muted-foreground">Address book</div>
           </div>
+        </button>
+        <button
+          onClick={() => setBookmarksOpen(true)}
+          className="w-full flex items-center gap-2 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+        >
+          <BookmarkIcon className="w-4 h-4 text-amber-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium text-foreground">Bookmarks</div>
+            <div className="text-[10px] text-muted-foreground">
+              Save for later
+            </div>
+          </div>
+          {bookmarksCount > 0 && (
+            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500 text-white">
+              {bookmarksCount > 99 ? '99+' : bookmarksCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -337,6 +369,7 @@ export function Sidebar({
 
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
       <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
+      <GlobalStarredDialog open={starredOpen} onOpenChange={setStarredOpen} />
       <ContactsDialog
         open={contactsOpen}
         onOpenChange={setContactsOpen}
@@ -360,6 +393,7 @@ export function Sidebar({
           }
         }}
       />
+      <BookmarksDialog open={bookmarksOpen} onOpenChange={setBookmarksOpen} />
     </div>
   )
 }

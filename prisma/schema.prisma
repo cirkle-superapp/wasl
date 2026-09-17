@@ -68,6 +68,8 @@ model User {
   contacts          Contact[]      @relation("ContactOwner")
   // When this user appears in someone else's address book
   contactOf         Contact[]      @relation("ContactTarget")
+  // Messages this user has bookmarked for follow-up (Save for later).
+  bookmarks         Bookmark[]
 }
 
 /// Contact (address book entry) — a saved contact. `ownerId` is the user who
@@ -191,6 +193,8 @@ model Message {
   sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   reactions    Reaction[]
   starredBy    StarredMessage[]
+  // Users who have bookmarked (saved for later) this message.
+  bookmarkedBy Bookmark[]
   screenshotAttempts ScreenshotAttempt[]
   edits        MessageEdit[]
   // Per-user "deleted for me" records — hides a message from a specific user's
@@ -289,6 +293,26 @@ model StarredMessage {
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
+  @@index([userId])
+}
+
+/// Saved message (bookmark) — a personal reminder to follow up on a message.
+/// Unlike starred messages, bookmarks have a "done" state and optional notes.
+model Bookmark {
+  id          String   @id @default(cuid())
+  userId      String
+  messageId   String
+  // Optional personal note about why this was bookmarked
+  note        String?
+  // When true, the bookmark is marked as "done" (followed up)
+  done        Boolean  @default(false)
+  doneAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
   @@index([userId])
 }
 

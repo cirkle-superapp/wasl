@@ -83,6 +83,8 @@ export function ChatWindow({
     setStarred,
     removeMessage,
     socketStatus,
+    bookmarkedMessageIds,
+    setBookmarked,
   } = useWaslStore()
 
   const [commitOpen, setCommitOpen] = useState(false)
@@ -622,6 +624,66 @@ export function ChatWindow({
       }
     },
     [activeConversationId, messagesByConversation, setStarred]
+  )
+
+  // ---- Bookmark (Save for later) -------------------------------------------
+  // Toggles the bookmark state for a message. Optimistically updates the
+  // `bookmarkedMessageIds` set in the store, then fires the API request.
+  // The store always replaces the Set reference (instead of mutating) so
+  // consumers subscribed to the set re-render correctly.
+  const handleBookmark = useCallback(
+    async (messageId: string) => {
+      const isCurrentlyBookmarked = useWaslStore
+        .getState()
+        .bookmarkedMessageIds.has(messageId)
+      // Optimistic update
+      setBookmarked(messageId, !isCurrentlyBookmarked)
+      try {
+        if (isCurrentlyBookmarked) {
+          // To DELETE a bookmark we need its row id. We don't store bookmark
+          // ids in the store (only message ids), so re-fetch the list and
+          // find the row matching this message.
+          const res = await fetch('/api/bookmarks', { cache: 'no-store' })
+          if (res.ok) {
+            const data = await res.json()
+            const found = (data.bookmarks || []).find(
+              (b: { message: { id: string }; id: string }) =>
+                b.message.id === messageId
+            )
+            if (found?.id) {
+              await fetch(`/api/bookmarks/${found.id}`, { method: 'DELETE' })
+              toast.success('Bookmark removed')
+            } else {
+              // Already removed server-side — reset store to be safe.
+              setBookmarked(messageId, false)
+            }
+          }
+        } else {
+          const res = await fetch('/api/bookmarks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId }),
+          })
+          if (res.status === 409) {
+            // Already bookmarked server-side — make sure store reflects that.
+            setBookmarked(messageId, true)
+          }
+          if (res.ok || res.status === 409) {
+            toast.success('Message bookmarked')
+          } else {
+            const data = await res.json().catch(() => null)
+            toast.error(data?.error || 'Failed to bookmark')
+            setBookmarked(messageId, false)
+          }
+        }
+      } catch (e) {
+        console.error(e)
+        // Revert optimistic update on failure
+        setBookmarked(messageId, isCurrentlyBookmarked)
+        toast.error('Network error')
+      }
+    },
+    [setBookmarked]
   )
 
   const handleCopyMessage = useCallback(async (m: ChatMessage) => {
@@ -1331,12 +1393,14 @@ export function ChatWindow({
                       onReact={(emoji) => handleReact(m.id, emoji)}
                       onReply={() => setReplyTo(m)}
                       onStar={() => handleStar(m.id)}
+                      onBookmark={() => handleBookmark(m.id)}
                       onCopy={() => handleCopyMessage(m)}
                       onDelete={() => handleDeleteMessage(m.id)}
                       onEdit={() => handleEditMessage(m)}
                       onForward={() => handleForwardMessage(m)}
                       onPin={() => handlePinMessage(m)}
                       starred={m.starred}
+                      bookmarked={bookmarkedMessageIds.has(m.id)}
                       reactions={m.reactions}
                       currentUserId={user?.id}
                       // The sender can always pin/unpin their own message; in a
