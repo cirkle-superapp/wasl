@@ -898,6 +898,21 @@ kbd {
   .wasl-read-receipts-pop { animation: none; }
 }
 
+/* ---- Avatar image fade-in — used on every WaslAvatar <img> so swapping in
+   a new photo (e.g. after an admin uploads a group avatar) fades in smoothly
+   instead of snapping. The `key` on the <img> forces React to remount the
+   element whenever its src changes, which re-triggers this animation. ---- */
+@keyframes wasl-avatar-img-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.wasl-avatar-img-in {
+  animation: wasl-avatar-img-in 0.28s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wasl-avatar-img-in { animation: none; }
+}
+
 /* ---- Pinned message indicator (small pin on the bubble) ---- */
 .wasl-pinned-indicator {
   animation: wasl-timeline-pop 0.2s ease-out;
@@ -915,6 +930,28 @@ kbd {
 /* ---- Reply banner left-border accent ---- */
 .wasl-reply-banner {
   border-left: 4px solid var(--wasl-green);
+}
+
+/* ---- Reply preview bar entrance (slide-down + fade) ----
+   Applied via `.wasl-reply-banner-in` on the composer's reply preview bar
+   whenever `replyTo` is set in the store. The element is conditionally
+   rendered (mounts only when replyTo is set), so the CSS animation runs
+   once on mount and gives a fast 180ms slide-down + fade-in entrance. */
+@keyframes wasl-reply-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.wasl-reply-banner-in {
+  animation: wasl-reply-banner-in 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wasl-reply-banner-in { animation: none; }
 }
 
 /* ---- Online pulse ring (sidebar + chat header) ---- */

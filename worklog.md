@@ -3044,3 +3044,214 @@ said "proceed implementing upgrading and fixing".
 - Add group avatar upload
 - Add typing indicator in group (show who is typing)
 - Add message reply with quote preview in composer
+
+---
+Task ID: 33-a
+Agent: general-purpose (reply quote preview)
+Task: Add a WhatsApp/Telegram-style reply quote preview in the composer (and improve the in-bubble reply quote). When the user clicks "Reply" on a message, the composer should show a visual preview of the message being replied to, with sender name, truncated content, a cancel button, click-to-jump, and a slide-down entrance animation. The replied-to message should also render a compact quote box inside the chat bubble with the original sender's name and content, and clicking the quote should scroll to the original message.
+
+Work Log:
+- Read worklog.md (Tasks 31, 32) and `src/lib/store.ts` to confirm the existing `replyTo`/`setReplyTo` pattern + `wasl:jump-to-message` event contract used by chat-window.tsx.
+- Inspected `src/components/wasl/message-input.tsx` — found a partial reply banner that only said "Reply to yourself/message" with no real sender name, no jump-on-click, and no entrance animation. Also confirmed the composer's `handleSend` did NOT clear `replyTo` itself (relied on the parent chat-window's handleSend at line 488).
+- Inspected `src/components/wasl/message-bubble.tsx` — found a minimal in-bubble reply quote (lines 647–654) showing only "You"/"Replied to" and the truncated content, no click-to-jump, no real sender name. Confirmed `replyTo?: ChatMessage | null` was already a prop.
+- Inspected `src/components/wasl/chat-window.tsx` — confirmed `replyToMsg` is computed from `messages.find(...)` and passed to MessageBubble, and that `wasl:jump-to-message` is already wired (lines 374–424) to scroll + flash the target message.
+- Updated `src/components/wasl/message-input.tsx`:
+  - Swapped the `Reply` lucide icon import for `CornerUpLeft`.
+  - Added a Zustand selector `replyToSenderName` that resolves the original sender's display name from `conversations` + `activeConversationId` (string return keeps re-renders cheap).
+  - Rewrote the reply preview bar: `wasl-reply-banner-in` animation, 3px left accent border in wasl-green, `bg-muted/40` surface with rounded corners, "Replying to <name>" / "Replying to yourself" / "Replying to message" copy, 80-char truncated content with ellipsis, `CornerUpLeft` icon, and a close (X) button that stops propagation so it doesn't trigger the jump.
+  - Made the bar focusable (`role="button"` + `tabIndex={0}`) and dispatched `wasl:jump-to-message` on click and Enter/Space.
+  - Added `setReplyTo(null)` after `await onSend(...)` succeeds in `handleSend` (defence-in-depth — the parent also clears it, but the composer is now self-contained).
+- Updated `src/components/wasl/message-bubble.tsx`:
+  - Added `replyToSenderName?: string` to the `MessageBubble` props type and destructuring.
+  - Replaced the static reply quote `<div>` with a `<button>` that dispatches `wasl:jump-to-message` with `replyTo.id` on click, shows the real sender name (or "You" for self, or "Original message" fallback), uses a 3px left accent border (`wasl-green` for outgoing, `wasl-teal` for incoming), `bg-muted/30` background, hover state, and a focus-visible ring for keyboard a11y.
+- Updated `src/components/wasl/chat-window.tsx`:
+  - Computed `replyToSenderName` from `conversation.participants` next to the existing `replyToMsg` lookup and passed it to `MessageBubble`.
+- Updated `src/app/globals.css`:
+  - Added a `wasl-reply-banner-in` keyframe (translateY(-6px) → 0 + opacity 0 → 1, 180ms ease-out) and a `prefers-reduced-motion` opt-out.
+- Ran `bun run lint` — 0 errors. (`bunx tsc --noEmit` shows only pre-existing errors in files I did NOT touch: login route, bot-reply route, reactions-summary route, link-preview route, edits route, sidebar.tsx, chat-app.tsx, and 2 lines in chat-window.tsx that are unrelated to my edits.)
+
+Stage Summary:
+- Files modified:
+  - `src/components/wasl/message-input.tsx`
+  - `src/components/wasl/message-bubble.tsx`
+  - `src/components/wasl/chat-window.tsx`
+  - `src/app/globals.css`
+- The composer now shows a polished reply preview bar (sender name, 80-char preview, cancel button, click-to-jump, slide-down animation) whenever `replyTo` is set in the Zustand store.
+- In-bubble reply quotes now show the original sender's real name (when resolvable) and are clickable to jump to the original message; the accent border colour adapts to outgoing (wasl-green) vs incoming (wasl-teal) bubbles.
+- `replyTo` is cleared both in `MessageInput.handleSend` (newly added) and in `chat-window.handleSend` (pre-existing), so the preview disappears immediately after every successful send (text, image, voice, document — all routed through the same `onSend`).
+- `bun run lint` passes cleanly. No new TypeScript errors introduced.
+
+---
+Task ID: 33-b
+Agent: general-purpose (group avatar upload)
+Task: Allow group admins to upload a custom group avatar (replacing the composite-initials grid). Add a `/api/upload` endpoint that writes image files to `public/uploads/`, extend the admin-only `PATCH /api/conversations/:id` handler to accept an `avatar` field (URL or null), wire a camera-icon upload button (with loading spinner + toast) onto the contact-info-panel hero, expose a "Remove photo" dropdown for admins, and have the sidebar + chat header render the custom avatar (with a smooth fade-in transition on swap).
+
+Work Log:
+- Read `worklog.md` Tasks 31-a/31-b/32-a/32-b/32 to confirm established patterns: admin-only PATCH at `src/app/api/conversations/[id]/route.ts` (combined `{ name, description }` payload, system messages per changed field, no-op short-circuit), `Conversation` model in `prisma/schema.prisma` already has `avatar String?` and `description String?`, `Conversation` type in `src/lib/store.ts` already has `avatar: string | null`, wasl-teal/green CSS vars (`var(--wasl-teal)` / `var(--wasl-green)` / `var(--wasl-green-dark)`), shadcn `DropdownMenu` available at `src/components/ui/dropdown-menu.tsx`, sonner toasts, the `WaslAvatar` / `WaslGroupAvatar` components in `src/components/wasl/wasl-avatar.tsx`, the existing optimistic-local-override pattern (`localParticipants` / `localDescription`) for instant panel updates, and the `refreshConversation()` callback that re-pulls the canonical record so the sidebar + chat header pick up changes.
+- Verified that the "existing upload API at `src/app/api/upload/route.ts`" referenced in the task spec did NOT actually exist in the repo — the only avatar-like upload pattern was the data-URL approach in `src/components/wasl/story-bar.tsx` and the 10 KB cap on `User.avatar` in `src/app/api/profile/route.ts`. Created the missing route from scratch.
+
+Step 1 — New `/api/upload` route (`src/app/api/upload/route.ts`, CREATED):
+- `POST /api/upload` — accepts a single multipart image upload (`file` field), writes it to `public/uploads/`, returns `{ url, size, mimeType }`.
+- Auth-gated (401 without session) — only logged-in Wasl users can upload.
+- Strict MIME allowlist: `image/png`, `image/jpeg`, `image/jpg`, `image/webp`, `image/gif`, `image/heic`, `image/heif`. Anything else → 415 "Unsupported file type — only images are allowed".
+- 5 MB cap → 413 "File too large" when exceeded. Empty file → 400.
+- Filename pattern: `<userId>-<timestamp>-<random8>.<ext>` so files are unique per user / per upload and easy to audit. Random component is `Math.random().toString(36).slice(2, 10)`.
+- Creates `public/uploads/` on first upload via `fs.mkdir({ recursive: true })`. Next.js serves `/public/*` at the root, so the returned URL (`/uploads/<filename>`) is directly usable in `<img src=…>` and storable on the `Conversation.avatar` column.
+- Optional `?type=group-avatar` query param is accepted (purely informational right now — leaves room for future per-type quotas / logging without breaking callers).
+
+Step 2 — Extended `PATCH /api/conversations/[id]` to accept an `avatar` field (`src/app/api/conversations/[id]/route.ts`, MODIFIED):
+- Body can now contain `{ name }`, `{ description }`, `{ avatar }`, or any combination of the three. If none is present → 400 `"Provide a name, description, or avatar to update"`.
+- `avatar` accepts either a string URL/path or explicit `null` (to clear). Empty/whitespace-only string is also treated as "clear".
+- URL safety check (defensive — blocks `javascript:` etc.): accepts only paths starting with `/uploads/` or `/avatar`, absolute `https://` URLs, or `data:image/(png|jpeg|webp|gif);base64,…` data URLs (the data-URL fallback mirrors the existing `User.avatar` behaviour). Anything else → 400 `"Invalid avatar URL"`. Cap at 50 KB so a stray data URL can't bloat the row.
+- No-op short-circuit preserved: when the supplied value already equals the current DB value, it isn't included in the Prisma `update` payload and the route returns `{ ok: true, conversation, unchanged: true }` without writing or emitting a system message.
+- System messages emitted per change: `"X set the group photo"` (when going from null → URL), `"X changed the group photo"` (URL → different URL), `"X removed the group photo"` (URL → null). These interleave correctly with the existing `"X changed the group name to Y"` and `"X changed/deleted the group description"` messages thanks to the per-field system-message loop.
+- Existing admin / non-group / forbidden checks unchanged (404 / 400 / 403 as before).
+
+Step 3 — `WaslGroupAvatar` accepts a custom `src` (`src/components/wasl/wasl-avatar.tsx`, MODIFIED):
+- Added optional `src?: string | null` prop. When set, the component renders a single `WaslAvatar` with that image (single image, no initials, no composite grid) — mirroring how a 1-on-1 user avatar renders.
+- When `src` is falsy, behaviour is unchanged (composite initials grid for groups with participants, single-initials fallback otherwise).
+- Also added a `key={src}` to the `<img>` inside `WaslAvatar` plus the new `wasl-avatar-img-in` CSS class so swapping in a new photo (e.g. after an admin uploads a group avatar) fades in smoothly instead of snapping.
+
+Step 4 — Sidebar + chat header use the custom avatar (`src/components/wasl/sidebar.tsx` + `src/components/wasl/chat-window.tsx`, MODIFIED):
+- Sidebar's `ConversationRow`: passes `src={conversation.avatar}` to the group's `WaslGroupAvatar`. When a custom URL is set, the row now shows that image; otherwise it falls back to the composite initials grid (unchanged).
+- Chat header (`chat-window.tsx`): same one-line change — passes `src={conversation.avatar}` to `WaslGroupAvatar` so the header avatar matches the panel + sidebar.
+
+Step 5 — Avatar upload UI in `contact-info-panel.tsx` (`src/components/wasl/contact-info-panel.tsx`, MODIFIED):
+- Hero avatar wrapped in a `relative inline-block` container so the camera button can be positioned absolutely on top of it.
+- Uses `effectiveAvatar` (optimistic local override → store value → null) so the panel updates the instant the upload / remove succeeds, before the canonical `refreshConversation()` round-trip lands.
+- For admins in a group: a small circular camera button at `bottom-1 right-1` of the 120px avatar. Wasl-green background (`var(--wasl-green)` → `var(--wasl-green-dark)` on hover), white `Camera` icon, 2px ring matching the sidebar bg, `transition-transform duration-150 hover:scale-110` for the hover lift, and `focus-visible:ring-[var(--wasl-green)]` for keyboard accessibility.
+- Clicking the camera button calls `fileInputRef.current?.click()` to open the OS file picker (`<input type="file" accept="image/*" className="hidden" />` is rendered once and reused).
+- Client-side guards in `handleAvatarFileChange`: rejects files > 5 MB ("Image too large (max 5MB)") and non-image MIME types ("Only image files are allowed") before the network round-trip. Always clears the input value afterwards so picking the same file twice still fires `onChange`.
+- Upload flow: `POST /api/upload` with `FormData(file)` → on 200, parse `{ url }` → `PATCH /api/conversations/:id` with `{ avatar: url }` → on 200, `toast.success('Group avatar updated')` + `handleAvatarChanged(url)` to optimistically update local state, the global store, and trigger `refreshConversation()`. Any error in either step surfaces as a `toast.error` with the server-provided message (or a fallback).
+- "Remove photo" dropdown: only visible when an admin AND a custom avatar is already set. Renders a small ghost `Photo ▾` button next to the existing "Edit group name" button (using `DropdownMenu` / `DropdownMenuTrigger` / `DropdownMenuContent` / `DropdownMenuItem` from `@/components/ui/dropdown-menu`). The single item is `"Remove photo"` (with a `Trash2` icon, `text-destructive` styling) — clicking it triggers `confirm()` then `handleRemoveAvatar`, which PATCHes `{ avatar: null }` and shows the appropriate toast.
+- Loading state: while `avatarUploading` OR `avatarRemoving` is true, a `Loader2` spinner is overlaid on the avatar (`absolute inset-0 rounded-full bg-black/40 flex items-center justify-center`) and the camera button is hidden so the user can't double-trigger an upload.
+- Non-admins: no camera button, no dropdown — they just see the static avatar (as before).
+- Local state reset on conversation change: added `setLocalAvatar(undefined)` to the existing `useEffect(() => {…}, [activeConversationId])` block (alongside `setLocalParticipants(null)` and `setLocalDescription(undefined)`) so stale avatar overrides from a previous chat don't leak in.
+- Smooth transition: the `WaslAvatar` itself carries `className="transition-all duration-300"` and the `<img>` inside has the new `wasl-avatar-img-in` animation, so swapping from the initials state to a freshly-uploaded photo (or removing it back to initials) fades in cleanly.
+
+Step 6 — CSS for the avatar fade-in (`src/app/globals.css`, MODIFIED):
+- Added `@keyframes wasl-avatar-img-in { from { opacity: 0; } to { opacity: 1; } }` + `.wasl-avatar-img-in { animation: wasl-avatar-img-in 0.28s ease-out backwards; }` class, placed right after the existing `.wasl-read-receipts-pop` block for thematic grouping. Added a `@media (prefers-reduced-motion: reduce)` guard to disable the animation for accessibility (matches the pattern used by every other wasl-* animation in the file).
+
+Verification (against the running dev server on port 3000):
+- `bun run lint` → exit 0, zero errors, zero warnings across the whole repo.
+- `bunx tsc --noEmit` filtered to the touched files → no matches (zero new type errors in `upload/route.ts`, `conversations/[id]/route.ts`, `wasl-avatar.tsx`, `sidebar.tsx`, `contact-info-panel.tsx`, `globals.css`). All remaining TS errors in the repo are pre-existing in files I did not touch (login route, bot-reply, reactions-summary, link-preview, edits, sidebar.tsx UI component, chat-app, chat-window).
+- Dev server was restarted with the worklog's `setsid -f bash -c 'exec ./node_modules/.bin/next dev -p 3000 …'` pattern (it had died); logged in as `demo` / `demo123` and ran an end-to-end smoke test:
+  - `POST /api/upload?type=group-avatar` with a 68-byte PNG → 200 `{"url":"/uploads/<userId>-<ts>-<rand>.png","size":68,"mimeType":"image/png"}`. File confirmed written to `public/uploads/`.
+  - `POST /api/upload` with no file → 400 `"Expected multipart/form-data"`.
+  - `POST /api/upload` without auth → 401 `"Unauthorized"`.
+  - `POST /api/upload` with a `.txt` (non-image) → 415 `"Unsupported file type — only images are allowed"`.
+  - `PATCH /api/conversations/{groupId}` with `{ avatar: "/uploads/test-fake-avatar.png" }` → 200, response conversation has `avatar` set, then `GET /api/conversations/{groupId}` returns `avatar` matching, and `GET /api/conversations` (list) also returns the same `avatar` value on the matching row.
+  - `PATCH` with `{ avatar: null }` → 200, `avatar` cleared back to `null`. Subsequent GET confirms `avatar: null`.
+  - `PATCH` with `{ avatar: "javascript:alert(1)" }` → 400 `"Invalid avatar URL"` (defensive URL-safety check working).
+  - `PATCH` with `{}` → 400 `"Provide a name, description, or avatar to update"` (updated error message reflects the new `avatar` field).
+  - System message audit: fetched the 3 most-recent messages in the group → saw `"Demo User set the group photo"`, `"Demo User removed the group photo"`, `"Demo User set the group photo"` interleaved correctly with the existing description / name system messages.
+- No tests added (per instructions). No `bun run build` run (per instructions). No indigo/blue colors introduced — only `var(--wasl-green)` / `var(--wasl-green-dark)` / `var(--wasl-teal)` for the accent actions, `bg-black/40` for the loading scrim, `text-destructive` for the "Remove photo" item, and standard `bg-muted/60` / `border` / `text-muted-foreground` neutrals.
+
+Stage Summary:
+- `src/app/api/upload/route.ts` — NEW route. Accepts a single image upload via `multipart/form-data` (`file` field), writes to `public/uploads/<userId>-<ts>-<rand>.<ext>`, returns `{ url, size, mimeType }`. Auth-gated, strict image MIME allowlist (png/jpeg/jpg/webp/gif/heic/heif), 5 MB cap, 415 / 413 / 400 error paths. Optional `?type=group-avatar` query param.
+- `src/app/api/conversations/[id]/route.ts` — PATCH now accepts `avatar` (URL string or null) alongside `name` and `description`. Admin + group-only checks unchanged. URL-safety allowlist (rejects `javascript:` etc.) and 50 KB cap. System messages: `"X set the group photo"` (null → URL), `"X changed the group photo"` (URL → URL), `"X removed the group photo"` (URL → null). No-op short-circuit preserved. Empty-body error message updated to mention `avatar`.
+- `src/components/wasl/wasl-avatar.tsx` — `WaslGroupAvatar` accepts a new `src?: string | null` prop. When set, renders a single image avatar (no composite grid). `WaslAvatar`'s `<img>` now has `key={src}` + the new `wasl-avatar-img-in` class for a smooth fade-in on every photo swap.
+- `src/components/wasl/sidebar.tsx` — single-line change: passes `src={conversation.avatar}` to `WaslGroupAvatar` so the sidebar row shows the admin-uploaded photo.
+- `src/components/wasl/chat-window.tsx` — single-line change: passes `src={conversation.avatar}` to `WaslGroupAvatar` in the chat header.
+- `src/components/wasl/contact-info-panel.tsx` — hero avatar wrapped in a relative container with: a wasl-green circular camera button (bottom-right, hover:scale-110, focus-visible ring) that opens a hidden `<input type="file" accept="image/*">` via ref; a `Loader2` spinner overlay during upload / remove; a `DropdownMenu` "Photo ▾" button (only shown for admins when a custom avatar is set) with a `text-destructive` "Remove photo" item; new state `localAvatar` / `avatarUploading` / `avatarRemoving` (reset on conversation switch); and `handleAvatarFileChange` / `handleRemoveAvatar` / `handleAvatarChanged` handlers that upload to `/api/upload`, PATCH the conversation, optimistically update local + store, and toast success/error. Non-admins see just the avatar.
+- `src/app/globals.css` — added `@keyframes wasl-avatar-img-in` (opacity 0 → 1, 0.28s ease-out) + `.wasl-avatar-img-in` class, with a `prefers-reduced-motion: reduce` guard.
+
+---
+Task ID: 33 — Reply quote preview + Group avatar upload + Typing indicator improvements
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing upgrading and fixing".
+
+### Phase 1: Reply Quote Preview in Composer (subagent 33-a)
+**Files:** `src/components/wasl/message-input.tsx`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`, `src/app/globals.css`
+
+**Composer reply preview bar:**
+- When `replyTo` is set, shows a preview bar above the text input with:
+  - CornerUpLeft icon + 3px wasl-green left accent border
+  - "Replying to <sender name>" (resolved from conversation participants)
+  - Message content preview (80 chars, truncated)
+  - X cancel button (calls `setReplyTo(null)`)
+  - Click → dispatches `wasl:jump-to-message` event to scroll to original
+- Slide-down entrance animation (`wasl-reply-banner-in`)
+- Clears `replyTo` after send (defence-in-depth)
+
+**In-bubble reply quote:**
+- MessageBubble now shows a clickable quote box when `replyToId` is set
+- Quote shows original sender name + content preview
+- Accent border: wasl-green for outgoing, wasl-teal for incoming
+- Clicking the quote dispatches `wasl:jump-to-message` to scroll to original
+- `replyToSenderName` prop resolved in chat-window and passed to MessageBubble
+
+### Phase 2: Group Avatar Upload (subagent 33-b)
+**Files:** `src/app/api/upload/route.ts` (NEW), `src/app/api/conversations/[id]/route.ts`, `src/components/wasl/wasl-avatar.tsx`, `src/components/wasl/contact-info-panel.tsx`, `src/components/wasl/sidebar.tsx`, `src/components/wasl/chat-window.tsx`, `src/app/globals.css`
+
+**Upload API:**
+- Multipart image upload → `public/uploads/`
+- Returns `{url, size, mimeType}`
+- Auth-gated, strict image MIME allowlist, 5MB cap
+
+**Conversation PATCH:**
+- Now accepts `avatar` (URL string or null) alongside name/description
+- URL-safety check (blocks `javascript:` etc.)
+- System messages for set/change/remove
+
+**UI — contact-info-panel:**
+- Wasl-green camera button overlay on avatar (bottom-right, hover:scale-110)
+- Opens file picker, uploads image, PATCHes conversation
+- Loading spinner during upload
+- "Remove photo" dropdown option (admin-only, when avatar is set)
+- Toasts on success/error
+
+**WaslGroupAvatar:**
+- Accepts new `src` prop — single image overrides composite grid
+- Fade-in animation when image loads
+
+**E2E verified:**
+- Upload image → 200, returns URL ✅
+- PATCH avatar → 200, avatar persists ✅
+- GET conversation returns avatar URL ✅
+- PATCH with `javascript:` URL → 400 ✅
+
+### Phase 3: Typing Indicator Improvements (main)
+**File:** `src/components/wasl/chat-window.tsx`
+
+Improved the typing indicator in the chat window:
+- **Group typing with avatar:** Shows a small 6x6 avatar (with initial + avatar color) of the first typing user next to the typing bubble
+- **Better text:** "Amira is typing" (1 person) / "3 people are typing" (multiple) instead of "Amira typing"
+- **Green dots:** Typing dots now use wasl-green instead of muted-foreground for better visibility
+- **Animation:** Added `wasl-msg-in` entrance animation to the typing indicator
+- **1-on-1:** Just shows "typing" (no name needed since the header already shows who)
+
+### Phase 4: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| POST /api/upload (image) | 200, returns URL ✅ |
+| PATCH /api/conversations/{id} (avatar) | 200, avatar persists ✅ |
+| GET /api/conversations/{id} | 200, returns avatar ✅ |
+| Invalid avatar URL | 400 ✅ |
+| Send reply message | 200, replyToId stored ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 33)
+- `src/components/wasl/message-input.tsx` — reply preview bar (subagent 33-a)
+- `src/components/wasl/message-bubble.tsx` — clickable reply quote (subagent 33-a)
+- `src/components/wasl/chat-window.tsx` — replyToSenderName + typing indicator (subagent 33-a + main)
+- `src/app/globals.css` — wasl-reply-banner-in + wasl-avatar-img-in animations
+- `src/app/api/upload/route.ts` — NEW image upload (subagent 33-b)
+- `src/app/api/conversations/[id]/route.ts` — avatar PATCH (subagent 33-b)
+- `src/components/wasl/wasl-avatar.tsx` — WaslGroupAvatar src prop (subagent 33-b)
+- `src/components/wasl/contact-info-panel.tsx` — avatar upload UI (subagent 33-b)
+- `src/components/wasl/sidebar.tsx` — pass avatar to group avatar (subagent 33-b)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add voice note transcription
+- Add message pinning by admin (group)
+- Add group invite link / QR code
+- Add message star/filter view
+- Add contact list / address book

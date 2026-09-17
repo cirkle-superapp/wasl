@@ -7,7 +7,7 @@ import {
   Paperclip,
   Mic,
   X,
-  Reply,
+  CornerUpLeft,
   ShieldCheck,
   BarChart3,
   Clock,
@@ -71,6 +71,18 @@ export function MessageInput({
   const replyTo = useWaslStore((s) => s.replyTo)
   const setReplyTo = useWaslStore((s) => s.setReplyTo)
   const user = useWaslStore((s) => s.user)
+  // Resolve the display name of the user who sent the message we're replying
+  // to. Subscribing via a single selector keeps re-renders cheap (Zustand
+  // compares the returned string by value, so we only re-render when the name
+  // actually changes).
+  const replyToSenderName = useWaslStore((s) => {
+    if (!s.replyTo || !s.activeConversationId) return undefined
+    const conv = s.conversations.find((c) => c.id === s.activeConversationId)
+    if (!conv) return undefined
+    const fallback =
+      conv.participants.find((p) => p.userId === s.replyTo!.senderId)?.name
+    return fallback
+  })
 
   // Resolve the effective `protected` flag for the next outgoing message.
   const defaultProtect = !!user?.defaultProtectMessages
@@ -201,6 +213,11 @@ export function MessageInput({
     try {
       await onSend(trimmed, 'text', { protected: effectiveProtect })
       setValue('')
+      // Clear the reply preview once the message is on its way. The parent
+      // chat-window's handleSend also clears this, but we clear it here too
+      // so the composer stays self-contained (and reacts immediately even
+      // if onSend is wrapped/delayed upstream).
+      setReplyTo(null)
       emitTyping(false)
       if (typingTimer.current) {
         clearTimeout(typingTimer.current)
@@ -288,21 +305,53 @@ export function MessageInput({
 
   return (
     <div className="relative bg-[var(--wasl-chat-bg)] px-2 sm:px-4 py-2 border-t border-border/60">
-      {/* Reply banner */}
+      {/* Reply preview bar — WhatsApp/Telegram-style quote preview that
+          appears above the toolbar row whenever `replyTo` is set in the store.
+          Clicking the bar (or pressing Enter/Space when focused) scrolls the
+          chat back to the original message via the wasl:jump-to-message event. */}
       {replyTo && (
-        <div className="mb-2 mx-1 flex items-start gap-2 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-lg p-2 shadow-sm border-l-4 border-[var(--wasl-green)] border-y border-r border-border">
-          <Reply className="w-4 h-4 mt-0.5 text-[var(--wasl-green)] shrink-0" />
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent('wasl:jump-to-message', { detail: replyTo.id })
+            )
+          }
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              window.dispatchEvent(
+                new CustomEvent('wasl:jump-to-message', { detail: replyTo.id })
+              )
+            }
+          }}
+          title="Jump to original message"
+          className="wasl-reply-banner-in mb-2 mx-1 flex items-start gap-2 bg-muted/40 dark:bg-[var(--wasl-sidebar-bg)] rounded-lg p-2 shadow-sm border-y border-r border-border cursor-pointer hover:bg-muted/60 dark:hover:bg-[var(--wasl-sidebar-bg)]/80 transition-colors"
+          style={{ borderLeft: '3px solid var(--wasl-green)' }}
+        >
+          <CornerUpLeft className="w-4 h-4 mt-0.5 text-[var(--wasl-green)] shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
-              Reply to {replyTo.senderId === user?.id ? 'yourself' : 'message'}
+              {replyTo.senderId === user?.id
+                ? 'Replying to yourself'
+                : replyToSenderName
+                  ? `Replying to ${replyToSenderName}`
+                  : 'Replying to message'}
             </div>
-            <div className="text-sm text-muted-foreground truncate max-h-10 overflow-hidden">
-              {replyTo.content}
+            <div className="text-sm text-muted-foreground truncate">
+              {replyTo.content.length > 80
+                ? replyTo.content.slice(0, 80) + '…'
+                : replyTo.content}
             </div>
           </div>
           <button
-            onClick={() => setReplyTo(null)}
-            className="p-1 rounded-full hover:bg-muted text-muted-foreground shrink-0"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setReplyTo(null)
+            }}
+            className="p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
             aria-label="Cancel reply"
           >
             <X className="w-4 h-4" />

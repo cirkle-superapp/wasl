@@ -203,6 +203,7 @@ export function MessageBubble({
   senderName,
   isGroup,
   replyTo,
+  replyToSenderName,
   onReact,
   onReply,
   onStar,
@@ -220,6 +221,11 @@ export function MessageBubble({
   senderName?: string
   isGroup: boolean
   replyTo?: ChatMessage | null
+  // Display name of the user who sent the `replyTo` message (resolved by the
+  // parent chat-window from the conversation's participants). When absent we
+  // fall back to a generic "Original message" label so the quote is still
+  // readable.
+  replyToSenderName?: string
   onReact?: (emoji: string) => void
   onReply?: () => void
   onStar?: () => void
@@ -645,12 +651,35 @@ export function MessageBubble({
             </div>
           )}
           {replyTo && (
-            <div className="border-l-2 border-[var(--wasl-green)] pl-2 mb-1 opacity-70 text-sm bg-black/5 dark:bg-white/5 rounded py-0.5 px-1">
-              <div className="text-xs font-medium">
-                {replyTo.senderId === me?.id ? 'You' : 'Replied to'}
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('wasl:jump-to-message', { detail: replyTo.id })
+                )
+              }
+              title="Jump to original message"
+              className="block w-full text-left rounded-md mb-1 px-2 py-1 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10 transition-colors border-l-[3px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wasl-green)]/40"
+              style={{
+                borderLeftColor: mine
+                  ? 'var(--wasl-green)'
+                  : 'var(--wasl-teal)',
+              }}
+            >
+              <div
+                className="text-[11px] font-semibold leading-tight"
+                style={{
+                  color: mine ? 'var(--wasl-green)' : 'var(--wasl-teal)',
+                }}
+              >
+                {replyTo.senderId === me?.id
+                  ? 'You'
+                  : replyToSenderName || 'Original message'}
               </div>
-              <div className="truncate">{replyTo.content}</div>
-            </div>
+              <div className="text-xs text-muted-foreground truncate leading-snug">
+                {replyTo.content}
+              </div>
+            </button>
           )}
           {message.type === 'image' ? (
             <div className="rounded-lg overflow-hidden max-w-xs">

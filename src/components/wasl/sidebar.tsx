@@ -414,6 +414,7 @@ function ConversationRow({
       {conversation.isGroup ? (
         <WaslGroupAvatar
           name={conversation.name}
+          src={conversation.avatar}
           participants={conversation.participants.map((p) => ({
             name: p.name,
             avatar: p.avatar,

@@ -41,6 +41,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { WaslAvatar } from './wasl-avatar'
 import { useWaslStore, type Commit, type Participant } from '@/lib/store'
 import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
@@ -122,6 +128,15 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [descEditOpen, setDescEditOpen] = useState(false)
   const [localDescription, setLocalDescription] = useState<string | null | undefined>(undefined)
   const [deletingDesc, setDeletingDesc] = useState(false)
+  // --- Group avatar upload (admin only) -----------------------------------
+  // Optimistic local override of the conversation's avatar URL (set right
+  // after a successful upload/remove so the hero updates instantly while the
+  // global conversation list refetch is still in flight). `undefined` means
+  // "fall back to the store value"; `null` means "explicitly cleared".
+  const [localAvatar, setLocalAvatar] = useState<string | null | undefined>(undefined)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarRemoving, setAvatarRemoving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const commits: Commit[] = activeConversationId
     ? commitsByConversation[activeConversationId] || []
     : []
@@ -131,6 +146,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     setLocalParticipants(null)
     setLocalDescription(undefined)
+    setLocalAvatar(undefined)
   }, [activeConversationId])
 
   const participants: Participant[] =
@@ -325,6 +341,14 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       ? localDescription
       : conversation?.description ?? null
 
+  // Effective group avatar URL — same optimistic-override pattern as the
+  // description above. `null` means "no custom avatar" (the composite
+  // initials grid will be shown for groups, or the other user's photo for
+  // 1-on-1s).
+  const effectiveAvatar: string | null =
+    localAvatar !== undefined ? localAvatar : conversation?.avatar ?? null
+  const avatarBusy = avatarUploading || avatarRemoving
+
   // After the description is saved/deleted, update the local + store copy so
   // the panel reflects the change immediately. The refreshConversation call
   // afterwards pulls the canonical record so the sidebar/header also update.
@@ -370,6 +394,123 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       toast.error('Network error')
     } finally {
       setDeletingDesc(false)
+    }
+  }
+
+  // After a successful avatar upload / remove, optimistically update the
+  // hero + the global store so the sidebar + chat header pick up the new
+  // image right away (before the canonical refetch lands).
+  function handleAvatarChanged(newAvatar: string | null) {
+    setLocalAvatar(newAvatar)
+    if (conversation) {
+      upsertConversation({
+        ...conversation,
+        avatar: newAvatar,
+      })
+    }
+    void refreshConversation()
+  }
+
+  // Upload a new group avatar (admin only). Posts the file to /api/upload,
+  // then PATCHes the conversation with the returned URL. Reuses the
+  // 5 MB cap from the upload API for the client-side guard so we fail fast
+  // before the network round-trip.
+  async function handleAvatarFileChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0]
+    // Always clear the input value so picking the same file twice in a row
+    // still fires onChange.
+    e.target.value = ''
+    if (!file) return
+    if (!activeConversationId) return
+    if (!conversation?.isGroup || !isAdmin) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image too large (max 5MB)')
+      return
+    }
+    if (!/^image\//i.test(file.type)) {
+      toast.error('Only image files are allowed')
+      return
+    }
+
+    setAvatarUploading(true)
+    try {
+      // Step 1: upload the image bytes to /api/upload.
+      const form = new FormData()
+      form.append('file', file)
+      const upRes = await fetch('/api/upload?type=group-avatar', {
+        method: 'POST',
+        body: form,
+      })
+      if (!upRes.ok) {
+        const upData = await upRes.json().catch(() => null)
+        toast.error(upData?.error || 'Failed to upload image')
+        return
+      }
+      const upJson = (await upRes.json()) as { url?: string }
+      const url = upJson.url
+      if (!url) {
+        toast.error('Upload response is missing the image URL')
+        return
+      }
+
+      // Step 2: PATCH the conversation with the returned URL.
+      const patchRes = await fetch(
+        `/api/conversations/${activeConversationId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ avatar: url }),
+        }
+      )
+      if (!patchRes.ok) {
+        const patchData = await patchRes.json().catch(() => null)
+        toast.error(patchData?.error || 'Failed to set group photo')
+        return
+      }
+      toast.success('Group avatar updated')
+      handleAvatarChanged(url)
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  // Remove the custom group avatar (admin only). Confirms before clearing.
+  async function handleRemoveAvatar() {
+    if (!activeConversationId) return
+    if (!conversation?.isGroup || !isAdmin) return
+    if (!effectiveAvatar) return
+    if (
+      !confirm(
+        'Remove this group photo? The group will go back to the composite member initials.'
+      )
+    )
+      return
+    setAvatarRemoving(true)
+    try {
+      const res = await fetch(
+        `/api/conversations/${activeConversationId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ avatar: null }),
+        }
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        toast.error(data?.error || 'Failed to remove group photo')
+        return
+      }
+      toast.success('Group photo removed')
+      handleAvatarChanged(null)
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setAvatarRemoving(false)
     }
   }
 
@@ -424,14 +565,46 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       <div className="flex-1 overflow-y-auto wasl-scroll p-4 space-y-6">
         {/* Hero */}
         <div className="flex flex-col items-center text-center">
-          <WaslAvatar
-            name={conversation.name}
-            src={conversation.avatar}
-            color={conversation.avatarColor}
-            size={120}
-            online={isOnline}
-            showStatus={!conversation.isGroup}
-          />
+          <div className="relative inline-block">
+            <WaslAvatar
+              name={conversation.name}
+              src={effectiveAvatar}
+              color={conversation.avatarColor}
+              size={120}
+              online={isOnline}
+              showStatus={!conversation.isGroup}
+              className="transition-all duration-300"
+            />
+            {/* Loading spinner overlay — shown during upload / remove. */}
+            {avatarBusy && (
+              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+                <Loader2 className="w-7 h-7 animate-spin text-white" />
+              </div>
+            )}
+            {/* Admin-only camera upload button (bottom-right corner). For
+                groups only — opens a hidden file picker that uploads the image
+                to /api/upload and then PATCHes the conversation. */}
+            {conversation.isGroup && isAdmin && !avatarBusy && (
+              <button
+                type="button"
+                aria-label="Change group photo"
+                title="Change group photo"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute bottom-1 right-1 w-9 h-9 rounded-full bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white flex items-center justify-center shadow-md ring-2 ring-[var(--wasl-sidebar-bg)] transition-transform duration-150 hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--wasl-green)]"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            )}
+            {/* Hidden file input — rendered once and triggered programmatically
+                by the camera button above. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarFileChange}
+            />
+          </div>
           <h2 className="text-xl font-semibold mt-3">{conversation.name}</h2>
           {!conversation.isGroup && otherUser && (
             <p className="text-sm text-muted-foreground">
@@ -445,14 +618,44 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
             </p>
           )}
           {conversation.isGroup && isAdmin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-[var(--wasl-teal)]/10"
-              onClick={() => setRenameOpen(true)}
-            >
-              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit group name
-            </Button>
+            <div className="mt-2 flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-[var(--wasl-teal)]/10"
+                onClick={() => setRenameOpen(true)}
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit group name
+              </Button>
+              {/* "Remove photo" dropdown — only visible when an admin has set a
+                  custom group avatar. Clicking the item clears the avatar
+                  back to the composite initials grid (with a confirm). */}
+              {effectiveAvatar && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:bg-muted/60"
+                      aria-label="Photo options"
+                      title="Photo options"
+                    >
+                      <Camera className="w-3.5 h-3.5 mr-1.5" /> Photo
+                      <ChevronDown className="w-3 h-3 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                      onClick={handleRemoveAvatar}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Remove photo
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           )}
         </div>
 

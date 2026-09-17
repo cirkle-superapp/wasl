@@ -87,7 +87,10 @@ export async function GET(
   })
 }
 
-// PATCH /api/conversations/:id - update conversation (rename group / set description, admin only)
+// PATCH /api/conversations/:id - update conversation (rename group / set
+// description / set group avatar, admin only). Any combination of fields may
+// be supplied in one request; the handler validates each independently and
+// emits a system message for every field that actually changes.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -98,12 +101,13 @@ export async function PATCH(
   }
   const { id } = await params
   const body = await req.json()
-  const { name, description } = body || {}
+  const { name, description, avatar } = body || {}
   const hasName = typeof name === 'string'
   const hasDescription = typeof description === 'string'
-  if (!hasName && !hasDescription) {
+  const hasAvatar = typeof avatar === 'string' || avatar === null
+  if (!hasName && !hasDescription && !hasAvatar) {
     return NextResponse.json(
-      { error: 'Provide a name or description to update' },
+      { error: 'Provide a name, description, or avatar to update' },
       { status: 400 }
     )
   }
@@ -131,9 +135,13 @@ export async function PATCH(
     )
   }
 
-  // Build the update payload and validation errors incrementally so name
-  // and description can be updated together or independently.
-  const data: { name?: string; description?: string | null } = {}
+  // Build the update payload and validation errors incrementally so name,
+  // description, and avatar can be updated together or independently.
+  const data: {
+    name?: string
+    description?: string | null
+    avatar?: string | null
+  } = {}
   const systemMessages: string[] = []
 
   if (hasName) {
@@ -155,6 +163,51 @@ export async function PATCH(
       systemMessages.push(
         `${session.name} changed the group name to "${trimmed}"`
       )
+    }
+  }
+
+  if (hasAvatar) {
+    // Allow clearing the avatar by sending null. Empty string is also treated
+    // as "clear". Otherwise expect a URL or path string (e.g. "/uploads/x.png"
+    // returned by /api/upload). Reject obviously-large payloads (data URLs are
+    // capped at 50 KB to avoid bloating the row) and anything that isn't a
+    // web-safe path.
+    if (avatar === null || avatar.trim() === '') {
+      if (conversation.avatar !== null) {
+        data.avatar = null
+        systemMessages.push(`${session.name} removed the group photo`)
+      }
+    } else {
+      const trimmed = avatar.trim()
+      if (trimmed.length > 50 * 1024) {
+        return NextResponse.json(
+          { error: 'Avatar URL is too long' },
+          { status: 400 }
+        )
+      }
+      // Accept relative paths ("/uploads/..."), absolute https URLs, and
+      // small data URLs (used as a fallback by older clients). Anything else
+      // (e.g. "javascript:") is rejected defensively.
+      const looksSafe =
+        trimmed.startsWith('/uploads/') ||
+        trimmed.startsWith('/avatar') ||
+        /^https:\/\//i.test(trimmed) ||
+        /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(trimmed)
+      if (!looksSafe) {
+        return NextResponse.json(
+          { error: 'Invalid avatar URL' },
+          { status: 400 }
+        )
+      }
+      if (trimmed !== conversation.avatar) {
+        data.avatar = trimmed
+        const hadPhoto = !!conversation.avatar
+        systemMessages.push(
+          hadPhoto
+            ? `${session.name} changed the group photo`
+            : `${session.name} set the group photo`
+        )
+      }
     }
   }
 
@@ -190,7 +243,7 @@ export async function PATCH(
     data,
   })
 
-  // Emit a system message for each change (name and/or description).
+  // Emit a system message for each change (name, description, and/or avatar).
   for (const content of systemMessages) {
     await db.message.create({
       data: {

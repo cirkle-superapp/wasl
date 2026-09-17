@@ -1102,6 +1102,7 @@ export function ChatWindow({
           {conversation.isGroup ? (
             <WaslGroupAvatar
               name={conversation.name}
+              src={conversation.avatar}
               participants={conversation.participants.map((p) => ({
                 name: p.name,
                 avatar: p.avatar,
@@ -1256,6 +1257,15 @@ export function ChatWindow({
               const replyToMsg = m.replyToId
                 ? messages.find((mm) => mm.id === m.replyToId)
                 : null
+              // Resolve the display name of the original sender so the reply
+              // quote inside the bubble can show "Amira Hassan" instead of the
+              // generic "Replied to" placeholder. Falls back to undefined
+              // (MessageBubble handles the missing-name case).
+              const replyToSenderName = replyToMsg
+                ? conversation.participants.find(
+                    (p) => p.userId === replyToMsg.senderId
+                  )?.name
+                : undefined
               // Compute the index of the first unread message. The separator
               // appears before that message (only if there are unread messages
               // and they're not the very first message in the visible batch).
@@ -1292,6 +1302,7 @@ export function ChatWindow({
                       senderName={senderName}
                       isGroup={conversation.isGroup}
                       replyTo={replyToMsg}
+                      replyToSenderName={replyToSenderName}
                       onReact={(emoji) => handleReact(m.id, emoji)}
                       onReply={() => setReplyTo(m)}
                       onStar={() => handleStar(m.id)}
@@ -1308,16 +1319,36 @@ export function ChatWindow({
                 </div>
               )
             })}
-            {/* Typing indicator */}
+            {/* Typing indicator — shows who is typing with avatar in groups */}
             {typingUsers.length > 0 && (
-              <div className="flex justify-start mb-2">
-                <div className="wasl-bubble-in px-3 py-2 shadow-sm flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground mr-1">
-                    {conversation.isGroup ? typingUsers[0] : ''} typing
-                  </span>
-                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
+              <div className="flex justify-start mb-2 wasl-msg-in">
+                <div className="flex items-end gap-1.5">
+                  {/* Show a small avatar of the first typing user in groups */}
+                  {conversation.isGroup && typingUsers[0] && (() => {
+                    const typer = conversation.participants.find(
+                      (p) => p.name?.split(' ')[0] === typingUsers[0]
+                    )
+                    return typer ? (
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mb-0.5"
+                        style={{ backgroundColor: typer.avatarColor || 'var(--wasl-green)' }}
+                      >
+                        {typer.name?.charAt(0).toUpperCase()}
+                      </div>
+                    ) : null
+                  })()}
+                  <div className="wasl-bubble-in px-3 py-2 shadow-sm flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground mr-1">
+                      {conversation.isGroup
+                        ? typingUsers.length === 1
+                          ? `${typingUsers[0]} is typing`
+                          : `${typingUsers.length} people are typing`
+                        : 'typing'}
+                    </span>
+                    <span className="wasl-typing-dot w-1.5 h-1.5 bg-[var(--wasl-green)] rounded-full inline-block" />
+                    <span className="wasl-typing-dot w-1.5 h-1.5 bg-[var(--wasl-green)] rounded-full inline-block" />
+                    <span className="wasl-typing-dot w-1.5 h-1.5 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  </div>
                 </div>
               </div>
             )}

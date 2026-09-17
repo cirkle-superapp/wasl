@@ -32,9 +32,10 @@ export function WaslAvatar({
       >
         {src ? (
           <img
+            key={src}
             src={src}
             alt={name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover wasl-avatar-img-in"
             referrerPolicy="no-referrer"
           />
         ) : (
@@ -72,14 +73,30 @@ export type GroupParticipant = {
 export function WaslGroupAvatar({
   name,
   participants = [],
+  src,
   size = 44,
   className,
 }: {
   name: string
   participants?: GroupParticipant[]
+  // Optional custom group avatar URL (e.g. an uploaded photo set by an
+  // admin). When provided it overrides the composite initials grid.
+  src?: string | null
   size?: number
   className?: string
 }) {
+  // If an admin has uploaded a custom avatar, render it the same way a regular
+  // user avatar renders (single image, no composite grid, no initials).
+  if (src) {
+    return (
+      <WaslAvatar
+        name={name}
+        src={src}
+        size={size}
+        className={className}
+      />
+    )
+  }
   if (participants.length === 0) {
     return <WaslAvatar name={name} size={size} className={className} />
   }
