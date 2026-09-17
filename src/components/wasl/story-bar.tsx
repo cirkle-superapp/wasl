@@ -35,7 +35,7 @@ type StoryGroup = {
 }
 
 const TEXT_BG_COLORS = [
-  '#1a4a5a', '#009588', '#c2a060', '#c25a6e', '#4a6b88', '#9a7a3e',
+  '#1a4a5a', '#009588', '#c2a060', '#c25a6e', '#2a6b7e', '#9a7a3e',
 ]
 
 export function StoryBar() {

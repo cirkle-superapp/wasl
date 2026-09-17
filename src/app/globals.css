@@ -115,7 +115,7 @@
   --cirkle-teal-light: #2a6a7a;
   --cirkle-rose: #c25a6e;
   --cirkle-rose-bright: #ff2357;  /* production Cirkle rose-500 */
-  --cirkle-steel: #4a6b88;
+  --cirkle-steel: #2a6b7e;
   --cirkle-charcoal: #1a1a14;
   --cirkle-cream: #fdfcf9;
 }
@@ -242,7 +242,7 @@
 
 /* Cirkle signature gradients (available in both themes) */
 .wasl-gradient-hero-cirkle {
-  background: linear-gradient(135deg, #1a4a5a 0%, #4a6b88 50%, #c25a6e 100%);
+  background: linear-gradient(135deg, #1a4a5a 0%, #2a6b7e 50%, #c2a060 100%);
 }
 .wasl-gradient-gold {
   background: linear-gradient(135deg, #e5c98a 0%, #9a7a3e 100%);
