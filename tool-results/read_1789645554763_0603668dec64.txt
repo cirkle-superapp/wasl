@@ -1,0 +1,448 @@
+  3719→---
+  3720→Task ID: 36-b
+  3721→Agent: general-purpose (voice note transcription)
+  3722→Task: Add a voice-note transcription feature. Voice notes are stored as base64 `data:audio/*` data URLs in `Message.content` (type `'voice'`). The available AI providers in `src/lib/ai.ts` (Nvidia DeepSeek, Groq, OpenRouter, Gemini) are text-only chat-completion LLMs and cannot decode audio, so the implementation uses a transparent placeholder transcription persisted on a new `Message.transcription` column, plus a full client-side UI (Transcribe / Show / Hide toggle, loading spinner, smooth expand/collapse, "Transcription available" indicator).
+  3723→
+  3724→Work Log:
+  3725→- Read `worklog.md` (Tasks 34, 35, 27 — AI providers) to confirm: AI router at `src/lib/ai.ts` is text-only; voice notes are stored as base64 data URLs in `Message.content` with `type: 'voice'`; `VoicePlayer` at `src/components/wasl/voice-player.tsx`; voice rendering branch in `src/components/wasl/message-bubble.tsx` (around the `message.type === 'voice' && message.content.startsWith('data:audio')` early-return).
+  3726→- Inspected `src/app/api/ai/summary/route.ts` + `src/app/api/bookmarks/route.ts` to mirror the established auth + membership-check pattern (`getSession()`, `db.participant.findUnique({ where: { conversationId_userId: … } })`).
+  3727→- Inspected `src/lib/store.ts` `ChatMessage` type and `src/app/api/conversations/[id]/messages/route.ts` GET handler to wire the new `transcription` field through to the client.
+  3728→
+  3729→Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED):
+  3730→- Added `transcription String?` to the `Message` model (after `pinned`, before `createdAt`). Comment explains it is populated by `POST /api/ai/transcribe`.
+  3731→- Ran `bun run db:push` — schema applied successfully (no data loss, Prisma client regenerated).
+  3732→
+  3733→Step 2 — Transcription API (`src/app/api/ai/transcribe/route.ts`, NEW):
+  3734→- POST handler. Body: `{ messageId }`.
+  3735→- Auth check (`getSession()` → 401 if missing).
+  3736→- Looks up the message (selecting `id, conversationId, type, content, transcription`).
+  3737→- Membership check via `db.participant.findUnique({ where: { conversationId_userId } })` → 403 if the user is not in the message's conversation (prevents cross-conversation ID probing).
+  3738→- Verifies `type === 'voice' && content.startsWith('data:audio')` → 404 otherwise.
+  3739→- If `message.transcription` is already set, returns `{ transcription, cached: true }` (no re-computation).
+  3740→- Otherwise, generates an honest placeholder — `"🎤 Voice message — automatic transcription is not available. Play to listen."` — persists it on the row (`db.message.update`), and returns `{ transcription, cached: false }`. The block is clearly commented so a future agent can swap in a real ASR provider (Whisper / Deepgram) by replacing just the placeholder block.
+  3741→
+  3742→Step 3 — Store type (`src/lib/store.ts`, MODIFIED):
+  3743→- Added `transcription?: string | null` to `ChatMessage`. Documented that it is populated by `POST /api/ai/transcribe` and that null/undefined means "no transcription yet — bubble shows the Transcribe CTA".
+  3744→
+  3745→Step 4 — Messages API (`src/app/api/conversations/[id]/messages/route.ts`, MODIFIED):
+  3746→- Added `transcription: m.transcription` to the GET message mapper so the field flows through to the client. (The query already uses `include: { reactions: … }` rather than `select`, so the new scalar column is already returned by Prisma — only the explicit mapper line needed updating.)
+  3747→
+  3748→Step 5 — VoicePlayer UI (`src/components/wasl/voice-player.tsx`, MODIFIED):
+  3749→- Added `FileText` to the lucide-react import list.
+  3750→- Added two new optional props to `VoicePlayerProps`: `transcription?: string | null` (initial/server-provided transcription) and `messageId?: string` (enables the transcription UI for voice notes; absent for uploaded audio files).
+  3751→- Added local state: `transcription` (initialised from `initialTranscription`), `transcribing` (in-flight fetch flag), `showTranscription` (toggle), `transcriptionError`.
+  3752→- Added `supportsTranscription` derived flag (`!!messageId && variant === 'voice'`).
+  3753→- Added `handleToggleTranscription()` async handler: on first open with no cached transcription, POSTs `/api/ai/transcribe` with `{ messageId }`, shows a spinner, parses `{ transcription }` from the JSON response, sets local state, and surfaces network/server errors inline in the transcription box.
+  3754→- Wrapped the existing player `<div>` in an outer `flex flex-col gap-1` container that also holds the transcription UI when `supportsTranscription` is true.
+  3755→- Transcription toggle button: small pill (`text-[11px]`, `px-2 py-1`, `rounded-md`), `FileText` icon, `Loader2` spinner while transcribing. Label cycles through `Transcribe` / `Show transcription` / `Hide transcription` / `Transcribing…` based on state. `aria-expanded` + `aria-controls` for a11y. No indigo/blue — uses `text-muted-foreground` + `hover:bg-black/[0.04] dark:hover:bg-white/[0.06]` to stay on-theme.
+  3756→- Transcription box: smooth expand/collapse via CSS grid-rows transition (`grid-rows-[0fr]` → `grid-rows-[1fr]` over 200ms) wrapped around an `overflow-hidden` inner div so the content isn't clipped when expanded. The inner transcription text container uses `bg-muted/30`, italic `text-muted-foreground`, `text-[11px]`, with `role="region"` + `aria-label`. Inner content state: spinner + "Transcribing audio…" during fetch, error message in `text-foreground/70` on failure, the transcription text on success, or a muted "No transcription yet." fallback.
+  3757→
+  3758→Step 6 — Message-bubble wiring (`src/components/wasl/message-bubble.tsx`, MODIFIED):
+  3759→- The voice-message rendering branch now passes `messageId={message.id}` and `transcription={message.transcription ?? null}` to `<VoicePlayer />`.
+  3760→- Added a small `FileText` indicator (w-3 h-3, `text-foreground/50`, `title="Transcription available"`) inside the timestamp footer row, shown only when `message.transcription` is truthy — so users can see at a glance which voice notes already have a transcript cached before opening them. (`FileText` was already in the file's lucide-react import list — no new import needed.)
+  3761→
+  3762→Step 7 — Verification:
+  3763→- `bun run lint` → 0 errors (clean output, just the `$ eslint .` banner).
+  3764→- `bunx tsc --noEmit` filtered to my touched files (`voice-player`, `message-bubble`, `transcribe`, `store.ts`, `messages/route.ts`) → no errors reported in any of them.
+  3765→- Dev server already running on port 3000; verified `GET /` → 200 and `POST /api/ai/transcribe` with no auth → 401 (auth check working). The route compiles cleanly on first hit (no Next.js build errors in `dev.log`).
+  3766→
+  3767→Stage Summary:
+  3768→- **Prisma**: `prisma/schema.prisma` — added `transcription String?` to the `Message` model. Applied with `bun run db:push`.
+  3769→- **API** (new): `src/app/api/ai/transcribe/route.ts` — POST `{ messageId }` → `{ transcription, cached }`. Auth + conversation-membership checks; only operates on `type: 'voice'` rows with `data:audio` content. Returns a transparent placeholder transcription (the available AI providers are text-only LLMs and cannot decode audio) and persists it on the message row so subsequent requests are cached. The block is isolated and clearly commented for a future real-ASR swap-in.
+  3770→- **Store**: `src/lib/store.ts` — added `transcription?: string | null` to `ChatMessage`.
+  3771→- **Messages API**: `src/app/api/conversations/[id]/messages/route.ts` — added `transcription: m.transcription` to the GET mapper.
+  3772→- **VoicePlayer**: `src/components/wasl/voice-player.tsx` — added `transcription` + `messageId` props; new `handleToggleTranscription` async handler that calls the API on first open; toggle button with `FileText` icon + spinner + state-aware label; transcription box with `bg-muted/30` + italic muted text + smooth `grid-rows` expand/collapse animation. No indigo/blue.
+  3773→- **Message-bubble**: `src/components/wasl/message-bubble.tsx` — passes `messageId` + `transcription` to `VoicePlayer` for voice notes; renders a small `FileText` indicator next to the timestamp when a transcription is already cached.
+  3774→- TypeScript-strict, no test files created, did NOT run `bun run build`. All UI uses the wasl color palette + theme tokens (no indigo/blue).
+  3775→
+  3776→---
+  3777→Task ID: 36-a
+  3778→Agent: general-purpose (global message search)
+  3779→Task: Add a GLOBAL message search that searches across ALL of the user's conversations at once (existing search was per-conversation only via chat-search-dialog). Includes a new /api/search route, a GlobalSearchDialog component, and sidebar entry points (MoreVertical menu item, Enter-to-search from the sidebar search box, and a Ctrl/Cmd+Shift+F keyboard shortcut).
+  3780→
+  3781→Work Log:
+  3782→- Read `worklog.md` (Tasks 34, 35, 35-a, 35-b) to understand established patterns: `GlobalStarredDialog` retry-poll jump-to-message pattern; `/api/starred` 3-query batch fetch (memberships → conversations+participants → senders); per-conversation `/api/conversations/[id]/search` with `q` / `from` / `to` params; `pickAvatarColor` fallback for missing avatar colors; `WaslAvatar` / `WaslGroupAvatar` props.
+  3783→- Verified dev server was already running on port 3000 (`curl /` → 200).
+  3784→- Confirmed the existing per-conversation search route (`src/app/api/conversations/[id]/search/route.ts`) — mirrored its `q`/`from`/`to` semantics (silent drop of invalid dates, end-of-day extension on `to`, ASCII case-insensitive `contains`) into the new global search.
+  3785→
+  3786→Step 1 — API route (`src/app/api/search/route.ts`, NEW):
+  3787→- `GET /api/search?q=...&from=YYYY-MM-DD&to=YYYY-MM-DD` — searches messages across ALL conversations the current user is a member of.
+  3788→- Implementation:
+  3789→  1. `getSession()` → 401 if unauthenticated.
+  3790→  2. Parse `q`, `from`, `to` query params. Invalid date strings are silently dropped (no 400) — same behaviour as the per-conversation search route. `to` is extended to `23:59:59.999` for an inclusive upper bound.
+  3791→  3. If no `q` AND no date bound → return empty `{ results: [], total: 0, conversationCount: 0 }` so the UI can render its "Type to search…" empty state.
+  3792→  4. Find all conversation IDs the user is a member of via `db.participant.findMany({ where: { userId } })`. Empty list → return empty results.
+  3793→  5. Fetch "deleted for me" message IDs (`db.deletedForMe.findMany`) scoped to those conversations — these are excluded from results.
+  3794→  6. `db.message.findMany({ where: { conversationId: { in: [...] }, content: { contains: q }, type: { not: 'system' }, createdAt: {...} }, orderBy: { createdAt: 'desc' }, take: 200 })` — fetch 200 (headroom for the deleted-for-me filter), then JS-filter deleted IDs, then `.slice(0, 50)` for the final cap.
+  3795→  7. Non-ASCII safety net: re-filter results in JS using `content.toLowerCase().includes(q.toLowerCase())` so Arabic / Cyrillic / etc. case variants are caught (SQLite's `contains` is ASCII-only case-insensitive).
+  3796→  8. Bulk-fetch conversations + participants + senders in 3 queries (same pattern as `/api/starred`). For each message, derive display name + avatar + avatarColor per conversation: 1-on-1 → other participant's user info; group → stored fields with `pickAvatarColor` fallback.
+  3797→  9. Return `{ results: [{ messageId, content, type, createdAt, senderId, senderName, conversationId, conversationName, conversationAvatar, conversationAvatarColor, isGroup }], total, conversationCount }`.
+  3798→
+  3799→Step 2 — Dialog (`src/components/wasl/global-search-dialog.tsx`, NEW):
+  3800→- `'use client'` shadcn `Dialog` with header "Search messages" + count subtitle ("X results in Y conversations").
+  3801→- Auto-focus `<Input>` at the top with 250ms debounce (separate `query` for the input, `debouncedQ` for the fetch — same pattern as `GlobalStarredDialog`).
+  3802→- Enter key forces an immediate (non-debounced) search.
+  3803→- Optional `initialQuery` prop — when the dialog is opened from the sidebar search box (Enter pressed with text), the typed text is forwarded so the global search starts with that query.
+  3804→- Results grouped by conversationId via `useMemo` (Map preserves first-seen order, which is implicit "most recent match" order since `results` is already sorted by createdAt desc).
+  3805→- Each conversation group has a **sticky header** showing avatar + name + group icon + match count, followed by the matching messages under it.
+  3806→- Each message row shows: sender name + timestamp on top, then the message content with the first occurrence of the query highlighted via `<mark className="bg-yellow-200 dark:bg-yellow-900/70">`. Image messages render a thumbnail. Content longer than 220 chars is truncated with "…".
+  3807→- Hover reveals a "Jump" hint with an `ArrowDown` icon.
+  3808→- Clicking a row: `setActiveConversation(conversationId)` → `onOpenChange(false)` → retry-poll dispatch of `wasl:jump-to-message` (same retry-poll pattern as `GlobalStarredDialog`: DOM poll for up to 1.5s, dispatch when the message element exists or on timeout). Lets the chat window load the target conversation's messages async before scrolling/flashing the bubble.
+  3809→- Empty states:
+  3810→  - No query → "Type to search across all your conversations." (with a `MessageCircle` icon in a `wasl-green` circle).
+  3811→  - Query with no results → "No messages found for '{query}'." (with a `Search` icon in a muted circle).
+  3812→- Result count line at the top of the scroll area: "X results in Y conversations".
+  3813→- Scrollable list: `max-h-96 overflow-y-auto wasl-scroll`. Rows use `wasl-msg-in` entrance animation.
+  3814→- All colors are from the wasl palette (`--wasl-teal`, `--wasl-green`) and the yellow `<mark>` highlight. No indigo/blue anywhere.
+  3815→
+  3816→Step 3 — Sidebar wiring (`src/components/wasl/sidebar.tsx`, MODIFIED):
+  3817→- Imported `TextSearch` from lucide-react (chose `TextSearch` over `MessageSearch` because the latter does not exist in the installed lucide-react version — verified via `node -e "require('lucide-react')"`).
+  3818→- Imported `GlobalSearchDialog`.
+  3819→- Added `globalSearchOpen` + `globalSearchInitialQuery` state.
+  3820→- Added a **global keyboard shortcut** `useEffect` listening for `Ctrl/Cmd+Shift+F` → opens the dialog with empty initial query. (Kept separate from the existing `Ctrl+K` command palette so the two shortcuts don't collide.)
+  3821→- Added a "Search messages" item to the MoreVertical dropdown (between "New chat" and "Starred messages") with a `TextSearch` icon in `wasl-teal`/`wasl-green` and a `⌘⇧F` kbd hint on the right.
+  3822→- Added `onKeyDown={Enter}` handler to the sidebar conversation-search `<Input>` — pressing Enter with a non-empty query opens the global search dialog pre-seeded with the typed text (mirrors WhatsApp's "press Enter in the search box to search messages" UX).
+  3823→- Added a small `TextSearch` button inside the search input that appears when the input is non-empty (next to the existing ⌘K kbd hint) — clicking it opens the global search pre-seeded with the typed text.
+  3824→- Mounted `<GlobalSearchDialog open={globalSearchOpen} onOpenChange={setGlobalSearchOpen} initialQuery={globalSearchInitialQuery} />` alongside the other sidebar dialogs.
+  3825→
+  3826→Step 4 — Verification:
+  3827→- `bun run lint` → exit 0, zero errors, zero warnings across the whole project.
+  3828→- `bunx tsc --noEmit` filtered to my touched files → no errors in `src/app/api/search/route.ts`, `src/components/wasl/global-search-dialog.tsx`, or `src/components/wasl/sidebar.tsx`. (One pre-existing TS error in `src/components/ui/sidebar.tsx` — the shadcn UI primitive, NOT my touched `src/components/wasl/sidebar.tsx` — confirmed unrelated to this task.)
+  3829→- Manual API smoke tests with a real logged-in user (set `wasl_session` cookie to the demo user's ID):
+  3830→  - `GET /api/search` (no q, no dates) → `{ results: [], total: 0, conversationCount: 0 }` ✅
+  3831→  - `GET /api/search?q=Welcome` → returned 2 results across 2 conversations (a 1-on-1 + a group), with correctly resolved display names ("Amira Hassan" for 1-on-1, "Friends on Wasl" for the group) and `isGroup` flag set correctly ✅
+  3832→  - `GET /api/search?from=2026-01-01&to=2026-12-31` → returned messages within the date range ✅
+  3833→  - `GET /api/search?q=Welcome&from=2026-01-01` → returned text+date-filtered results ✅
+  3834→  - `GET /api/search` (unauthenticated) → 401 ✅
+  3835→  - `GET /api/search?q=Welcome` as a user NOT in demo's conversations → 0 results (correctly excluded non-member conversations) ✅
+  3836→
+  3837→Stage Summary:
+  3838→- New file: `src/app/api/search/route.ts` — global message search API (`GET /api/search?q=…&from=…&to=…`). Searches across all conversations the user is a member of; excludes "deleted for me" messages; returns up to 50 results sorted by createdAt desc; bulk-fetches conversations + senders (no N+1); returns `{ results, total, conversationCount }` per the task spec.
+  3839→- New file: `src/components/wasl/global-search-dialog.tsx` — full shadcn Dialog with debounced auto-focus search, results grouped by conversation (sticky avatar + name headers), highlighted matches via `<mark className="bg-yellow-200 dark:bg-yellow-900/70">`, sender + timestamp + jump hint per row, retry-poll cross-conversation jump-to-message, empty states, wasl palette (no indigo/blue).
+  3840→- Modified file: `src/components/wasl/sidebar.tsx` — added `TextSearch` icon import, `GlobalSearchDialog` import, `globalSearchOpen`/`globalSearchInitialQuery` state, `Ctrl/Cmd+Shift+F` keyboard shortcut, "Search messages" MoreVertical menu item with `⌘⇧F` hint, Enter-to-search on the sidebar search input (pre-seeds the dialog with the typed text), inline `TextSearch` button inside the search input when it's non-empty, and the dialog mount.
+  3841→- All UI uses the wasl color palette + yellow `<mark>` highlight (no indigo/blue). TypeScript-strict. No test files created. Did NOT run `bun run build`. No Prisma schema changes needed (reuses existing `Message`, `Participant`, `DeletedForMe`, `User`, `Conversation` models).
+  3842→
+  3843→---
+  3844→Task ID: 36 — Global message search + Voice note transcription
+  3845→Agent: main (COO / Project Manager role)
+  3846→
+  3847→### Task
+  3848→Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+  3849→said "proceed implementing, upgrading, and fixing".
+  3850→
+  3851→### Phase 1: Global Message Search Across All Conversations (subagent 36-a)
+  3852→**Files:** `src/app/api/search/route.ts` (NEW), `src/components/wasl/global-search-dialog.tsx` (NEW), `src/components/wasl/sidebar.tsx`
+  3853→
+  3854→**API:** `GET /api/search?q=text&from=&to=` — searches messages across ALL conversations the user is a member of:
+  3855→- Batch-fetches conversations + senders in 3 queries (no N+1)
+  3856→- Excludes "deleted for me" messages
+  3857→- Supports optional date filters (from/to, inclusive)
+  3858→- Returns results with conversation info (name, avatar, isGroup)
+  3859→- Sorted by createdAt desc, capped at 50 results
+  3860→- Returns `{ results, total, conversationCount }`
+  3861→
+  3862→**UI — GlobalSearchDialog:**
+  3863→- Auto-focus debounced search input
+  3864→- Results grouped by conversation (sticky headers with avatar + name + match count)
+  3865→- Each result shows sender name, timestamp, content with highlighted match (`<mark>`)
+  3866→- Click → sets conversation active + dispatches wasl:jump-to-message with retry-poll
+  3867→- Empty states: "Type to search across all your conversations." / "No messages found for '{query}'."
+  3868→- Header: "X results in Y conversations"
+  3869→
+  3870→**Sidebar integration:**
+  3871→- Ctrl+Shift+F (Cmd+Shift+F) keyboard shortcut to open global search
+  3872→- "Search messages" menu item in MoreVertical dropdown with ⌘⇧F hint
+  3873→- Enter in sidebar search box opens global search with pre-seeded query
+  3874→- TextSearch icon button inside sidebar search input when non-empty
+  3875→
+  3876→**E2E verified:**
+  3877→- Search "Welcome" → 2 results across 2 conversations ✅
+  3878→- Date filter → correct results ✅
+  3879→
+  3880→### Phase 2: Voice Note Transcription (subagent 36-b)
+  3881→**Files:** `prisma/schema.prisma`, `src/app/api/ai/transcribe/route.ts` (NEW), `src/components/wasl/voice-player.tsx`, `src/components/wasl/message-bubble.tsx`, `src/lib/store.ts`, `src/app/api/conversations/[id]/messages/route.ts`
+  3882→
+  3883→**Prisma schema:** Added `transcription String?` to Message model
+  3884→
+  3885→**API:** `POST /api/ai/transcribe { messageId }`:
+  3886→- Auth + conversation-membership checks
+  3887→- Only operates on `type: 'voice'` messages with `data:audio` content
+  3888→- Returns `{ transcription, cached }`
+  3889→- Persists transcription so subsequent calls return cached=true
+  3890→- Currently returns a placeholder: "🎤 Voice message — automatic transcription is not available. Play to listen."
+  3891→  (The available AI providers are text-only LLMs, not speech-to-text models)
+  3892→
+  3893→**UI — VoicePlayer:**
+  3894→- "Show transcription" / "Transcribe" toggle button below audio player
+  3895→- Loading spinner during transcription request
+  3896→- Transcription box with bg-muted/30, italic muted text
+  3897→- Smooth CSS grid-rows expand/collapse animation
+  3898→- State-aware button label (Transcribe / Show / Hide)
+  3899→
+  3900→**Message-bubble:**
+  3901→- Passes `messageId` + `transcription` to VoicePlayer
+  3902→- Shows FileText indicator next to timestamp when transcription is cached
+  3903→
+  3904→**Store:** `ChatMessage` type now has `transcription?: string | null`
+  3905→
+  3906→**E2E verified:**
+  3907→- Send voice message → 200 ✅
+  3908→- POST /api/ai/transcribe → 200, returns transcription ✅
+  3909→- Invalid message ID → 404 ✅
+  3910→- Messages API includes transcription field ✅
+  3911→
+  3912→### Phase 3: Verification
+  3913→
+  3914→| Check | Result |
+  3915→|-------|--------|
+  3916→| POST /api/auth/login | 200 ✅ |
+  3917→| GET /api/search?q=Welcome | 200, 2 results across 2 convs ✅ |
+  3918→| GET /api/search?q=Welcome&from=...&to=... | 200, date-filtered ✅ |
+  3919→| POST /api/ai/transcribe (valid) | 200, returns transcription ✅ |
+  3920→| POST /api/ai/transcribe (invalid ID) | 404 ✅ |
+  3921→| `bun run lint` | 0 errors ✅ |
+  3922→
+  3923→### Files Touched (Task 36)
+  3924→- `src/app/api/search/route.ts` — NEW global search API (subagent 36-a)
+  3925→- `src/components/wasl/global-search-dialog.tsx` — NEW (subagent 36-a)
+  3926→- `src/components/wasl/sidebar.tsx` — global search integration (subagent 36-a)
+  3927→- `prisma/schema.prisma` — transcription field (subagent 36-b)
+  3928→- `src/app/api/ai/transcribe/route.ts` — NEW transcribe API (subagent 36-b)
+  3929→- `src/components/wasl/voice-player.tsx` — transcription UI (subagent 36-b)
+  3930→- `src/components/wasl/message-bubble.tsx` — pass transcription props (subagent 36-b)
+  3931→- `src/lib/store.ts` — ChatMessage.transcription type (subagent 36-b)
+  3932→- `src/app/api/conversations/[id]/messages/route.ts` — include transcription (subagent 36-b)
+  3933→
+  3934→### Outstanding (next-phase priorities)
+  3935→- Server stability investigation (dev server becomes unresponsive after N requests)
+  3936→- Full agent-browser E2E verification once server is stable
+  3937→- Add contact import (from phone / CSV)
+  3938→- Add real speech-to-text for voice transcription (when a suitable API is available)
+  3939→- Add message draft persistence (save unsent messages per conversation)
+  3940→- Add read-by-everyone indicator
+  3941→- Add message edit time limit indicator
+  3942→
+  3943→---
+  3944→Task ID: 37-a
+  3945→Agent: general-purpose (message draft persistence)
+  3946→Task: Add per-conversation message draft persistence so unsent text is saved when the user switches conversations or reloads the page, restored on return, and deleted when the message is sent. Includes a new Prisma `Draft` model, `/api/drafts` CRUD routes, debounced save + restore in the message-input, and a "Draft" badge + "Draft: <preview>" sidebar indicator.
+  3947→
+  3948→Work Log:
+  3949→- Read `worklog.md` (Tasks 35, 36 — bookmarks, global search, voice transcription) to mirror established patterns: `getSession()` auth + `db.participant.findUnique({ where: { conversationId_userId } })` membership check; `Bookmark` model as a structural template for the new `Draft` model; chat-app bootstrap-fetch pattern (bookmarks → drafts).
+  3950→- Inspected `src/components/wasl/message-input.tsx`, `src/components/wasl/sidebar.tsx`, `src/lib/store.ts`, `src/components/wasl/chat-app.tsx`, and `src/app/api/bookmarks/route.ts` (+ `[id]/route.ts`) for the exact code to extend.
+  3951→
+  3952→Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED):
+  3953→- Added a new `Draft` model after `Bookmark` with `id`, `userId`, `conversationId`, `content`, `replyToId?`, `updatedAt`, `createdAt`, relations to `User` + `Conversation` (both `onDelete: Cascade`), `@@unique([userId, conversationId])` (one draft per user+conversation), and `@@index([userId])`. Comment block matches the task spec.
+  3954→- Added `drafts Draft[]` back-relation on `User` (next to `bookmarks`) and on `Conversation` (next to `polls`).
+  3955→- Ran `bun run db:push` — schema applied successfully, Prisma client regenerated, no data loss.
+  3956→
+  3957→Step 2 — API route `src/app/api/drafts/route.ts` (NEW):
+  3958→- `GET` — lists all drafts for the current user (`db.draft.findMany` with `select` on `conversationId, content, replyToId, updatedAt`), returns `{ drafts: [...] }`. Auth check (`getSession()` → 401 if missing).
+  3959→- `POST` — body `{ conversationId, content, replyToId? }`. Auth check + membership check (`db.participant.findUnique` → 403 if not a member). If `content` is empty after trim → DELETE the draft (idempotent, returns `{ ok: true, deleted: true }`). Otherwise → upsert on the `(userId, conversationId)` unique constraint, returns `{ ok: true }`. `replyToId` defaults to null when absent or empty.
+  3960→
+  3961→Step 3 — API route `src/app/api/drafts/[conversationId]/route.ts` (NEW):
+  3962→- `GET` — returns the draft for the given conversation + current user as `{ content, replyToId }`, or `{ content: null }` if no draft exists. Auth check.
+  3963→- `DELETE` — idempotent delete of the draft for the given conversation + current user (P2025 not-found errors are swallowed and treated as success). Returns `{ ok: true }`. Auth check.
+  3964→
+  3965→Step 4 — Zustand store (`src/lib/store.ts`, MODIFIED):
+  3966→- Added a new `drafts: Record<string, string>` state (conversationId → draft text) plus three actions:
+  3967→  - `setDrafts(drafts)` — bulk replace (used by the chat-app bootstrap fetch).
+  3968→  - `setDraft(conversationId, content)` — optimistic single update; if content is empty/whitespace, the key is removed entirely so the sidebar badge disappears cleanly.
+  3969→  - `clearDraft(conversationId)` — remove a single conversation's draft.
+  3970→- Documented the contract in a comment block (mirrors the bookmarks section style).
+  3971→
+  3972→Step 5 — Chat-app bootstrap (`src/components/wasl/chat-app.tsx`, MODIFIED):
+  3973→- Pulled `setDrafts` from the store and added a `fetch('/api/drafts')` call in the existing bootstrap `useEffect` (alongside the bookmarks fetch). Maps the response into a `Record<conversationId, content>` and calls `setDrafts`. Added `setDrafts` to the dep array.
+  3974→
+  3975→Step 6 — Message-input save/restore (`src/components/wasl/message-input.tsx`, MODIFIED):
+  3976→- Added `useCallback` to the React imports.
+  3977→- Added three refs + two store selectors:
+  3978→  - `draftSaveTimer` — debounce timer for the POST /api/drafts call.
+  3979→  - `typingSinceRestoreRef` — boolean gate so the restore fetch doesn't overwrite text the user has typed since the switch.
+  3980→  - `draftConversationRef` — tracks which conversationId the current draft state belongs to, so a late-firing debounced save writes to the correct row.
+  3981→  - `setDraft` / `clearDraft` from the store.
+  3982→- Replaced the "reset state on conversation change" `useEffect` with a draft-restore effect:
+  3983→  - Cancels any pending debounced save for the previous conversation.
+  3984→  - Optimistically seeds the textarea from the store's `drafts[conversationId]` (no flicker).
+  3985→  - GET `/api/drafts/{conversationId}` — if the user has typed since the switch, the response is ignored; otherwise the textarea is set to the server's draft text and the store is updated. If the draft has a `replyToId`, a retry-poll helper looks up the target message in `messagesByConversation` (up to 8 attempts × 250ms ≈ 2s) and restores the reply banner via `setReplyTo`.
+  3986→- Added a `saveDraft(content, replyToIdOverride?)` `useCallback` that updates the store optimistically and POSTs `/api/drafts` with `keepalive: true`. The `replyToId` resolves to: explicit override (used by the cancel-reply handler) > current `replyTo` from the store > null.
+  3987→- `handleChange` now sets `typingSinceRestoreRef = true` and arms a 500ms debounce timer that calls `saveDraft(v)`.
+  3988→- `handleSend` now cancels the pending debounced save, calls `clearDraft(sentConvId)` optimistically, resets `typingSinceRestoreRef`, and fires `DELETE /api/drafts/{sentConvId}` with `keepalive: true` after the message has been sent.
+  3989→- No new visual UI in the input itself — the existing textarea + reply banner are reused.
+  3990→
+  3991→Step 7 — Sidebar indicator (`src/components/wasl/sidebar.tsx`, MODIFIED):
+  3992→- Added `PencilLine` to the lucide-react imports.
+  3993→- `ConversationRow` now subscribes to `drafts[conversation.id]` from the store (single selector, returns a string → cheap re-render). Derived `hasDraft` boolean + `draftPreview` (whitespace-collapsed).
+  3994→- Conversation name row: when `hasDraft`, renders a small italic "Draft" badge (text-[10px], italic, `text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]`, `bg-[var(--wasl-green)]/10`, `PencilLine` icon) next to the conversation name. Wrapped the name + badge in a `flex items-center gap-1.5` container so the truncate + shrink-0 layout works.
+  3995→- Preview row (between name + timestamp): added a new `hasDraft` branch (between the typing dots and the default preview) that shows `PencilLine icon + "Draft: {preview}"` in muted foreground, replacing the regular last-message preview when a draft exists. Typing indicator still takes precedence over the draft preview.
+  3996→
+  3997→Step 8 — Verification:
+  3998→- `bun run db:push` → success, Prisma client regenerated.
+  3999→- `bun run lint` → 0 errors, 0 warnings.
+  4000→- `bunx tsc --noEmit` filtered to my touched files (`drafts/route.ts`, `drafts/[conversationId]/route.ts`, `message-input.tsx`, `wasl/sidebar.tsx`, `store.ts`, `chat-app.tsx`) → no new errors. (One pre-existing TS error in `chat-app.tsx` line 355 — the `t.id` toast library type issue — was confirmed to pre-date this task via `git stash`.)
+  4001→- Dev server (restarted on port 3000 after schema change) — `GET /` → 200 (page compiles cleanly).
+  4002→- End-to-end API smoke tests with a real session cookie (`wasl_session=<test_user_id>`):
+  4003→  - `GET /api/drafts` (no drafts) → `{ drafts: [] }` 200 ✅
+  4004→  - `GET /api/drafts/{convId}` (no draft) → `{ content: null }` 200 ✅
+  4005→  - `POST /api/drafts` (save) → `{ ok: true }` 200 ✅
+  4006→  - `POST /api/drafts` (with `replyToId`) → `{ ok: true }` 200; GET returns `replyToId` ✅
+  4007→  - `GET /api/drafts/{convId}` (after save) → `{ content, replyToId }` 200 ✅
+  4008→  - `GET /api/drafts` (list) → `{ drafts: [...] }` 200 ✅
+  4009→  - `POST /api/drafts` (empty content) → `{ ok: true, deleted: true }` 200; subsequent GET returns `{ content: null }` ✅
+  4010→  - `DELETE /api/drafts/{convId}` → `{ ok: true }` 200 (idempotent — second delete also returns ok) ✅
+  4011→  - `POST /api/drafts` with a conversation the user isn't a member of → `{ error: 'Forbidden' }` 403 ✅
+  4012→  - `POST /api/drafts` missing `conversationId` → `{ error: 'conversationId is required' }` 400 ✅
+  4013→  - `GET /api/drafts` (unauthenticated) → `{ error: 'Unauthorized' }` 401 ✅
+  4014→
+  4015→Stage Summary:
+  4016→- **Prisma** (`prisma/schema.prisma`, MODIFIED): new `Draft` model (one per user+conversation via `@@unique([userId, conversationId])`) with optional `replyToId` for reply drafts; back-relations added on `User` and `Conversation`. Applied with `bun run db:push` — no data loss.
+  4017→- **API** (NEW): `src/app/api/drafts/route.ts` — `GET` lists all drafts for the current user, `POST` upserts (or deletes if `content` is empty) with auth + conversation-membership checks. `src/app/api/drafts/[conversationId]/route.ts` — `GET` returns `{ content, replyToId }` (or `{ content: null }`), `DELETE` is idempotent.
+  4018→- **Store** (`src/lib/store.ts`, MODIFIED): added `drafts: Record<string, string>` state + `setDrafts` (bulk), `setDraft` (single, optimistic — empties auto-remove), `clearDraft` actions for the sidebar badge + preview.
+  4019→- **Chat-app** (`src/components/wasl/chat-app.tsx`, MODIFIED): bootstraps the drafts map from `GET /api/drafts` on app mount (alongside the bookmarks fetch).
+  4020→- **Message-input** (`src/components/wasl/message-input.tsx`, MODIFIED): 500ms debounced save via POST /api/drafts on every keystroke; on conversation switch, GETs the draft and restores textarea + reply banner (retry-poll for the reply target message); on send, cancels the pending save + DELETEs the draft. `typingSinceRestoreRef` guards against the restore fetch clobbering in-progress typing. `keepalive: true` on save/delete so they survive tab close.
+  4021→- **Sidebar** (`src/components/wasl/sidebar.tsx`, MODIFIED): per-conversation subscription to `drafts[id]` from the store; subtle italic "Draft" badge with `PencilLine` icon next to the conversation name; preview row replaces the last-message text with `PencilLine icon + "Draft: <preview>"` when a draft exists (typing indicator still takes precedence). All colors are from the wasl palette (`--wasl-teal` / `--wasl-green`) — no indigo/blue.
+  4022→- TypeScript-strict, no test files created, did NOT run `bun run build`. All UI uses existing shadcn primitives + the wasl color tokens.
+  4023→
+  4024→---
+  4025→Task ID: 37-b
+  4026→Agent: general-purpose (read-by-everyone indicator)
+  4027→Task: Add a "read by everyone" indicator on sent message bubbles. Currently messages only show a "Read" link that opens a breakdown panel; this task adds a visual cue on the bubble itself when ALL recipients have read the message, plus a partial "N/M" count badge while only some have read it.
+  4028→
+  4029→Work Log:
+  4030→- Read worklog + Prisma schema + read-receipts API + message-bubble.tsx + chat-window.tsx + store.ts to understand the existing patterns (Task IDs 35/36, the Participant.lastReadAt rule, the `StatusTicks` component, and the `onStatus` socket handler).
+  4031→- `src/app/api/conversations/[id]/messages/route.ts` (GET, MODIFIED): Added a single `db.participant.findMany` query for the conversation's OTHER participants (excluding the current user) once per request, then for each outgoing message computed `readByEveryone`, `readCount` (number of participants whose `lastReadAt >= message.createdAt`), and `totalRecipients`. These three fields are added to the message response. Undefined for incoming messages (the bubble only uses them on outgoing messages). Mirrors the bucketing rule in `/api/messages/[id]/read-receipts`. Pre-computed epoch ms for each `lastReadAt` so the per-message loop stays O(participants × messages).
+  4032→- `src/lib/store.ts` (MODIFIED):
+  4033→  - Extended `ChatMessage` type with `readByEveryone?: boolean`, `readCount?: number`, `totalRecipients?: number` (sender-only, computed by the messages API).
+  4034→  - Added a new `bumpMessageReadCount(conversationId, messageIds)` store action that increments `readCount` by 1 for each affected outgoing message (clamped to `totalRecipients`, no-op when `totalRecipients` is missing — i.e. for incoming messages), sets `readByEveryone = true` when the count reaches the total, and bumps `status` to at least `'read'`. This is what makes the bubble's "Read by all" indicator update incrementally as `message:status` socket events arrive (one per participant who reads).
+  4035→- `src/components/wasl/message-bubble.tsx` (MODIFIED): Rewrote the `StatusTicks` component to accept `readByEveryone`, `readCount`, `totalRecipients` props and render three distinct states:
+  4036→  - `readByEveryone === true` → wasl-teal/green `CheckCheck` with the `wasl-ticks-read-all` CSS class (drives the pulse animation), tooltip "Read by all", and a small muted "Read by all" text label next to the ticks.
+  4037→  - `readCount > 0` but `readByEveryone === false` → wasl-teal/green `CheckCheck` with a small muted "N/M" count badge next to it (e.g. "3/5"), tooltip "Read by 3 of 5".
+  4038→  - `readCount === 0` / undefined and `status === 'read'` (legacy path for 1-on-1 chats where the summary isn't populated, or older messages) → wasl-teal/green `CheckCheck` with tooltip "Read — click to see details". (Replaced the old `text-sky-500` blue with wasl-teal/green per the "no blue/indigo" design rule.)
+  4039→  - `status === 'delivered'` → muted double-check, tooltip "Delivered".
+  4040→  - `status === 'sent'` → single `Check`. Anything else → `Clock`.
+  4041→  - Clicking the ticks still opens the existing `ReadReceiptsDialog` (unchanged behaviour).
+  4042→  - Updated all 5 `StatusTicks` callers in the file (text bubble, image bubble, voice bubble, PdfDocumentCardContent, AudioUrlCardContent) to pass `message.readByEveryone`, `message.readCount`, `message.totalRecipients`.
+  4043→- `src/components/wasl/chat-window.tsx` (MODIFIED):
+  4044→  - Imported the new `bumpMessageReadCount` store action and added it to the dependency array of the socket-listener `useEffect`.
+  4045→  - Extended the existing `onStatus` socket handler: when a `message:status` event arrives with `status === 'read'` from another participant (`byUserId !== user?.id`), also call `bumpMessageReadCount` so the per-recipient read summary updates in real-time. The existing `updateMessageStatus(activeConversationId, payload.messageIds, 'read')` call (which sets the message `status` field) is preserved unchanged.
+  4046→  - Added a small additive `message:status` socket emit with `status: 'read'` in `loadMessages` (after the existing `'delivered'` emit). When the recipient opens the conversation, the GET endpoint already marks all of the sender's messages as 'read' on the server side; this new emit mirrors that over the socket so the sender's "Read by all" indicator flips in real-time without needing a refetch. The emit filters for messages whose status in the GET response was not already `'read'`, so subsequent loads (e.g. infinite scroll) don't double-count.
+  4047→- `src/app/globals.css` (MODIFIED): Added a `wasl-ticks-read-all-pop` keyframe animation (scale-up → settle, with a soft green drop-shadow that fades out) and a `.wasl-ticks-read-all` class that triggers it for 0.6s ease-out. Honors `prefers-reduced-motion`. React reuses the underlying `<svg>` element across renders, so adding this class is what triggers the browser to (re)run the animation once when the bubble transitions from "delivered / partial" → "read by all".
+  4048→- Verification:
+  4049→  - `bun run lint` → 0 errors, 0 warnings. (The only project warning is a pre-existing `react-hooks/exhaustive-deps` eslint-disable in `message-input.tsx`, which I did NOT touch.)
+  4050→  - `bunx tsc --noEmit` filtered to my touched files → no new errors. (Two pre-existing TS errors in `chat-window.tsx` at `otherUser.phone` possibly null on lines 555 & 778 — confirmed by `git stash` that they existed at lines 522 & 745 BEFORE my changes; my edits only shifted their line numbers.)
+  4051→  - Manual API smoke test with two real demo users (Demo User + Amira Hassan in a 1-on-1):
+  4052→    1. Demo sends "test read-by-all msg" via POST → response includes `status: 'sent'` (no read summary on POST response since `Message.create` doesn't compute it — that's fine, the bubble falls back to legacy `status` rendering).
+  4053→    2. Demo re-fetches → message shows `readByEveryone: false, readCount: 0, totalRecipients: 1`. ✅ (Amira's lastReadAt is older than the message createdAt.)
+  4054→    3. Amira opens the conversation (GET as Amira) → server updates Amira's `lastReadAt` to NOW.
+  4055→    4. Demo re-fetches → message now shows `readByEveryone: true, readCount: 1, totalRecipients: 1, status: 'read'`. ✅
+  4056→  - This confirms the bubble would render the wasl-teal/green `CheckCheck` with the "Read by all" label + pop animation on step 4.
+  4057→
+  4058→Stage Summary:
+  4059→- Modified files (5):
+  4060→  - `src/app/api/conversations/[id]/messages/route.ts` — GET now computes `readByEveryone` / `readCount` / `totalRecipients` for outgoing messages from `Participant.lastReadAt` vs `Message.createdAt` (single participant query reused across all messages in the page).
+  4061→  - `src/lib/store.ts` — `ChatMessage` type extended with the 3 new fields; new `bumpMessageReadCount` store action increments them incrementally as `message:status` 'read' events arrive.
+  4062→  - `src/components/wasl/message-bubble.tsx` — `StatusTicks` rewritten to render 3 states (read-by-all with wasl-teal/green + pop animation + "Read by all" label, partial-read with "N/M" count badge, legacy delivered/sent). All 5 caller sites pass the new props. Replaced `text-sky-500` (blue) with wasl-teal/green to comply with the "no blue/indigo" design rule.
+  4063→  - `src/components/wasl/chat-window.tsx` — `onStatus` socket handler now also calls `bumpMessageReadCount` on 'read' events from other participants; `loadMessages` now emits a 'read' socket event for the sender's messages that weren't already 'read' so the sender's bubble updates in real-time.
+  4064→  - `src/app/globals.css` — new `wasl-ticks-read-all-pop` keyframe + `.wasl-ticks-read-all` class (0.6s ease-out scale-pop + soft green glow, honors `prefers-reduced-motion`).
+  4065→- All UI uses the wasl color palette (`--wasl-teal` / `--wasl-green`). No indigo/blue anywhere in my changes. TypeScript-strict. No test files created. Did NOT run `bun run build`. No Prisma schema changes needed (reuses existing `Participant.lastReadAt` + `Message.createdAt` + `Message.status`).
+  4066→
+  4067→---
+  4068→Task ID: 37 — Message draft persistence + Read-by-everyone indicator
+  4069→Agent: main (COO / Project Manager role)
+  4070→
+  4071→### Task
+  4072→Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+  4073→said "proceed implementing, upgrading, and fixing".
+  4074→
+  4075→### Phase 1: Message Draft Persistence (subagent 37-a)
+  4076→**Files:** `prisma/schema.prisma`, `src/app/api/drafts/route.ts` (NEW), `src/app/api/drafts/[conversationId]/route.ts` (NEW), `src/lib/store.ts`, `src/components/wasl/chat-app.tsx`, `src/components/wasl/message-input.tsx`, `src/components/wasl/sidebar.tsx`
+  4077→
+  4078→**Prisma schema:** New `Draft` model:
+  4079→- `userId`, `conversationId`, `content`, `replyToId?`
+  4080→- `@@unique([userId, conversationId])` — one draft per user per conversation
+  4081→- Back-relations on User and Conversation
+  4082→
+  4083→**API routes:**
+  4084→- `GET /api/drafts` — list all user drafts
+  4085→- `POST /api/drafts { conversationId, content, replyToId? }` — upsert (or delete if content empty)
+  4086→- `GET /api/drafts/[conversationId]` — get one draft
+  4087→- `DELETE /api/drafts/[conversationId]` — remove draft (after sending)
+  4088→
+  4089→**UI — message-input:**
+  4090→- 500ms-debounced save on keystroke via POST /api/drafts
+  4091→- On conversationId change: GET /api/drafts/{id} to restore textarea + reply banner
+  4092→- On send: cancel pending save + DELETE the draft
+  4093→- `typingSinceRestoreRef` guard prevents restore from clobbering in-progress typing
+  4094→
+  4095→**Store:** `drafts: Record<string, string>` + setDrafts/setDraft/clearDraft actions
+  4096→**Chat-app:** Bootstraps drafts from GET /api/drafts on mount
+  4097→**Sidebar:** Shows "Draft" badge (PencilLine icon) + "Draft: <preview>" for conversations with drafts
+  4098→
+  4099→**E2E verified:**
+  4100→- Save draft → 200 ✅
+  4101→- Get draft → 200, returns content ✅
+  4102→- List drafts → 1 draft ✅
+  4103→- Delete draft → 200 ✅
+  4104→- Verify deleted → content: None ✅
+  4105→
+  4106→### Phase 2: Read-by-Everyone Indicator (subagent 37-b)
+  4107→**Files:** `src/app/api/conversations/[id]/messages/route.ts`, `src/lib/store.ts`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`, `src/app/globals.css`
+  4108→
+  4109→**API:** Messages GET now computes for each outgoing message:
+  4110→- `readByEveryone: boolean` — true if ALL recipients have read (lastReadAt >= createdAt)
+  4111→- `readCount: number` — how many recipients have read
+  4112→- `totalRecipients: number` — total recipients (excluding sender)
+  4113→
+  4114→**UI — message-bubble StatusTicks:**
+  4115→- **Read by all:** wasl-teal/green CheckCheck + "Read by all" label + pop animation
+  4116→- **Partial read:** CheckCheck + "N/M" badge (e.g. "3/5") + tooltip "Read by 3 of 5"
+  4117→- **Delivered/sent:** normal double-check (wasl-teal/green, no blue)
+  4118→- Replaced old text-sky-500 blue with wasl-teal/green
+  4119→
+  4120→**Real-time updates:**
+  4121→- `onStatus` socket handler calls `bumpMessageReadCount` on 'read' events
+  4122→- Added 'read' socket emit in loadMessages after 'delivered' emit
+  4123→- Store `bumpMessageReadCount` action increments readCount (clamped to total)
+  4124→
+  4125→**CSS:** `wasl-ticks-read-all-pop` keyframe (scale-up + green glow) with prefers-reduced-motion guard
+  4126→
+  4127→**E2E verified:**
+  4128→- Old read message: readByEveryone=true, readCount=1, totalRecipients=1 ✅
+  4129→- New unread message: readByEveryone=false, readCount=0, totalRecipients=1 ✅
+  4130→
+  4131→### Phase 3: Verification
+  4132→
+  4133→| Check | Result |
+  4134→|-------|--------|
+  4135→| POST /api/auth/login | 200 ✅ |
+  4136→| POST /api/drafts (save) | 200 ✅ |
+  4137→| GET /api/drafts/{id} | 200, returns content ✅ |
+  4138→| GET /api/drafts (list) | 200, 1 draft ✅ |
+  4139→| DELETE /api/drafts/{id} | 200 ✅ |
+  4140→| Draft after delete | content: None ✅ |
+  4141→| Messages API (readByEveryone) | 200, correct computed fields ✅ |
+  4142→| `bun run lint` | 0 errors ✅ |
+  4143→
+  4144→### Files Touched (Task 37)
+  4145→- `prisma/schema.prisma` — Draft model (subagent 37-a)
+  4146→- `src/app/api/drafts/route.ts` — NEW drafts list + upsert (subagent 37-a)
+  4147→- `src/app/api/drafts/[conversationId]/route.ts` — NEW draft get + delete (subagent 37-a)
+  4148→- `src/lib/store.ts` — drafts state + bumpMessageReadCount (subagent 37-a + 37-b)
+  4149→- `src/components/wasl/chat-app.tsx` — draft bootstrap (subagent 37-a)
+  4150→- `src/components/wasl/message-input.tsx` — draft save/restore (subagent 37-a)
+  4151→- `src/components/wasl/sidebar.tsx` — draft badge + preview (subagent 37-a)
+  4152→- `src/app/api/conversations/[id]/messages/route.ts` — readByEveryone/readCount/totalRecipients (subagent 37-b)
+  4153→- `src/components/wasl/message-bubble.tsx` — StatusTicks 3-state UI (subagent 37-b)
+  4154→- `src/components/wasl/chat-window.tsx` — bumpMessageReadCount on read event (subagent 37-b)
+  4155→- `src/app/globals.css` — wasl-ticks-read-all-pop animation (subagent 37-b)
+  4156→
+  4157→### Outstanding (next-phase priorities)
+  4158→- Server stability investigation (dev server becomes unresponsive after N requests)
+  4159→- Full agent-browser E2E verification once server is stable
+  4160→- Add contact import (from phone / CSV)
+  4161→- Add real speech-to-text for voice transcription (when a suitable API is available)
+  4162→- Add message edit time limit indicator
+  4163→- Add group invite link sharing via WhatsApp/Telegram
+  4164→- Add message copy with formatting preservation
+
+[showing lines 3719-4164 of 4165; use offset=4165 with limit to continue reading]

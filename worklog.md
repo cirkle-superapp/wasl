@@ -4162,3 +4162,238 @@ said "proceed implementing, upgrading, and fixing".
 - Add message edit time limit indicator
 - Add group invite link sharing via WhatsApp/Telegram
 - Add message copy with formatting preservation
+
+---
+Task ID: 38-b
+Agent: general-purpose (contact import CSV)
+Task: Add contact bulk-import (CSV file upload + paste phone numbers) with preview table (New/Matched/Duplicate status, per-row checkboxes, progress indicator) and CSV export. Reuses the existing Contact model; no schema changes.
+
+Work Log:
+- Read `worklog.md` (Tasks 34, 35, 36, 37) to confirm: existing `Contact` model with `ownerId`, `userId?`, `nickname?`, `phone?`, `notes?` and `@@unique([ownerId, userId])`; existing `/api/contacts` (POST/GET) + `/api/contacts/[id]` (DELETE) routes; existing `ContactsDialog` with list view + `AddContactForm`; `getSession()` pattern; `WaslAvatar` mismatched-prop TS error is pre-existing and unrelated (Task 35-b notes).
+- Verified `package.json` — PapaParse NOT installed, so wrote a minimal RFC-4180-ish CSV parser inline (handles quoted cells, escaped `""`, `\r\n` + `\n` line endings, blank trailing rows).
+
+Step 1 — Import API (`src/app/api/contacts/import/route.ts`, NEW):
+- `POST /api/contacts/import` — accepts `{ contacts: Array<{ phone, nickname?, notes? }> }`.
+- Hard cap of 100 contacts per request (returns 400 if exceeded).
+- For each contact: normalize phone (trim + strip spaces/dashes/parens); lookup `User.phone` to find a Wasl user; if found, set `userId` on the new Contact row.
+- Dedup logic: dedupe input list (keep first occurrence); then per-row check existing contacts by either `userId` (preferred, uses `@@unique`) or `phone` (for non-Wasl). Skip duplicates — does NOT error.
+- Returns `{ imported, skipped, matched }` where `matched` = count of new contacts that were linked to a Wasl user.
+- Bonus: `POST /api/contacts/import?preview=1` — same body, returns `{ results: Array<{ phone, nickname, notes, status: 'new'|'matched'|'duplicate', matchedUser: { name, username } | null }> }` for the preview-table UI. The preview path also marks intra-list duplicate phones (same phone pasted twice) as `duplicate`.
+
+Step 2 — Export API (`src/app/api/contacts/export/route.ts`, NEW):
+- `GET /api/contacts/export` — returns CSV with columns: `name, phone, username, notes`.
+- Content-Type: `text/csv; charset=utf-8`. Content-Disposition: `attachment; filename="wasl-contacts-YYYY-MM-DD.csv"`. Cache-Control: `no-store`.
+- RFC-4180-ish escaping (quotes if value contains `,`, `"`, `\n`, `\r`; embedded quotes doubled).
+
+Step 3 — Contacts dialog UI (`src/components/wasl/contacts-dialog.tsx`, MODIFIED):
+- Refactored the dialog from a single `showAdd` boolean to a 3-way `view: 'list' | 'add' | 'import'` state.
+- List view now shows two side-by-side dashed-outline buttons: "Add new contact" (UserPlus icon) + "Import" (Upload icon, wasl-green). Below them, when contacts exist, a ghost "Export N contacts as CSV" button (Download icon).
+- `ImportPanel` component (new) with:
+  - Mode toggle: **CSV file** | **Paste phones** (wasl-green when active).
+  - **CSV file mode**: click-to-upload dropzone button (dashed border, Upload icon, wasl-green accent on hover), hidden `<input type="file" accept=".csv">`. Reads file via `file.text()`, runs through `parseCSV`, then `rowsToContacts`, then a preview lookup.
+  - **Paste mode**: Textarea with `+20 100 123 4567\nJane, +20 100 765 4321` placeholder; "Parse & preview" button. The parser auto-detects newline-separated records vs. a single comma-separated blob of phones.
+  - **Preview table** (shadcn-styled): columns Name, Phone, Status. Per-row Checkbox (disabled for duplicates). Sticky header. Alternating row backgrounds (`bg-background` / `bg-muted/30`). "Select all" checkbox in header.
+  - **Status badges**: emerald for New, amber for Matched, muted gray for Duplicate. While the preview lookup is in flight, a spinner badge ("pending") is shown.
+  - Summary chips above the table (X new / Y matched / Z duplicate).
+  - **Import button** (wasl-green): shows "Import N contacts" with the live selected count; disabled while parsing/importing or if 0 selected.
+  - **Progress indicator**: shadcn `Progress` bar that ramps 5%→90% via a setInterval while waiting for the server response, then snaps to 100% on success before closing the panel.
+  - Success toast: `Imported N contacts (M matched to Wasl users)`. If any were skipped (already contacts), an extra info toast: `N contacts were already in your list`.
+  - After import: returns to the list view and re-fetches contacts.
+- `rowsToContacts` heuristic: detects header row (looks for `name`/`phone`/`username`/`notes`); for 2-column rows, guesses which column is the phone via `looksLikePhone` (cleaned string must match `/^[+]?[\d]{6,}$/`).
+- `parseCSV` / `parseCSVLine` — inline minimal CSV parser (no library dependency).
+- Export button triggers a Blob download via `fetch` → `blob()` → `URL.createObjectURL` → programmatic `<a>` click. Reads the filename from the server's `Content-Disposition` header.
+
+Step 4 — Verification (with `demo_amira_hassan` session):
+- `POST /api/contacts/import?preview=1` with 3 mixed phones → returns `matched` for `+2010000000001` (Omar Khalil), `new` for `+20 999 888 7777`, `new` for `invalid`. ✅
+- `POST /api/contacts/import` (commit) with 2 contacts → `{imported:2, skipped:0, matched:1}` ✅
+- Re-preview same 2 phones → both `duplicate` ✅
+- Re-import same 2 phones → `{imported:0, skipped:2, matched:0}` ✅
+- Intra-list duplicate (same phone twice in payload) → only 1 created, 1 matched ✅
+- 101-contact payload → `400` `Too many contacts. Maximum is 100 per import.` ✅
+- `GET /api/contacts/export` → returns `name,phone,username,notes` CSV with proper `Content-Disposition` and `text/csv` Content-Type ✅
+- All endpoints return 401 without session cookie ✅
+- Cleaned up test contacts after verification.
+
+Step 5 — Lint / typecheck:
+- `bun run lint` → 0 errors ✅
+- `bunx tsc --noEmit` → only pre-existing errors (skills/ examples, auth/login route, the known WaslAvatar prop mismatch in contacts-dialog.tsx lines 286 + 454 which existed before this task). No new errors in `api/contacts/import`, `api/contacts/export`, or any of my edits to `contacts-dialog.tsx`.
+
+Stage Summary:
+- New file: `src/app/api/contacts/import/route.ts` — bulk import API with `?preview=1` mode; dedupes on `ownerId+userId` (preferred) and `ownerId+phone` (fallback); 100-contact cap; returns `{imported, skipped, matched}`.
+- New file: `src/app/api/contacts/export/route.ts` — `GET` returns CSV with `name,phone,username,notes` columns and a date-stamped download filename.
+- Modified file: `src/components/wasl/contacts-dialog.tsx` — added Import button + `ImportPanel` (CSV/paste parsing, preview lookup, status badges, checkboxes, progress bar, success toast), Export button with Blob download; refactored view state from `showAdd` boolean to `view: 'list' | 'add' | 'import'`.
+- No Prisma schema changes (reuses existing Contact model + `@@unique([ownerId, userId])`).
+- No new dependencies (no PapaParse — wrote a minimal RFC-4180-ish parser).
+- All UI uses the wasl palette (wasl-green primary actions) + emerald/amber/gray status badges (no indigo/blue). TypeScript-strict, `'use client'` on the dialog. No test files created, did NOT run `bun run build`.
+
+---
+Task ID: 38-a
+Agent: general-purpose (message edit time limit)
+Task: Add a 15-minute edit-time-limit on messages (server-enforced + mirrored client-side), hide the Edit button once the window elapses, and replace the `prompt()`-based edit flow with a proper dialog that shows a live countdown + warning and disables Save when the window closes. Add a small Pencil icon next to the existing "edited" indicator.
+
+Work Log:
+- Read `worklog.md` (Tasks 35–37 — bookmarks, global search, voice transcription, drafts, read-by-everyone) to mirror established patterns: `getSession()` auth + `db.participant.findUnique({ where: { conversationId_userId } })` membership check, shadcn `Dialog` + `Textarea` + `Button` primitives, wasl color tokens (`--wasl-teal` / `--wasl-green` — no indigo/blue), and the `MessageEdit` history pattern. Confirmed the existing `edit/route.ts` already had a hard-coded `ageMin > 15` check — replaced it with the shared constant.
+- Inspected `src/components/wasl/message-bubble.tsx`, `src/components/wasl/edit-history-dialog.tsx`, `src/components/wasl/delete-message-dialog.tsx`, `src/components/wasl/chat-window.tsx`, `src/lib/store.ts`, `src/lib/time.ts`, and `src/app/api/messages/[id]/edits/route.ts` for the exact code to extend.
+
+Step 1 — Constants module (`src/lib/constants.ts`, NEW):
+- Exported three documented constants:
+  - `MESSAGE_EDIT_TIME_LIMIT_MS = 15 * 60 * 1000` — the edit window (the single source of truth consumed by both the API and the UI).
+  - `MESSAGE_EDIT_WARNING_THRESHOLD_MS = 2 * 60 * 1000` — when the remaining time drops below this, the edit dialog shows an amber warning banner.
+  - `MESSAGE_EDIT_TOOLTIP_THRESHOLD_MS = 5 * 60 * 1000` — when the remaining time drops below this, the message-bubble Edit toolbar button's tooltip grows a "· Xm left" suffix.
+
+Step 2 — Edit API (`src/app/api/messages/[id]/edit/route.ts`, MODIFIED):
+- Imported `MESSAGE_EDIT_TIME_LIMIT_MS` from `@/lib/constants`.
+- Replaced the hard-coded `ageMin > 15` check with `Date.now() - new Date(msg.createdAt).getTime() > MESSAGE_EDIT_TIME_LIMIT_MS`, returning the new exact 403 message: `"This message can no longer be edited (15-minute window has passed.)"`. Server remains the source of truth — the UI's disabled button + countdown are advisory.
+- Preserved the existing edit logic: skip-if-unchanged short-circuit, `db.messageEdit.create` of the previous version, `db.message.update` setting `content` + `edited: true`.
+
+Step 3 — Message-bubble UI (`src/components/wasl/message-bubble.tsx`, MODIFIED):
+- Imported the two constants.
+- Added a small `useEditWindow(createdAt, enabled)` hook above the `MessageBubble` component. Returns `{ canEdit, msLeft, minsLeft }`. Inside the hook a `setInterval(30_000)` re-evaluates `now`, but only arms for messages whose `createdAt + MESSAGE_EDIT_TIME_LIMIT_MS + 30s` is still in the future — so old messages pay zero timer cost. The interval self-clears once the window has elapsed. Initial render is a single `useState` read of `Date.now()` so SSR/hydration is consistent within a tick.
+- In `MessageBubble`, mounted the hook ONLY when `mine && message.type === 'text' && !!onEdit` (the only case where the Edit button would render), so incoming + non-text messages don't pay the hook's `Date.now()` cost.
+- Edit toolbar button: gate is now `mine && message.type === 'text' && onEdit && canEdit` — the button disappears entirely once the window elapses, instead of being clickable and failing at the server. When `msLeft > 0 && msLeft <= MESSAGE_EDIT_TOOLTIP_THRESHOLD_MS`, the button's `title` becomes `"Edit · Xm left"` (where X is `Math.ceil(msLeft / 60_000)`) so the user is nudged that the window is closing.
+- Edit context-menu item: same `&& canEdit` gate added — the right-click menu also hides Edit once the window elapses.
+- "edited" indicator: refactored the existing button to `inline-flex items-center gap-0.5` and inserted a small `<Pencil className="w-[10px] h-[10px] inline -mt-px" aria-hidden />` before the "edited" text, so the indicator visually reads as a pencil + "edited". The existing click behaviour (opens `EditHistoryDialog`) and tooltip ("Edited — click to view edit history") are preserved. The `EditHistoryDialog` already shows the `editedAt` timestamp of each previous version, so the "show edit timestamp when clicked" requirement is already satisfied — verified, no changes needed there.
+
+Step 4 — EditMessageDialog (`src/components/wasl/edit-message-dialog.tsx`, NEW):
+- Replaces the old `prompt()`-based edit flow.
+- Reuses shadcn `Dialog` / `DialogHeader` / `DialogTitle` / `DialogDescription` / `DialogFooter` / `Button` / `Textarea` + `Pencil` / `Loader2` / `AlertTriangle` / `Clock` from lucide-react. No indigo/blue — uses `text-muted-foreground`, `amber-500`, and `destructive` tokens only.
+- Props: `open`, `onOpenChange`, `message: ChatMessage | null`, `conversationId`, `onEdited(messageId, newContent)`.
+- Seeds the textarea from `message.content` whenever the dialog opens for a different `message.id` (deliberately ignores `message.content` afterwards so a socket update doesn't blow away the user's in-progress edit).
+- Mounts a 1-second `setInterval` that bumps a local `now` state, so the countdown visibly ticks. Computes `msLeft = max(0, MESSAGE_EDIT_TIME_LIMIT_MS - elapsed)`, `minsLeft = ceil(msLeft / 60_000)`, and `displayMin:displaySec` for the <2-min warning banner.
+- Renders a state-aware banner:
+  - expired (red, `destructive`): "The 15-minute edit window has passed — this message can no longer be edited."
+  - warning (amber, <2 min left): "You have M:SS left to edit this message." (tabular-nums for stable width)
+  - normal (muted, ≥2 min left): "You have Xm left to edit this message." with a Clock icon.
+- Save button is disabled when `saving || expired || !trimmed || unchanged`. The button shows a spinner + "Saving…" while in-flight.
+- On save: PATCH `/api/messages/{id}/edit`. A 403 surfaces the server's error message verbatim as a Sonner toast; a 200 with `unchanged: true` just closes the dialog; otherwise it calls `onEdited(message.id, trimmed)`, shows a success toast, and closes.
+- Auto-closes 1.5s after the window elapses while the dialog is open (so the user doesn't sit on a Save button that just turned disabled forever).
+
+Step 5 — Chat-window wiring (`src/components/wasl/chat-window.tsx`, MODIFIED):
+- Imported `EditMessageDialog`.
+- Replaced the old `handleEditMessage` (which used `prompt()`) with a tiny state setter `setEditMessage(m)` and added a `handleEditSaved(messageId, newContent)` callback that mirrors the previous local-update logic: `useWaslStore.getState().updateMessage(activeConversationId, messageId, { content, edited: true })` + `getSocket().emit('message:reacted', { conversationId, messageId })` to broadcast to other clients.
+- Mounted `<EditMessageDialog open={!!editMessage} message={editMessage} conversationId={activeConversationId} onEdited={handleEditSaved} />` alongside the existing `DeleteMessageDialog` and `ForwardDialog`.
+
+Step 6 — Verification:
+- `bun run lint` → 0 errors, 0 warnings. (Initial run flagged two `Unused eslint-disable directive` warnings in `edit-message-dialog.tsx` — the directives I'd added defensively for `react-hooks/exhaustive-deps` weren't actually needed because the deps I used (`message?.id`) are already in the dep array. Removed both directives; lint is now clean.)
+- `bunx tsc --noEmit` filtered to my touched files → no new errors. The two `chat-window.tsx` errors (`otherUser.phone possibly null` on lines 556 + 779, and the unrelated `edits/route.ts:56 createdAt does not exist`) were confirmed pre-existing via `git stash` (they existed at lines 555 + 778 BEFORE my changes — my edits shifted their line numbers by 1).
+- Manual API smoke tests with a real session cookie (`wasl_session=<demo user id>`):
+  - Send fresh "Edit window test" message → POST 200, `edited: false`.
+  - PATCH `/api/messages/{fresh}/edit` with new content → 200 `{ ok: true }`. GET `/api/messages/{fresh}/edits` → `{ edited: true, currentContent: 'Edited content - first edit', edits: [{ content: 'Edit window test' }] }`. ✅ Edit history is created.
+  - PATCH with the SAME content → 200 `{ ok: true, unchanged: true }`. ✅ No-op short-circuit works.
+  - PATCH with empty/whitespace content → 400 `{ error: 'Content required' }`. ✅
+  - PATCH as a non-owner (different `wasl_session`) → 403 `{ error: 'Can only edit your own messages' }`. ✅
+  - PATCH a non-existent message → 404 `{ error: 'Not found' }`. ✅
+  - Created a 30-min-old message directly via Prisma, then PATCH `/api/messages/{old}/edit` → 403 `{ error: 'This message can no longer be edited (15-minute window has passed).' }`. ✅ New error message matches the task spec exactly.
+- Dev server (port 3000) compiles cleanly — `dev.log` shows the 403 for the old message and the 200 for the fresh message with no errors or warnings.
+
+Stage Summary:
+- **New constants module** (`src/lib/constants.ts`): `MESSAGE_EDIT_TIME_LIMIT_MS` (15 min, single source of truth consumed by API + UI), `MESSAGE_EDIT_WARNING_THRESHOLD_MS` (2 min, drives the dialog's amber banner), `MESSAGE_EDIT_TOOLTIP_THRESHOLD_MS` (5 min, drives the Edit toolbar button's "Xm left" tooltip).
+- **Edit API** (`src/app/api/messages/[id]/edit/route.ts`, MODIFIED): replaces the hard-coded `ageMin > 15` with the shared constant; returns the task-spec 403 message `"This message can no longer be edited (15-minute window has passed.)"`. All existing edit logic preserved (MessageEdit history, edited flag, no-op short-circuit).
+- **Message-bubble** (`src/components/wasl/message-bubble.tsx`, MODIFIED): new `useEditWindow` hook (30s interval, dormant for old messages, self-clears at expiry). Edit toolbar button + Edit context-menu item are hidden when `!canEdit`. Edit toolbar button's tooltip grows `"Edit · Xm left"` when within 5 min of expiry. Existing "edited" label gets a small inline `Pencil` icon. No blue/indigo — uses wasl tokens.
+- **EditMessageDialog** (`src/components/wasl/edit-message-dialog.tsx`, NEW): proper Dialog with Textarea + live 1-second countdown + state-aware banner (normal / amber-warning / red-expired). Save disabled when expired, empty, or unchanged. Surfaces the server's 403 verbatim. Auto-closes 1.5s after the window elapses mid-edit.
+- **Chat-window** (`src/components/wasl/chat-window.tsx`, MODIFIED): replaced the `prompt()`-based `handleEditMessage` with a state setter that opens `EditMessageDialog`; added `handleEditSaved` callback that updates the store + emits the `message:reacted` socket broadcast.
+- TypeScript-strict, no test files created, did NOT run `bun run build`. All UI uses existing shadcn primitives + the wasl color palette (no indigo/blue).
+
+---
+Task ID: 38 — Message edit time limit + Contact import/export
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing, upgrading, and fixing".
+
+### Phase 1: Message Edit Time Limit (subagent 38-a)
+**Files:** `src/lib/constants.ts` (NEW), `src/app/api/messages/[id]/edit/route.ts`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/edit-message-dialog.tsx` (NEW), `src/components/wasl/chat-window.tsx`
+
+**Constants:** `MESSAGE_EDIT_TIME_LIMIT_MS = 15 * 60 * 1000` (15 minutes)
+
+**API:** Edit route now checks the time limit:
+- If `Date.now() - createdAt > 15min` → 403 "This message can no longer be edited"
+- Returns proper error for expired, empty content, non-owner, non-existent
+- No-op short-circuit: `{ unchanged: true }` for same content
+
+**UI — message-bubble:**
+- New `useEditWindow` hook (30s interval, dormant for old messages, self-clears at expiry)
+- Edit button hidden when `!canEdit`
+- Edit button tooltip: "Edit · Xm left" when within 5 min of expiry
+- "edited" label gets a Pencil icon
+
+**UI — edit-message-dialog (NEW):**
+- Replaces the old `prompt()` flow
+- Textarea + live 1-second countdown
+- State-aware banner: normal / amber-warning (<2min) / red-expired
+- Save disabled when expired, empty, or unchanged
+- Auto-closes 1.5s after window expires mid-edit
+- Surfaces server 403 as toast
+
+**E2E verified:**
+- Edit fresh message → 200 ✅
+- Edit 30-min-old message → 403 ✅
+- Edit with unchanged content → 200 `{ unchanged: true }` ✅
+- Edit with empty content → 400 ✅
+- Edit as non-owner → 403 ✅
+
+### Phase 2: Contact Import/Export (subagent 38-b)
+**Files:** `src/app/api/contacts/import/route.ts` (NEW), `src/app/api/contacts/export/route.ts` (NEW), `src/components/wasl/contacts-dialog.tsx`
+
+**Import API:** `POST /api/contacts/import`
+- Accepts `{ contacts: Array<{ phone, nickname?, notes? }> }`
+- Dedupes on `ownerId+userId` (preferred) or `ownerId+phone` (fallback)
+- Links to Wasl users via `User.phone` lookup
+- Skips duplicates without erroring
+- Caps at 100 contacts per request
+- `?preview=1` mode returns per-phone status (new/matched/duplicate) + matched user info
+- Returns `{ imported, skipped, matched }`
+
+**Export API:** `GET /api/contacts/export`
+- Returns CSV with columns: name, phone, username, notes
+- RFC-4180 escaping
+- Content-Disposition: attachment with date-stamped filename
+
+**UI — contacts-dialog:**
+- "Import" button (dashed outline, Upload icon)
+- "Export" button (Blob download)
+- Import panel with two modes:
+  1. CSV file upload (`.csv` files, parsed client-side)
+  2. Paste phone numbers (textarea, one per line)
+- Preview table with status badges: green=New, amber=Matched, gray=Duplicate
+- Per-row checkboxes with select-all
+- Progress bar during import
+- Success toast: "Imported N contacts (M matched to Wasl users)"
+
+**E2E verified:**
+- Preview mode → 200, returns status for each contact ✅
+- Actual import → 200, imported=2, matched=1 ✅
+- CSV export → 200, proper CSV with headers ✅
+- Contact list shows imported contacts ✅
+
+### Phase 3: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| PATCH /api/messages/{id}/edit (fresh) | 200 ✅ |
+| PATCH /api/messages/{id}/edit (expired) | 403 ✅ |
+| POST /api/contacts/import (preview) | 200, returns statuses ✅ |
+| POST /api/contacts/import (actual) | 200, imported=2, matched=1 ✅ |
+| GET /api/contacts/export | 200, CSV format ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 38)
+- `src/lib/constants.ts` — NEW edit time constants (subagent 38-a)
+- `src/app/api/messages/[id]/edit/route.ts` — time limit check (subagent 38-a)
+- `src/components/wasl/message-bubble.tsx` — canEdit + useEditWindow hook (subagent 38-a)
+- `src/components/wasl/edit-message-dialog.tsx` — NEW edit dialog with countdown (subagent 38-a)
+- `src/components/wasl/chat-window.tsx` — handleEditSaved callback (subagent 38-a)
+- `src/app/api/contacts/import/route.ts` — NEW import API (subagent 38-b)
+- `src/app/api/contacts/export/route.ts` — NEW export API (subagent 38-b)
+- `src/components/wasl/contacts-dialog.tsx` — import/export UI (subagent 38-b)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add real speech-to-text for voice transcription (when a suitable API is available)
+- Add group invite link sharing via WhatsApp/Telegram
+- Add message copy with formatting preservation
+- Add message draft autosave indicator
+- Add conversation export (chat history download)

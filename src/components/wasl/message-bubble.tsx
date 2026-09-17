@@ -25,6 +25,10 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
+import {
+  MESSAGE_EDIT_TIME_LIMIT_MS,
+  MESSAGE_EDIT_TOOLTIP_THRESHOLD_MS,
+} from '@/lib/constants'
 import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
 import { toast } from 'sonner'
 import { findUrls, prettyPath } from '@/lib/link-preview'
@@ -199,6 +203,45 @@ function recordAttempt(messageId: string, kind: string) {
 const PROTECTED_WARNING =
   '🔒 This message is protected by the sender. Screenshots, copying and forwarding are disabled.'
 
+// ---- Edit-window hook -------------------------------------------------------
+// Returns whether a message can still be edited (i.e. the edit time window has
+// not elapsed), plus the milliseconds remaining. Re-evaluates every 30 seconds
+// while the message is anywhere inside [0, MESSAGE_EDIT_TIME_LIMIT_MS + 30s]
+// so the Edit toolbar button reliably disappears once the window closes, even
+// if the user leaves the chat open for a long time. Outside that range the
+// timer is dormant — old messages don't pay a per-render cost.
+//
+// `enabled` lets callers short-circuit (e.g. for incoming messages, where the
+// Edit button never shows anyway) so we don't spin a timer for every bubble.
+function useEditWindow(createdAt: string, enabled: boolean) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!enabled) return
+    // Cheap initial check — only arm the interval if the message is in (or
+    // near) the edit window. We add a 30s buffer past the limit so the timer
+    // can tick over the boundary and re-render the bubble to hide the button.
+    const created = new Date(createdAt).getTime()
+    if (Number.isNaN(created)) return
+    const upperBound = created + MESSAGE_EDIT_TIME_LIMIT_MS + 30_000
+    if (Date.now() > upperBound) return
+    const interval = window.setInterval(() => {
+      setNow(Date.now())
+      // Stop ticking once we're safely past the window — no point in
+      // re-rendering an old message forever.
+      if (Date.now() > upperBound) {
+        window.clearInterval(interval)
+      }
+    }, 30_000)
+    return () => window.clearInterval(interval)
+  }, [createdAt, enabled])
+  const created = new Date(createdAt).getTime()
+  const elapsed = Number.isNaN(created) ? Infinity : now - created
+  const canEdit = elapsed < MESSAGE_EDIT_TIME_LIMIT_MS
+  const msLeft = Math.max(0, MESSAGE_EDIT_TIME_LIMIT_MS - elapsed)
+  const minsLeft = Math.ceil(msLeft / 60_000)
+  return { canEdit, msLeft, minsLeft }
+}
+
 export function MessageBubble({
   message,
   senderName,
@@ -274,6 +317,19 @@ export function MessageBubble({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
+  // Edit-window countdown — only mounted for the current user's OWN text
+  // messages (the only case where the Edit toolbar button would render).
+  // Inside the hook the 30s interval only arms for messages that are still
+  // within ~15.5 minutes of being sent, so old bubbles pay zero cost.
+  const editWindowEnabled = mine && message.type === 'text' && !!onEdit
+  const { canEdit, msLeft, minsLeft } = useEditWindow(
+    message.createdAt,
+    editWindowEnabled
+  )
+  // When the remaining edit window drops below this threshold, the Edit
+  // toolbar button's tooltip adds a "· Xm left" suffix so the user is nudged
+  // to either edit now or let the window expire.
+  const showEditWindowTooltip = msLeft > 0 && msLeft <= MESSAGE_EDIT_TOOLTIP_THRESHOLD_MS
   // `blocked` means: this is a protected message that I RECEIVED and I have
   // NOT enabled "privacy always allow". In that case the bubble becomes
   // read-only: no copy, no forward, no context menu, no drag, no screenshot.
@@ -588,8 +644,11 @@ export function MessageBubble({
               <Copy className="w-4 h-4" />
             </ToolbarButton>
           )}
-          {mine && message.type === 'text' && onEdit && (
-            <ToolbarButton title="Edit" onClick={() => onEdit()}>
+          {mine && message.type === 'text' && onEdit && canEdit && (
+            <ToolbarButton
+              title={showEditWindowTooltip ? `Edit · ${minsLeft}m left` : 'Edit'}
+              onClick={() => onEdit()}
+            >
               <Pencil className="w-4 h-4" />
             </ToolbarButton>
           )}
@@ -834,9 +893,10 @@ export function MessageBubble({
                       e.stopPropagation()
                       setEditHistoryOpen(true)
                     }}
-                    className="italic hover:text-foreground transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-0.5 italic hover:text-foreground transition-colors cursor-pointer"
                     title="Edited — click to view edit history"
                   >
+                    <Pencil className="w-[10px] h-[10px] inline -mt-px" aria-hidden />
                     edited
                   </button>
                 )}
@@ -959,7 +1019,7 @@ export function MessageBubble({
             )}
           </ContextMenuItem>
         )}
-        {mine && message.type === 'text' && onEdit && (
+        {mine && message.type === 'text' && onEdit && canEdit && (
           <ContextMenuItem onClick={() => onEdit()}>
             <Pencil className="w-4 h-4 mr-2" />
             Edit

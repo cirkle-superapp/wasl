@@ -1,0 +1,1424 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useRef, useEffect, useCallback } from 'react'
+     4→import {
+     5→  Check,
+     6→  CheckCheck,
+     7→  Clock,
+     8→  Reply,
+     9→  Star,
+    10→  Bookmark,
+    11→  Copy,
+    12→  Trash2,
+    13→  SmilePlus,
+    14→  Pencil,
+    15→  Forward,
+    16→  Lock,
+    17→  ExternalLink,
+    18→  Pin,
+    19→  PinOff,
+    20→  Info,
+    21→  Share2,
+    22→  FileText,
+    23→  Download,
+    24→  Music,
+    25→} from 'lucide-react'
+    26→import { cn } from '@/lib/utils'
+    27→import { formatChatTimestamp } from '@/lib/time'
+    28→import { useWaslStore, type ChatMessage, type Reaction } from '@/lib/store'
+    29→import { toast } from 'sonner'
+    30→import { findUrls, prettyPath } from '@/lib/link-preview'
+    31→import { renderMarkdownLite } from '@/lib/markdown'
+    32→import { LinkPreviewCard } from './link-preview-card'
+    33→import { ReadReceiptsDialog } from './read-receipts-dialog'
+    34→import { EditHistoryDialog } from './edit-history-dialog'
+    35→import { MessageInfoDialog } from './message-info-dialog'
+    36→import { VoicePlayer } from './voice-player'
+    37→import {
+    38→  ContextMenu,
+    39→  ContextMenuContent,
+    40→  ContextMenuItem,
+    41→  ContextMenuSeparator,
+    42→  ContextMenuTrigger,
+    43→} from '@/components/ui/context-menu'
+    44→
+    45→const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+    46→
+    47→// ---- Search highlight helper ---------------------------------------------
+    48→// Splits `text` on case-insensitive occurrences of `query` and wraps each
+    49→// match in a <mark> with a visible yellow background so the user can see why
+    50→// the message was returned by the chat-search dialog.
+    51→//
+    52→// Supports multi-word queries: if the query contains spaces, each word is
+    53→// highlighted independently (e.g. "welcome wasl" highlights both "Welcome"
+    54→// and "Wasl" separately). Each word is regex-escaped so special characters
+    55→// (`(`, `.`, `*`, …) are matched literally.
+    56→//
+    57→// Returns the original `text` (a single string node) when either the text or
+    58→// query is empty, so plain messages with no active query render with zero
+    59→// overhead and no behavioural change vs. before.
+    60→function highlightText(text: string, query: string): React.ReactNode {
+    61→  if (!text) return text
+    62→  const q = query.trim()
+    63→  if (!q) return text
+    64→
+    65→  // Split the query into individual words for multi-word highlighting.
+    66→  // Filter out empty strings from multiple consecutive spaces.
+    67→  const words = q.split(/\s+/).filter(Boolean)
+    68→  if (words.length === 0) return text
+    69→
+    70→  // Build a single regex that matches ANY of the words (OR).
+    71→  // Each word is regex-escaped so special characters are literal.
+    72→  const escapedWords = words.map((w) =>
+    73→    w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    74→  )
+    75→  const pattern = escapedWords.join('|')
+    76→  let regex: RegExp
+    77→  try {
+    78→    regex = new RegExp(`(${pattern})`, 'gi')
+    79→  } catch {
+    80→    // Malformed query — bail to plain text rather than crashing the bubble.
+    81→    return text
+    82→  }
+    83→  // String.split with a capturing group keeps the matched delimiters in the
+    84→  // result array, so odd indices are the query matches (highlight them) and
+    85→  // even indices are the surrounding plain text.
+    86→  const parts = text.split(regex)
+    87→  if (parts.length === 1) {
+    88→    // No matches — render as a single plain string node.
+    89→    return text
+    90→  }
+    91→  return parts.map((part, i) =>
+    92→    i % 2 === 1 ? (
+    93→      <mark
+    94→        key={i}
+    95→        className="bg-yellow-200 dark:bg-yellow-900/70 text-foreground rounded px-0.5"
+    96→      >
+    97→        {part}
+    98→      </mark>
+    99→    ) : (
+   100→      // Render empty strings as `null` so React doesn't complain about
+   101→      // adjacent text separators. Non-empty even-indexed parts become plain
+   102→      // string nodes (no wrapping element needed).
+   103→      part || null
+   104→    )
+   105→  )
+   106→}
+   107→
+   108→// ---- File-attachment content parser --------------------------------------
+   109→// PDF / document / audio messages store their payload as a small JSON blob
+   110→// in the message `content` field: `{ url, name, size }`. This parser tolerates
+   111→// a plain URL string too (legacy / forwarded payloads) so the renderer is
+   112→// resilient when the JSON shape isn't present.
+   113→export function parseFileContent(
+   114→  content: string
+   115→): { url: string; name?: string; size?: number } | null {
+   116→  if (!content) return null
+   117→  try {
+   118→    const parsed = JSON.parse(content)
+   119→    if (
+   120→      parsed &&
+   121→      typeof parsed === 'object' &&
+   122→      typeof parsed.url === 'string'
+   123→    ) {
+   124→      return {
+   125→        url: parsed.url,
+   126→        name: typeof parsed.name === 'string' ? parsed.name : undefined,
+   127→        size: typeof parsed.size === 'number' ? parsed.size : undefined,
+   128→      }
+   129→    }
+   130→  } catch {
+   131→    // Not JSON — fall through to plain-URL detection.
+   132→  }
+   133→  // Plain URL fallback (absolute http(s) or relative `/uploads/...`).
+   134→  if (content.startsWith('http') || content.startsWith('/')) {
+   135→    return { url: content }
+   136→  }
+   137→  return null
+   138→}
+   139→
+   140→export function formatFileSize(bytes: number): string {
+   141→  if (bytes < 1024) return `${bytes} B`
+   142→  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+   143→  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+   144→}
+   145→
+   146→// Derive a filename from a URL when the parsed payload has no `name`.
+   147→function deriveFilenameFromUrl(url: string, fallback: string): string {
+   148→  try {
+   149→    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+   150→    const last = u.pathname.split('/').filter(Boolean).pop()
+   151→    return last ? decodeURIComponent(last) : fallback
+   152→  } catch {
+   153→    return fallback
+   154→  }
+   155→}
+   156→
+   157→// ---- Protection helpers -------------------------------------------------
+   158→// Resolves whether a message is effectively protected from screenshot /
+   159→// forwarding. The effective flag is:
+   160→//   - the explicit `message.protected` value if it is a boolean
+   161→//   - otherwise the sender's `defaultProtectMessages` setting (we don't have
+   162→//     the sender's settings here, so we just use the explicit value — the
+   163→//     backend always resolves and persists it on send, so the frontend
+   164→//     always sees the resolved boolean).
+   165→//
+   166→// Returns `{ isProtected, isOwner, alwaysAllow, blocked }` where `blocked`
+   167→// is true only when the current user is the recipient of a protected
+   168→// message and has NOT opted into "privacy always allow".
+   169→function useProtectionState(message: ChatMessage) {
+   170→  const me = useWaslStore((s) => s.user)
+   171→  const isOwner = !!me && message.senderId === me.id
+   172→  const alwaysAllow = !!me?.privacyAlwaysAllow
+   173→  const isProtected = message.protected === true
+   174→  const blocked = isProtected && !isOwner && !alwaysAllow
+   175→  return { isProtected, isOwner, alwaysAllow, blocked }
+   176→}
+   177→
+   178→// Record a screenshot/copy/save attempt to the audit log via the API and
+   179→// show a toast. Idempotent — debounced per-message per-kind to avoid
+   180→// spamming the server when the user holds down PrintScreen.
+   181→const recentAttemptCache = new Map<string, number>()
+   182→function recordAttempt(messageId: string, kind: string) {
+   183→  const key = `${messageId}:${kind}`
+   184→  const now = Date.now()
+   185→  if (recentAttemptCache.has(key)) {
+   186→    const last = recentAttemptCache.get(key)!
+   187→    // Debounce: at most one record per 5 seconds per kind per message.
+   188→    if (now - last < 5000) return
+   189→  }
+   190→  recentAttemptCache.set(key, now)
+   191→  // Fire and forget
+   192→  fetch(`/api/messages/${messageId}/screenshot-attempt`, {
+   193→    method: 'POST',
+   194→    headers: { 'Content-Type': 'application/json' },
+   195→    body: JSON.stringify({ kind }),
+   196→  }).catch(() => {})
+   197→}
+   198→
+   199→const PROTECTED_WARNING =
+   200→  '🔒 This message is protected by the sender. Screenshots, copying and forwarding are disabled.'
+   201→
+   202→export function MessageBubble({
+   203→  message,
+   204→  senderName,
+   205→  isGroup,
+   206→  replyTo,
+   207→  replyToSenderName,
+   208→  onReact,
+   209→  onReply,
+   210→  onStar,
+   211→  onBookmark,
+   212→  onCopy,
+   213→  onDelete,
+   214→  onEdit,
+   215→  onForward,
+   216→  onPin,
+   217→  starred,
+   218→  bookmarked,
+   219→  reactions,
+   220→  currentUserId,
+   221→  prevSameSender,
+   222→  // Whether the current user is allowed to pin/unpin this message.
+   223→  // - For a 1-on-1 chat: the sender of the message (matches the API's
+   224→  //   "sender-only" authorization rule).
+   225→  // - For a group chat: the message sender OR any group admin (the API
+   226→  //   allows admins to pin ANY message).
+   227→  // When false (a non-admin viewing someone else's message in a group), the
+   228→  // Pin button is hidden from both the hover toolbar and the context menu.
+   229→  canPin,
+   230→}: {
+   231→  message: ChatMessage
+   232→  senderName?: string
+   233→  isGroup: boolean
+   234→  replyTo?: ChatMessage | null
+   235→  // Display name of the user who sent the `replyTo` message (resolved by the
+   236→  // parent chat-window from the conversation's participants). When absent we
+   237→  // fall back to a generic "Original message" label so the quote is still
+   238→  // readable.
+   239→  replyToSenderName?: string
+   240→  onReact?: (emoji: string) => void
+   241→  onReply?: () => void
+   242→  onStar?: () => void
+   243→  onBookmark?: () => void
+   244→  onCopy?: () => void
+   245→  onDelete?: () => void
+   246→  onEdit?: () => void
+   247→  onForward?: () => void
+   248→  onPin?: () => void
+   249→  starred?: boolean
+   250→  bookmarked?: boolean
+   251→  reactions?: Reaction[]
+   252→  currentUserId?: string
+   253→  // When true, this message is a continuation of a previous message from
+   254→  // the same sender. The bubble's connecting corner gets a tighter radius
+   255→  // for a WhatsApp-style "tail" effect. Currently optional — the parent can
+   256→  // opt-in to passing this prop.
+   257→  prevSameSender?: boolean
+   258→  canPin?: boolean
+   259→}) {
+   260→  const me = useWaslStore((s) => s.user)
+   261→  const mine = message.senderId === me?.id
+   262→  // Search highlight state — only the message whose id matches
+   263→  // `highlightedMessageId` should wrap query matches in <mark>. Subscribing via
+   264→  // individual selectors keeps re-renders scoped: every other bubble only
+   265→  // re-renders when `highlightedMessageId` flips from null↔its own id.
+   266→  const highlightQuery = useWaslStore((s) => s.highlightQuery)
+   267→  const highlightedMessageId = useWaslStore((s) => s.highlightedMessageId)
+   268→  const isHighlighted =
+   269→    !!highlightQuery && highlightedMessageId === message.id
+   270→  const [showReactions, setShowReactions] = useState(false)
+   271→  const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
+   272→  const [editHistoryOpen, setEditHistoryOpen] = useState(false)
+   273→  const [messageInfoOpen, setMessageInfoOpen] = useState(false)
+   274→  const toolbarRef = useRef<HTMLDivElement>(null)
+   275→  const bubbleRef = useRef<HTMLDivElement>(null)
+   276→  const protection = useProtectionState(message)
+   277→  // `blocked` means: this is a protected message that I RECEIVED and I have
+   278→  // NOT enabled "privacy always allow". In that case the bubble becomes
+   279→  // read-only: no copy, no forward, no context menu, no drag, no screenshot.
+   280→  const blocked = protection.blocked
+   281→
+   282→  // ---- Keyboard capture-blocking (PrintScreen / Ctrl+C / Ctrl+S / Ctrl+P) ---
+   283→  // Mounted only when `blocked` is true. We attach a `keyup` listener to
+   284→  // `window` so we catch PrintScreen even when the bubble isn't focused, and
+   285→  // a `keydown` listener to the bubble element so we can preventDefault on
+   286→  // copy/save/print shortcuts when focus is inside the protected bubble.
+   287→  useEffect(() => {
+   288→    if (!blocked) return
+   289→    function onKeyUp(e: KeyboardEvent) {
+   290→      // PrintScreen key — most common screenshot trigger on Windows/Linux.
+   291→      if (e.key === 'PrintScreen') {
+   292→        toast.error(PROTECTED_WARNING, { duration: 4000 })
+   293→        recordAttempt(message.id, 'printscreen')
+   294→      }
+   295→    }
+   296→    function onKeyDown(e: KeyboardEvent) {
+   297→      // Ctrl/Cmd + C / S / P  → copy / save / print
+   298→      const meta = e.ctrlKey || e.metaKey
+   299→      if (meta && (e.key === 'c' || e.key === 'C')) {
+   300→        const sel = window.getSelection?.()
+   301→        // Only block if the selection is inside our bubble.
+   302→        if (sel && bubbleRef.current && sel.anchorNode && bubbleRef.current.contains(sel.anchorNode)) {
+   303→          e.preventDefault()
+   304→          toast.error(PROTECTED_WARNING, { duration: 4000 })
+   305→          recordAttempt(message.id, 'copy')
+   306→        }
+   307→      } else if (meta && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P')) {
+   308→        if (document.activeElement && bubbleRef.current?.contains(document.activeElement as Node)) {
+   309→          e.preventDefault()
+   310→          toast.error(PROTECTED_WARNING, { duration: 4000 })
+   311→          recordAttempt(message.id, 'save')
+   312→        }
+   313→      }
+   314→    }
+   315→    window.addEventListener('keyup', onKeyUp)
+   316→    window.addEventListener('keydown', onKeyDown)
+   317→    return () => {
+   318→      window.removeEventListener('keyup', onKeyUp)
+   319→      window.removeEventListener('keydown', onKeyDown)
+   320→    }
+   321→  }, [blocked, message.id])
+   322→
+   323→  // Block the right-click context menu on protected bubbles.
+   324→  const onContextMenu = useCallback(
+   325→    (e: React.MouseEvent) => {
+   326→      if (!blocked) return
+   327→      e.preventDefault()
+   328→      e.stopPropagation() // Prevent the Radix ContextMenu from opening
+   329→      toast.error(PROTECTED_WARNING, { duration: 4000 })
+   330→      recordAttempt(message.id, 'contextmenu')
+   331→    },
+   332→    [blocked, message.id]
+   333→  )
+   334→
+   335→  // Block drag of images out of protected bubbles.
+   336→  const onDragStart = useCallback(
+   337→    (e: React.DragEvent) => {
+   338→      if (!blocked) return
+   339→      e.preventDefault()
+   340→      toast.error(PROTECTED_WARNING, { duration: 4000 })
+   341→      recordAttempt(message.id, 'drag')
+   342→    },
+   343→    [blocked, message.id]
+   344→  )
+   345→
+   346→  // Close popover on outside click
+   347→  useEffect(() => {
+   348→    if (!showReactions) return
+   349→    function onClick(e: MouseEvent) {
+   350→      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+   351→        setShowReactions(false)
+   352→      }
+   353→    }
+   354→    document.addEventListener('mousedown', onClick)
+   355→    return () => document.removeEventListener('mousedown', onClick)
+   356→  }, [showReactions])
+   357→
+   358→  // ---- Share externally (Web Share API) ------------------------------------
+   359→  // Tries the native Web Share sheet first (mobile browsers, some desktop
+   360→  // Chromium builds). Falls back to writing the message to the clipboard and
+   361→  // showing a success toast on desktop browsers where `navigator.share` is
+   362→  // unavailable. Records a `share` audit attempt when the message is
+   363→  // protected and the user is the recipient (mirroring the Copy/Forward
+   364→  // behaviour for protected bubbles).
+   365→  const handleShareExternal = useCallback(async () => {
+   366→    if (blocked) {
+   367→      toast.error(PROTECTED_WARNING, { duration: 4000 })
+   368→      recordAttempt(message.id, 'share')
+   369→      return
+   370→    }
+   371→    const shareText = message.content
+   372→    try {
+   373→      if (
+   374→        typeof navigator !== 'undefined' &&
+   375→        typeof navigator.share === 'function'
+   376→      ) {
+   377→        await navigator.share({
+   378→          title: 'Wasl message',
+   379→          text: shareText,
+   380→        })
+   381→        return
+   382→      }
+   383→      if (
+   384→        typeof navigator !== 'undefined' &&
+   385→        navigator.clipboard &&
+   386→        typeof navigator.clipboard.writeText === 'function'
+   387→      ) {
+   388→        await navigator.clipboard.writeText(shareText)
+   389→        toast.success('Message copied to clipboard')
+   390→        return
+   391→      }
+   392→      toast.error('Sharing not supported on this device')
+   393→    } catch (err) {
+   394→      // The user dismissing the native share sheet throws an AbortError — we
+   395→      // shouldn't surface that as an error, just bail silently.
+   396→      const name = (err as { name?: string })?.name
+   397→      if (name === 'AbortError') return
+   398→      // Last-ditch: try clipboard as a fallback before showing the error.
+   399→      try {
+   400→        if (
+   401→          typeof navigator !== 'undefined' &&
+   402→          navigator.clipboard &&
+   403→          typeof navigator.clipboard.writeText === 'function'
+   404→        ) {
+   405→          await navigator.clipboard.writeText(shareText)
+   406→          toast.success('Message copied to clipboard')
+   407→          return
+   408→        }
+   409→      } catch {
+   410→        // fall through to the error toast
+   411→      }
+   412→      toast.error('Sharing not supported on this device')
+   413→    }
+   414→  }, [blocked, message.id, message.content])
+   415→
+   416→  if (message.type === 'system') {
+   417→    return (
+   418→      <div className="flex justify-center my-2">
+   419→        <div className="wasl-bubble-system text-xs px-3 py-1.5 rounded-lg shadow-sm">
+   420→          {message.content}
+   421→        </div>
+   422→      </div>
+   423→    )
+   424→  }
+   425→
+   426→  if (message.type === 'commit' && message.commitId) {
+   427→    return (
+   428→      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
+   429→        <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
+   430→          {isGroup && !mine && senderName && (
+   431→            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+   432→              {senderName}
+   433→            </div>
+   434→          )}
+   435→          <CommitMessageWrapper message={message} mine={mine} />
+   436→        </div>
+   437→      </div>
+   438→    )
+   439→  }
+   440→
+   441→  if (message.type === 'poll' && message.commitId) {
+   442→    return (
+   443→      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
+   444→        <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
+   445→          {isGroup && !mine && senderName && (
+   446→            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+   447→              {senderName}
+   448→            </div>
+   449→          )}
+   450→          <PollMessageWrapper
+   451→            pollId={message.commitId}
+   452→            conversationId={message.conversationId}
+   453→            createdAt={message.createdAt}
+   454→          />
+   455→        </div>
+   456→      </div>
+   457→    )
+   458→  }
+   459→
+   460→  if (message.type === 'voice' && message.content.startsWith('data:audio')) {
+   461→    return (
+   462→      <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
+   463→        <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out' : 'wasl-bubble-in')}>
+   464→          {isGroup && !mine && senderName && (
+   465→            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+   466→              {senderName}
+   467→            </div>
+   468→          )}
+   469→          <VoicePlayer
+   470→            src={message.content}
+   471→            mine={mine}
+   472→            variant="voice"
+   473→            blocked={blocked}
+   474→            messageId={message.id}
+   475→            transcription={message.transcription ?? null}
+   476→          />
+   477→          <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+   478→            {/* If a transcription is already cached on the message (either
+   479→                from a previous request or pre-populated by the server),
+   480→                show a small indicator next to the timestamp so the user
+   481→                knows the bubble has a transcript available before they
+   482→                open it. */}
+   483→            {message.transcription && (
+   484→              <span
+   485→                className="inline-flex items-center gap-0.5 text-foreground/50"
+   486→                title="Transcription available"
+   487→              >
+   488→                <FileText className="w-3 h-3" aria-hidden />
+   489→              </span>
+   490→            )}
+   491→            {protection.isProtected && (
+   492→              <Lock className="w-3 h-3 inline opacity-60" />
+   493→            )}
+   494→            {formatChatTimestamp(message.createdAt)}
+   495→            {mine && (
+   496→              <StatusTicks
+   497→                status={message.status}
+   498→                className="ml-1"
+   499→                onClick={() => setReadReceiptsOpen(true)}
+   500→                readByEveryone={message.readByEveryone}
+   501→                readCount={message.readCount}
+   502→                totalRecipients={message.totalRecipients}
+   503→              />
+   504→            )}
+   505→          </div>
+   506→        </div>
+   507→      </div>
+   508→    )
+   509→  }
+   510→
+   511→  // Group reactions by emoji for the pill display
+   512→  const grouped = groupReactions(reactions || [])
+   513→  const myReaction = (reactions || []).find((r) => r.userId === currentUserId)?.emoji
+   514→
+   515→  // Detect URLs in text messages so we can render a small preview card.
+   516→  // This is a plain function call (not a hook) so it's safe to compute after
+   517→  // the early returns above for system / commit / poll / voice messages.
+   518→  // The regex is O(n) which is negligible for typical chat message lengths.
+   519→  const linkPreview =
+   520→    message.type === 'text'
+   521→      ? (() => {
+   522→          const urls = findUrls(message.content)
+   523→          if (urls.length === 0) return null
+   524→          const first = urls[0]
+   525→          return {
+   526→            href: first.href,
+   527→            domain: first.domain,
+   528→            path: prettyPath(first.path),
+   529→          }
+   530→        })()
+   531→      : null
+   532→
+   533→  return (
+   534→    <ContextMenu>
+   535→      <ContextMenuTrigger asChild>
+   536→        <div
+   537→          className={cn(
+   538→            'flex w-full wasl-msg-in group/msg',
+   539→            mine ? 'justify-end' : 'justify-start'
+   540→          )}
+   541→        >
+   542→          <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
+   543→        {/* Hover toolbar — appears on hover (desktop) — slides in smoothly */}
+   544→        <div
+   545→          ref={toolbarRef}
+   546→          className={cn(
+   547→            'wasl-toolbar absolute top-0 z-20 flex items-center gap-0.5 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-md border border-border px-0.5 py-0.5',
+   548→            mine
+   549→              ? 'left-0 -ml-1 -translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:-translate-x-full group-hover/msg:opacity-100 focus-within:-translate-x-full focus-within:opacity-100'
+   550→              : 'right-0 -mr-1 translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:translate-x-full group-hover/msg:opacity-100 focus-within:translate-x-full focus-within:opacity-100'
+   551→          )}
+   552→        >
+   553→          <ToolbarButton title="React" onClick={() => setShowReactions((v) => !v)}>
+   554→            <SmilePlus className="w-4 h-4" />
+   555→          </ToolbarButton>
+   556→          <ToolbarButton title="Reply" onClick={() => { onReply?.(); setShowReactions(false) }}>
+   557→            <Reply className="w-4 h-4" />
+   558→          </ToolbarButton>
+   559→          <ToolbarButton title={starred ? 'Unstar' : 'Star'} onClick={() => onStar?.()}>
+   560→            <Star className={cn('w-4 h-4', starred && 'fill-amber-400 text-amber-400')} />
+   561→          </ToolbarButton>
+   562→          {/* Bookmark (Save for later) — a personal reminder to follow up on
+   563→              this message. Mirrors the Star toolbar button but uses the
+   564→              amber-500 palette so the two don't look identical at a glance. */}
+   565→          <ToolbarButton
+   566→            title={bookmarked ? 'Remove bookmark' : 'Bookmark for later'}
+   567→            onClick={() => onBookmark?.()}
+   568→          >
+   569→            <Bookmark
+   570→              className={cn(
+   571→                'w-4 h-4',
+   572→                bookmarked && 'fill-amber-500 text-amber-500'
+   573→              )}
+   574→            />
+   575→          </ToolbarButton>
+   576→          {blocked ? (
+   577→            <ToolbarButton
+   578→              title="Copy disabled — message is protected"
+   579→              onClick={() => {
+   580→                toast.error(PROTECTED_WARNING, { duration: 4000 })
+   581→                recordAttempt(message.id, 'copy')
+   582→              }}
+   583→            >
+   584→              <Copy className="w-4 h-4 opacity-40" />
+   585→            </ToolbarButton>
+   586→          ) : (
+   587→            <ToolbarButton title="Copy" onClick={() => { onCopy?.(); setShowReactions(false) }}>
+   588→              <Copy className="w-4 h-4" />
+   589→            </ToolbarButton>
+   590→          )}
+   591→          {mine && message.type === 'text' && onEdit && (
+   592→            <ToolbarButton title="Edit" onClick={() => onEdit()}>
+   593→              <Pencil className="w-4 h-4" />
+   594→            </ToolbarButton>
+   595→          )}
+   596→          {onForward && (
+   597→            blocked ? (
+   598→              <ToolbarButton
+   599→                title="Forward disabled — message is protected"
+   600→                onClick={() => {
+   601→                  toast.error(PROTECTED_WARNING, { duration: 4000 })
+   602→                  recordAttempt(message.id, 'forward')
+   603→                }}
+   604→              >
+   605→                <Forward className="w-4 h-4 opacity-40" />
+   606→              </ToolbarButton>
+   607→            ) : (
+   608→              <ToolbarButton title="Forward" onClick={() => onForward()}>
+   609→                <Forward className="w-4 h-4" />
+   610→              </ToolbarButton>
+   611→            )
+   612→          )}
+   613→          {/* Share externally — opens the native Web Share sheet on mobile
+   614→              (and some desktop browsers), otherwise copies the message text
+   615→              to the clipboard. Mirrors the Copy/Forward disabled treatment
+   616→              for protected bubbles. */}
+   617→          {blocked ? (
+   618→            <ToolbarButton
+   619→              title="Share disabled — message is protected"
+   620→              onClick={() => {
+   621→                toast.error(PROTECTED_WARNING, { duration: 4000 })
+   622→                recordAttempt(message.id, 'share')
+   623→              }}
+   624→            >
+   625→              <Share2 className="w-4 h-4 opacity-40" />
+   626→            </ToolbarButton>
+   627→          ) : (
+   628→            <ToolbarButton
+   629→              title="Share externally"
+   630→              onClick={() => { void handleShareExternal(); setShowReactions(false) }}
+   631→            >
+   632→              <Share2 className="w-4 h-4" />
+   633→            </ToolbarButton>
+   634→          )}
+   635→          {mine && (
+   636→            <ToolbarButton title="Delete" onClick={() => onDelete?.()} danger>
+   637→              <Trash2 className="w-4 h-4" />
+   638→            </ToolbarButton>
+   639→          )}
+   640→          {/* Pin / Unpin — shown to the message sender (always) and to group
+   641→              admins (for any message). Hidden for non-admins viewing someone
+   642→              else's message in a group. Mirrors the API's authorization
+   643→              matrix (sender-only for 1-on-1, sender+admin for groups). */}
+   644→          {onPin && canPin && (
+   645→            <ToolbarButton
+   646→              title={message.pinned ? 'Unpin' : 'Pin'}
+   647→              onClick={() => { onPin(); setShowReactions(false) }}
+   648→            >
+   649→              {message.pinned ? (
+   650→                <PinOff className="w-4 h-4" />
+   651→              ) : (
+   652→                <Pin className="w-4 h-4" />
+   653→              )}
+   654→            </ToolbarButton>
+   655→          )}
+   656→        </div>
+   657→
+   658→        {/* Quick reaction popover */}
+   659→        {showReactions && (
+   660→          <div
+   661→            className={cn(
+   662→              'absolute -top-11 z-30 flex items-center gap-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-lg border border-border px-1.5 py-1',
+   663→              mine ? 'right-0' : 'left-0'
+   664→            )}
+   665→          >
+   666→            {QUICK_REACTIONS.map((e) => (
+   667→              <button
+   668→                key={e}
+   669→                type="button"
+   670→                onClick={() => { onReact?.(e); setShowReactions(false) }}
+   671→                className="text-lg w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-transform hover:scale-125"
+   672→              >
+   673→                {e}
+   674→              </button>
+   675→            ))}
+   676→          </div>
+   677→        )}
+   678→
+   679→        {/* The bubble */}
+   680→        <div
+   681→          ref={bubbleRef}
+   682→          onContextMenu={onContextMenu}
+   683→          onDragStart={onDragStart}
+   684→          className={cn(
+   685→            'px-2.5 py-1.5 shadow-sm relative',
+   686→            mine ? 'wasl-bubble-out' : 'wasl-bubble-in',
+   687→            // WhatsApp-style "tail" — when grouped with the previous message
+   688→            // from the same sender, tighten the connecting corner's radius.
+   689→            prevSameSender && (mine ? 'wasl-bubble-grouped-out' : 'wasl-bubble-grouped-in'),
+   690→            blocked && 'wasl-protected-bubble'
+   691→          )}
+   692→          style={blocked ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
+   693→          data-protected={blocked ? 'true' : undefined}
+   694→        >
+   695→          {/* Lock badge — shown when the message is protected */}
+   696→          {protection.isProtected && (
+   697→            <div
+   698→              className={cn(
+   699→                'absolute -top-1.5 z-10 flex items-center justify-center w-5 h-5 rounded-full shadow-sm border',
+   700→                mine
+   701→                  ? 'right-1 bg-[var(--wasl-green)] border-[var(--wasl-green-dark)] text-white'
+   702→                  : 'left-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-[var(--wasl-green)]'
+   703→              )}
+   704→              title={
+   705→                blocked
+   706→                  ? '🔒 Protected by sender — screenshot, copy and forward are disabled'
+   707→                  : mine
+   708→                    ? '🔒 Protected — recipient cannot screenshot or forward'
+   709→                    : '🔒 Protected message'
+   710→              }
+   711→              aria-label="Protected message"
+   712→            >
+   713→              <Lock className="w-3 h-3" />
+   714→            </div>
+   715→          )}
+   716→          {/* Pinned indicator — a small rotated Pin icon at the top corner of
+   717→              the bubble. Visible to everyone (pinned state is a conversation-
+   718→              wide fact, not per-user) so members can see which message the
+   719→              admin/sender has chosen to highlight. */}
+   720→          {message.pinned && message.type !== 'system' && (
+   721→            <div
+   722→              className={cn(
+   723→                'absolute -top-1.5 z-10 flex items-center justify-center w-5 h-5 rounded-full shadow-sm border',
+   724→                mine
+   725→                  ? 'left-1 bg-[var(--wasl-teal)] border-[var(--wasl-teal)]/70 text-white'
+   726→                  : 'right-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+   727→              )}
+   728→              title="Pinned message"
+   729→              aria-label="Pinned message"
+   730→            >
+   731→              <Pin className="w-3 h-3 rotate-45" />
+   732→            </div>
+   733→          )}
+   734→          {isGroup && !mine && senderName && (
+   735→            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+   736→              {senderName}
+   737→            </div>
+   738→          )}
+   739→          {replyTo && (
+   740→            <button
+   741→              type="button"
+   742→              onClick={() =>
+   743→                window.dispatchEvent(
+   744→                  new CustomEvent('wasl:jump-to-message', { detail: replyTo.id })
+   745→                )
+   746→              }
+   747→              title="Jump to original message"
+   748→              className="block w-full text-left rounded-md mb-1 px-2 py-1 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10 transition-colors border-l-[3px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wasl-green)]/40"
+   749→              style={{
+   750→                borderLeftColor: mine
+   751→                  ? 'var(--wasl-green)'
+   752→                  : 'var(--wasl-teal)',
+   753→              }}
+   754→            >
+   755→              <div
+   756→                className="text-[11px] font-semibold leading-tight"
+   757→                style={{
+   758→                  color: mine ? 'var(--wasl-green)' : 'var(--wasl-teal)',
+   759→                }}
+   760→              >
+   761→                {replyTo.senderId === me?.id
+   762→                  ? 'You'
+   763→                  : replyToSenderName || 'Original message'}
+   764→              </div>
+   765→              <div className="text-xs text-muted-foreground truncate leading-snug">
+   766→                {replyTo.content}
+   767→              </div>
+   768→            </button>
+   769→          )}
+   770→          {message.type === 'image' ? (
+   771→            <div className="rounded-lg overflow-hidden max-w-xs">
+   772→              <img
+   773→                src={message.content}
+   774→                alt="sent"
+   775→                className={cn('w-full h-auto', blocked && 'pointer-events-none select-none')}
+   776→                draggable={!blocked}
+   777→                onDragStart={onDragStart}
+   778→              />
+   779→              <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+   780→                {protection.isProtected && (
+   781→                  <Lock className="w-3 h-3 inline opacity-60" />
+   782→                )}
+   783→                {formatChatTimestamp(message.createdAt)}
+   784→                {mine && (
+   785→                  <StatusTicks
+   786→                    status={message.status}
+   787→                    className="ml-1"
+   788→                    onClick={() => setReadReceiptsOpen(true)}
+   789→                    readByEveryone={message.readByEveryone}
+   790→                    readCount={message.readCount}
+   791→                    totalRecipients={message.totalRecipients}
+   792→                  />
+   793→                )}
+   794→              </div>
+   795→            </div>
+   796→          ) : message.type === 'pdf' || message.type === 'document' ? (
+   797→            <PdfDocumentCardContent
+   798→              message={message}
+   799→              mine={mine}
+   800→              blocked={blocked}
+   801→              isProtected={protection.isProtected}
+   802→              onOpenReadReceipts={() => setReadReceiptsOpen(true)}
+   803→            />
+   804→          ) : message.type === 'audio' && !message.content.startsWith('data:audio') ? (
+   805→            <AudioUrlCardContent
+   806→              message={message}
+   807→              mine={mine}
+   808→              blocked={blocked}
+   809→              isProtected={protection.isProtected}
+   810→              onOpenReadReceipts={() => setReadReceiptsOpen(true)}
+   811→            />
+   812→          ) : (
+   813→            <div
+   814→              className={cn(
+   815→                'text-sm leading-relaxed break-words whitespace-pre-wrap pr-1',
+   816→                blocked && 'select-none'
+   817→              )}
+   818→            >
+   819→              {isHighlighted
+   820→                ? highlightText(message.content, highlightQuery)
+   821→                : renderMarkdownLite(message.content)}
+   822→              <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
+   823→                {protection.isProtected && (
+   824→                  <Lock className="w-3 h-3 inline opacity-60" />
+   825→                )}
+   826→                {starred && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+   827→                {bookmarked && (
+   828→                  <Bookmark className="w-3 h-3 fill-amber-500 text-amber-500" />
+   829→                )}
+   830→                {message.edited && (
+   831→                  <button
+   832→                    type="button"
+   833→                    onClick={(e) => {
+   834→                      e.stopPropagation()
+   835→                      setEditHistoryOpen(true)
+   836→                    }}
+   837→                    className="italic hover:text-foreground transition-colors cursor-pointer"
+   838→                    title="Edited — click to view edit history"
+   839→                  >
+   840→                    edited
+   841→                  </button>
+   842→                )}
+   843→                {formatChatTimestamp(message.createdAt)}
+   844→                {mine && (
+   845→                  <StatusTicks
+   846→                    status={message.status}
+   847→                    onClick={() => setReadReceiptsOpen(true)}
+   848→                    readByEveryone={message.readByEveryone}
+   849→                    readCount={message.readCount}
+   850→                    totalRecipients={message.totalRecipients}
+   851→                  />
+   852→                )}
+   853→              </span>
+   854→            </div>
+   855→          )}
+   856→          {/* Link preview card — shown below any text message that contains
+   857→              at least one URL. We render at most one preview (the first URL)
+   858→              to keep the bubble compact. The card asynchronously fetches
+   859→              OpenGraph meta tags for a richer preview (title + description +
+   860→              image), falling back to a favicon-based card while loading. */}
+   861→          {message.type === 'text' && !blocked && linkPreview && (
+   862→            <LinkPreviewCard
+   863→              href={linkPreview.href}
+   864→              domain={linkPreview.domain}
+   865→              path={linkPreview.path}
+   866→            />
+   867→          )}
+   868→        </div>
+   869→
+   870→        {/* Reactions pill row */}
+   871→        {grouped.length > 0 && (
+   872→          <div className={cn('flex flex-wrap gap-1 mt-0.5', mine ? 'justify-end' : 'justify-start')}>
+   873→            {grouped.map((g) => {
+   874→              const mineReacted = g.users.includes(currentUserId || '')
+   875→              return (
+   876→                <button
+   877→                  key={g.emoji}
+   878→                  type="button"
+   879→                  onClick={() => onReact?.(g.emoji)}
+   880→                  className={cn(
+   881→                    'wasl-reaction-pill inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors',
+   882→                    mineReacted
+   883→                      ? 'bg-[var(--wasl-green)]/15 border-[var(--wasl-green)]/50 text-foreground'
+   884→                      : 'bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-foreground hover:bg-muted'
+   885→                  )}
+   886→                  title={g.users.length + ' reaction' + (g.users.length === 1 ? '' : 's')}
+   887→                >
+   888→                  <span>{g.emoji}</span>
+   889→                  <span className="text-[10px] font-medium">{g.count}</span>
+   890→                </button>
+   891→              )
+   892→            })}
+   893→          </div>
+   894→        )}
+   895→      </div>
+   896→        </div>
+   897→      </ContextMenuTrigger>
+   898→      <ContextMenuContent className="w-48">
+   899→        {/* Quick reactions row */}
+   900→        <div className="flex items-center justify-around px-1 py-1.5 border-b border-border/60 mb-1">
+   901→          {QUICK_REACTIONS.map((emoji) => (
+   902→            <button
+   903→              key={emoji}
+   904→              type="button"
+   905→              onClick={() => onReact?.(emoji)}
+   906→              className="text-lg w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted transition-transform hover:scale-125"
+   907→            >
+   908→              {emoji}
+   909→            </button>
+   910→          ))}
+   911→        </div>
+   912→        <ContextMenuItem onClick={() => onReply?.()}>
+   913→          <Reply className="w-4 h-4 mr-2" />
+   914→          Reply
+   915→        </ContextMenuItem>
+   916→        <ContextMenuItem onClick={() => onStar?.()}>
+   917→          <Star className={cn('w-4 h-4 mr-2', starred && 'fill-amber-400 text-amber-400')} />
+   918→          {starred ? 'Unstar' : 'Star'}
+   919→        </ContextMenuItem>
+   920→        <ContextMenuItem onClick={() => onBookmark?.()}>
+   921→          <Bookmark
+   922→            className={cn(
+   923→              'w-4 h-4 mr-2',
+   924→              bookmarked && 'fill-amber-500 text-amber-500'
+   925→            )}
+   926→          />
+   927→          {bookmarked ? 'Remove bookmark' : 'Bookmark for later'}
+   928→        </ContextMenuItem>
+   929→        <ContextMenuItem onClick={() => onCopy?.()}>
+   930→          <Copy className="w-4 h-4 mr-2" />
+   931→          Copy
+   932→        </ContextMenuItem>
+   933→        {onForward && (
+   934→          <ContextMenuItem onClick={() => onForward()}>
+   935→            <Forward className="w-4 h-4 mr-2" />
+   936→            Forward
+   937→          </ContextMenuItem>
+   938→        )}
+   939→        {/* Share externally — Web Share API with clipboard fallback.
+   940→            The context menu never opens on `blocked` bubbles (the bubble's
+   941→            onContextMenu handler preventDefaults + stops propagation), so we
+   942→            don't need a separate disabled state here. */}
+   943→        <ContextMenuItem onClick={() => void handleShareExternal()}>
+   944→          <Share2 className="w-4 h-4 mr-2" />
+   945→          Share externally
+   946→        </ContextMenuItem>
+   947→        {onPin && canPin && (
+   948→          <ContextMenuItem onClick={() => onPin()}>
+   949→            {message.pinned ? (
+   950→              <>
+   951→                <PinOff className="w-4 h-4 mr-2" />
+   952→                Unpin
+   953→              </>
+   954→            ) : (
+   955→              <>
+   956→                <Pin className="w-4 h-4 mr-2" />
+   957→                Pin
+   958→              </>
+   959→            )}
+   960→          </ContextMenuItem>
+   961→        )}
+   962→        {mine && message.type === 'text' && onEdit && (
+   963→          <ContextMenuItem onClick={() => onEdit()}>
+   964→            <Pencil className="w-4 h-4 mr-2" />
+   965→            Edit
+   966→          </ContextMenuItem>
+   967→        )}
+   968→        {/* Message info — shows delivery + read timeline */}
+   969→        <ContextMenuItem onClick={() => setMessageInfoOpen(true)}>
+   970→          <Info className="w-4 h-4 mr-2" />
+   971→          Info
+   972→        </ContextMenuItem>
+   973→        {mine && (
+   974→          <>
+   975→            <ContextMenuSeparator />
+   976→            <ContextMenuItem
+   977→              variant="destructive"
+   978→              onClick={() => onDelete?.()}
+   979→            >
+   980→              <Trash2 className="w-4 h-4 mr-2" />
+   981→              Delete
+   982→            </ContextMenuItem>
+   983→          </>
+   984→        )}
+   985→      </ContextMenuContent>
+   986→      {/* Read receipts dialog — opened by clicking the blue read-ticks */}
+   987→      <ReadReceiptsDialog
+   988→        open={readReceiptsOpen}
+   989→        onOpenChange={setReadReceiptsOpen}
+   990→        messageId={message.id}
+   991→      />
+   992→      {/* Edit history dialog — opened by clicking the "edited" indicator */}
+   993→      <EditHistoryDialog
+   994→        open={editHistoryOpen}
+   995→        onOpenChange={setEditHistoryOpen}
+   996→        messageId={message.id}
+   997→      />
+   998→      {/* Message info dialog — shows delivery + read timeline */}
+   999→      <MessageInfoDialog
+  1000→        open={messageInfoOpen}
+  1001→        onOpenChange={setMessageInfoOpen}
+  1002→        message={message}
+  1003→      />
+  1004→    </ContextMenu>
+  1005→  )
+  1006→}
+  1007→
+  1008→// Wrapper that lazy-loads the CommitCard so the heavy commit data only fetches
+  1009→// when a commit message is rendered. Keeps this file focused on the bubble.
+  1010→function CommitMessageWrapper({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  1011→  const [CommitCard, setCommitCard] = useState<any>(null)
+  1012→  useEffect(() => {
+  1013→    import('./commit-card').then((m) => setCommitCard(() => m.CommitCard))
+  1014→  }, [])
+  1015→  if (!CommitCard) {
+  1016→    return (
+  1017→      <div className="wasl-commit-card p-4 text-xs text-muted-foreground">
+  1018→        Loading commit…
+  1019→      </div>
+  1020→    )
+  1021→  }
+  1022→  return (
+  1023→    <CommitCard
+  1024→      commitId={message.commitId!}
+  1025→      conversationId={message.conversationId}
+  1026→      createdAt={message.createdAt}
+  1027→    />
+  1028→  )
+  1029→}
+  1030→
+  1031→// Lazy-loaded poll card wrapper (mirrors CommitMessageWrapper).
+  1032→function PollMessageWrapper({
+  1033→  pollId,
+  1034→  conversationId,
+  1035→  createdAt,
+  1036→}: {
+  1037→  pollId: string
+  1038→  conversationId: string
+  1039→  createdAt: string
+  1040→}) {
+  1041→  const [PollCard, setPollCard] = useState<any>(null)
+  1042→  useEffect(() => {
+  1043→    import('./poll-card').then((m) => setPollCard(() => m.PollCard))
+  1044→  }, [])
+  1045→  if (!PollCard) {
+  1046→    return (
+  1047→      <div className="wasl-poll-card p-4 text-xs text-muted-foreground">
+  1048→        Loading poll…
+  1049→      </div>
+  1050→    )
+  1051→  }
+  1052→  return (
+  1053→    <PollCard
+  1054→      pollId={pollId}
+  1055→      conversationId={conversationId}
+  1056→      createdAt={createdAt}
+  1057→    />
+  1058→  )
+  1059→}
+  1060→
+  1061→// ---- File-attachment card (PDF / document) -------------------------------
+  1062→// Renders a compact "file card" inside the bubble: a coloured FileText icon
+  1063→// (red for PDF, teal/green for documents), the original filename + human-
+  1064→// readable size, and a Download button that opens the URL in a new tab.
+  1065→//
+  1066→// `blocked` is set when the message is protected AND the current user is the
+  1067→// recipient — in that case the Download button is disabled and shows the
+  1068→// protected warning toast instead of opening the link.
+  1069→function PdfDocumentCardContent({
+  1070→  message,
+  1071→  mine,
+  1072→  blocked,
+  1073→  isProtected,
+  1074→  onOpenReadReceipts,
+  1075→}: {
+  1076→  message: ChatMessage
+  1077→  mine: boolean
+  1078→  blocked: boolean
+  1079→  isProtected: boolean
+  1080→  onOpenReadReceipts: () => void
+  1081→}) {
+  1082→  const parsed = parseFileContent(message.content)
+  1083→  const isPdf = message.type === 'pdf'
+  1084→  const fallbackName = isPdf ? 'PDF document' : 'Document'
+  1085→  const name =
+  1086→    parsed?.name ||
+  1087→    (parsed?.url ? deriveFilenameFromUrl(parsed.url, fallbackName) : fallbackName)
+  1088→  const sizeLabel = parsed?.size ? formatFileSize(parsed.size) : isPdf ? 'PDF' : 'Document'
+  1089→
+  1090→  // PDF → red icon. Document → teal/green icon (uses wasl theme tokens so it
+  1091→  // respects light/dark mode and the Cirkle gold theme). No indigo/blue.
+  1092→  const iconColor = isPdf
+  1093→    ? 'text-red-500'
+  1094→    : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+  1095→  const iconBg = isPdf
+  1096→    ? 'bg-red-500/10'
+  1097→    : 'bg-[var(--wasl-teal)]/10 dark:bg-[var(--wasl-green)]/10'
+  1098→
+  1099→  return (
+  1100→    <div className="rounded-lg overflow-hidden max-w-[280px]">
+  1101→      <div className="flex items-center gap-3 p-2 min-w-[220px]">
+  1102→        <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
+  1103→          <FileText className={cn('w-5 h-5', iconColor)} />
+  1104→        </div>
+  1105→        <div className="flex-1 min-w-0">
+  1106→          <div className="text-sm font-medium truncate text-foreground" title={name}>
+  1107→            {name}
+  1108→          </div>
+  1109→          <div className="text-[11px] text-foreground/60 uppercase tracking-wide">
+  1110→            {sizeLabel}
+  1111→          </div>
+  1112→        </div>
+  1113→        {blocked ? (
+  1114→          <button
+  1115→            type="button"
+  1116→            onClick={(e) => {
+  1117→              e.stopPropagation()
+  1118→              toast.error(PROTECTED_WARNING, { duration: 4000 })
+  1119→              recordAttempt(message.id, 'save')
+  1120→            }}
+  1121→            className="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground/40 cursor-not-allowed"
+  1122→            title="Download disabled — message is protected"
+  1123→            aria-label="Download disabled — message is protected"
+  1124→          >
+  1125→            <Download className="w-4 h-4" />
+  1126→          </button>
+  1127→        ) : (
+  1128→          <a
+  1129→            href={parsed?.url}
+  1130→            target="_blank"
+  1131→            rel="noopener noreferrer"
+  1132→            download={name}
+  1133→            onClick={(e) => e.stopPropagation()}
+  1134→            className={cn(
+  1135→              'shrink-0 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+  1136→              'bg-[var(--wasl-green)]/10 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/20'
+  1137→            )}
+  1138→            title="Download"
+  1139→            aria-label="Download"
+  1140→          >
+  1141→            <Download className="w-4 h-4" />
+  1142→          </a>
+  1143→        )}
+  1144→      </div>
+  1145→      <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+  1146→        {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
+  1147→        {formatChatTimestamp(message.createdAt)}
+  1148→        {mine && (
+  1149→          <StatusTicks
+  1150→            status={message.status}
+  1151→            className="ml-1"
+  1152→            onClick={onOpenReadReceipts}
+  1153→            readByEveryone={message.readByEveryone}
+  1154→            readCount={message.readCount}
+  1155→            totalRecipients={message.totalRecipients}
+  1156→          />
+  1157→        )}
+  1158→      </div>
+  1159→    </div>
+  1160→  )
+  1161→}
+  1162→
+  1163→// ---- Audio URL card ------------------------------------------------------
+  1164→// Renders an `<audio controls>` element for audio messages whose `content`
+  1165→// is a URL (i.e. an uploaded .mp3/.wav/.m4a/.ogg). Voice notes that were
+  1166→// recorded in-browser are stored as `data:audio/...` data URIs and are
+  1167→// handled by the existing VoiceMessagePlayer above.
+  1168→function AudioUrlCardContent({
+  1169→  message,
+  1170→  mine,
+  1171→  blocked,
+  1172→  isProtected,
+  1173→  onOpenReadReceipts,
+  1174→}: {
+  1175→  message: ChatMessage
+  1176→  mine: boolean
+  1177→  blocked: boolean
+  1178→  isProtected: boolean
+  1179→  onOpenReadReceipts: () => void
+  1180→}) {
+  1181→  const parsed = parseFileContent(message.content)
+  1182→  const url = parsed?.url
+  1183→  const name =
+  1184→    parsed?.name ||
+  1185→    (url ? deriveFilenameFromUrl(url, 'Audio message') : 'Audio message')
+  1186→  const sizeLabel = parsed?.size ? formatFileSize(parsed.size) : undefined
+  1187→
+  1188→  if (!url) {
+  1189→    // Malformed payload — fall back to a tiny "audio unavailable" notice
+  1190→    // rather than crashing the whole bubble.
+  1191→    return (
+  1192→      <div className="rounded-lg p-2 max-w-[280px] text-xs text-muted-foreground">
+  1193→        Audio unavailable
+  1194→      </div>
+  1195→    )
+  1196→  }
+  1197→
+  1198→  return (
+  1199→    <div className="rounded-lg overflow-hidden max-w-[300px] p-1">
+  1200→      <div className="flex items-center gap-2 mb-1 min-w-0">
+  1201→        <Music className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
+  1202→        <span className="text-xs font-medium truncate flex-1 text-foreground" title={name}>
+  1203→          {name}
+  1204→        </span>
+  1205→        {sizeLabel && (
+  1206→          <span className="text-[10px] text-foreground/60 shrink-0">{sizeLabel}</span>
+  1207→        )}
+  1208→        {blocked ? (
+  1209→          <button
+  1210→            type="button"
+  1211→            onClick={(e) => {
+  1212→              e.stopPropagation()
+  1213→              toast.error(PROTECTED_WARNING, { duration: 4000 })
+  1214→              recordAttempt(message.id, 'save')
+  1215→            }}
+  1216→            className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground/40 cursor-not-allowed"
+  1217→            title="Download disabled — message is protected"
+  1218→            aria-label="Download disabled — message is protected"
+  1219→          >
+  1220→            <Download className="w-4 h-4" />
+  1221→          </button>
+  1222→        ) : (
+  1223→          <a
+  1224→            href={url}
+  1225→            target="_blank"
+  1226→            rel="noopener noreferrer"
+  1227→            download={name}
+  1228→            onClick={(e) => e.stopPropagation()}
+  1229→            className={cn(
+  1230→              'shrink-0 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+  1231→              'bg-[var(--wasl-green)]/10 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/20'
+  1232→            )}
+  1233→            title="Download"
+  1234→            aria-label="Download"
+  1235→          >
+  1236→            <Download className="w-4 h-4" />
+  1237→          </a>
+  1238→        )}
+  1239→      </div>
+  1240→      {/* Custom audio player (Task 30-a) — replaces the bare `<audio controls>`
+  1241→          element with the same reusable VoicePlayer used for voice notes.
+  1242→          `variant="audio"` makes it show a Music icon and the surface tint
+  1243→          matches the bubble (wasl-green for outgoing, wasl-teal for
+  1244→          incoming). `blocked` makes the player read-only (pointer-events
+  1245→          disabled) for protected recipients. */}
+  1246→      <VoicePlayer
+  1247→        src={url}
+  1248→        mine={mine}
+  1249→        variant="audio"
+  1250→        blocked={blocked}
+  1251→        label={name ? `Play audio: ${name}` : 'Play audio'}
+  1252→      />
+  1253→      <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
+  1254→        {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
+  1255→        {formatChatTimestamp(message.createdAt)}
+  1256→        {mine && (
+  1257→          <StatusTicks
+  1258→            status={message.status}
+  1259→            className="ml-1"
+  1260→            onClick={onOpenReadReceipts}
+  1261→            readByEveryone={message.readByEveryone}
+  1262→            readCount={message.readCount}
+  1263→            totalRecipients={message.totalRecipients}
+  1264→          />
+  1265→        )}
+  1266→      </div>
+  1267→    </div>
+  1268→  )
+  1269→}
+  1270→
+  1271→function ToolbarButton({
+  1272→  title,
+  1273→  onClick,
+  1274→  children,
+  1275→  danger,
+  1276→}: {
+  1277→  title: string
+  1278→  onClick: () => void
+  1279→  children: React.ReactNode
+  1280→  danger?: boolean
+  1281→}) {
+  1282→  return (
+  1283→    <button
+  1284→      type="button"
+  1285→      title={title}
+  1286→      aria-label={title}
+  1287→      onClick={onClick}
+  1288→      className={cn(
+  1289→        'w-7 h-7 rounded-full flex items-center justify-center transition-colors',
+  1290→        danger
+  1291→          ? 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+  1292→          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+  1293→      )}
+  1294→    >
+  1295→      {children}
+  1296→    </button>
+  1297→  )
+  1298→}
+  1299→
+  1300→function StatusTicks({
+  1301→  status,
+  1302→  className,
+  1303→  onClick,
+  1304→  readByEveryone,
+  1305→  readCount,
+  1306→  totalRecipients,
+  1307→}: {
+  1308→  status: string
+  1309→  className?: string
+  1310→  onClick?: () => void
+  1311→  // ---- Read-receipt summary (sender-only) -------------------------------
+  1312→  // When `readByEveryone` is true, ALL other participants have read the
+  1313→  // message — the ticks turn wasl-teal/green, get a subtle "pop" pulse
+  1314→  // animation, and a small "Read by all" label appears next to them.
+  1315→  // When `readCount > 0` but `readByEveryone` is false, the ticks turn
+  1316→  // wasl-teal/green and a small "N/M" count badge appears (e.g., "3/5").
+  1317→  // When `readCount === 0` (or undefined), the ticks render in the legacy
+  1318→  // muted color (delivered / sent).
+  1319→  readByEveryone?: boolean
+  1320→  readCount?: number
+  1321→  totalRecipients?: number
+  1322→}) {
+  1323→  // Determine the read state. `readByEveryone` is the richest signal — when
+  1324→  // true, we know the message has been read by every recipient. The partial
+  1325→  // state (some readers, not all) is shown when readCount > 0 but readByEveryone
+  1326→  // is false. We fall back to the legacy `status === 'read'` path for
+  1327→  // 1-on-1 chats or older messages where the summary isn't populated.
+  1328→  const hasReadCount =
+  1329→    typeof readCount === 'number' &&
+  1330→    typeof totalRecipients === 'number' &&
+  1331→    totalRecipients > 0
+  1332→  const isReadAll = readByEveryone === true
+  1333→  const isPartialRead = !isReadAll && hasReadCount && readCount! > 0
+  1334→  const isRead = isReadAll || isPartialRead || status === 'read'
+  1335→
+  1336→  // Single-check for freshly sent (no delivery confirmation yet).
+  1337→  if (status === 'sent' && !isRead) {
+  1338→    return <Check className={cn('w-3.5 h-3.5 inline', className)} />
+  1339→  }
+  1340→  // Pending clock for unknown / pending states.
+  1341→  if (!isRead && status !== 'delivered') {
+  1342→    return <Clock className={cn('w-3.5 h-3.5 inline', className)} />
+  1343→  }
+  1344→
+  1345→  // Resolve tooltip text + tick color for the double-check state.
+  1346→  let title: string
+  1347→  let tickColorClass: string
+  1348→  let label: string | null = null
+  1349→  if (isReadAll) {
+  1350→    title = 'Read by all'
+  1351→    tickColorClass =
+  1352→      'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] wasl-ticks-read-all'
+  1353→    label = 'Read by all'
+  1354→  } else if (isPartialRead) {
+  1355→    title = `Read by ${readCount} of ${totalRecipients}`
+  1356→    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+  1357→    label = `${readCount}/${totalRecipients}`
+  1358→  } else if (status === 'read') {
+  1359→    // Legacy "read" status without a readCount summary (1-on-1 chats where
+  1360→    // the server didn't populate the summary, or older messages). Per the
+  1361→    // design rules, we use the wasl-teal/green palette — never blue/indigo.
+  1362→    title = 'Read — click to see details'
+  1363→    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+  1364→  } else {
+  1365→    // Delivered (no reads yet).
+  1366→    title = 'Delivered'
+  1367→    tickColorClass = 'text-foreground/50'
+  1368→  }
+  1369→
+  1370→  const ticksEl = (
+  1371→    <CheckCheck className={cn('w-3.5 h-3.5 inline', tickColorClass, className)} />
+  1372→  )
+  1373→
+  1374→  // Optional small muted label that appears next to the ticks. For "Read by
+  1375→  // all" we show the full label; for partial reads we show a compact "N/M"
+  1376→  // count badge. Both are intentionally tiny (text-[9px]) and muted so they
+  1377→  // stay unobtrusive next to the timestamp.
+  1378→  const labelEl = label ? (
+  1379→    <span className="text-[9px] font-medium leading-none text-foreground/50 ml-0.5 select-none">
+  1380→      {label}
+  1381→    </span>
+  1382→  ) : null
+  1383→
+  1384→  // When onClick is provided, the ticks become a clickable button that opens
+  1385→  // the read-receipts dialog (sender-only feature).
+  1386→  if (onClick) {
+  1387→    return (
+  1388→      <button
+  1389→        type="button"
+  1390→        onClick={(e) => {
+  1391→          e.stopPropagation()
+  1392→          onClick()
+  1393→        }}
+  1394→        className="inline-flex items-center hover:scale-110 transition-transform"
+  1395→        title={title}
+  1396→        aria-label={title}
+  1397→      >
+  1398→        {ticksEl}
+  1399→        {labelEl}
+  1400→      </button>
+  1401→    )
+  1402→  }
+  1403→  return (
+  1404→    <span className="inline-flex items-center" title={title}>
+  1405→      {ticksEl}
+  1406→      {labelEl}
+  1407→    </span>
+  1408→  )
+  1409→}
+  1410→
+  1411→function groupReactions(reactions: Reaction[]) {
+  1412→  const map = new Map<string, { emoji: string; count: number; users: string[] }>()
+  1413→  for (const r of reactions) {
+  1414→    const ex = map.get(r.emoji)
+  1415→    if (ex) {
+  1416→      ex.count++
+  1417→      ex.users.push(r.userId)
+  1418→    } else {
+  1419→      map.set(r.emoji, { emoji: r.emoji, count: 1, users: [r.userId] })
+  1420→    }
+  1421→  }
+  1422→  return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  1423→}
+  1424→

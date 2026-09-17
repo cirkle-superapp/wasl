@@ -38,6 +38,7 @@ import { ToneAdjusterDialog } from './tone-adjuster-dialog'
 import { CommandPalette } from './command-palette'
 import { ForwardDialog } from './forward-dialog'
 import { DeleteMessageDialog } from './delete-message-dialog'
+import { EditMessageDialog } from './edit-message-dialog'
 import { useWaslStore, type ChatMessage } from '@/lib/store'
 import { connectSocket, getSocket } from '@/lib/socket'
 import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
@@ -759,31 +760,33 @@ export function ChatWindow({
   )
 
   // ---- Edit message --------------------------------------------------------
+  // Opens the EditMessageDialog (replaces the old `prompt()` flow). The
+  // dialog enforces the 15-minute edit window client-side AND the server
+  // rejects the PATCH past that window with a 403, so we get a clean error
+  // toast if the window elapses while the dialog is open.
+  const [editMessage, setEditMessage] = useState<ChatMessage | null>(null)
   const handleEditMessage = useCallback(
-    async (m: ChatMessage) => {
-      const newContent = prompt('Edit your message:', m.content)
-      if (!newContent || newContent.trim() === m.content) return
-      try {
-        const res = await fetch(`/api/messages/${m.id}/edit`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: newContent.trim() }),
-        })
-        if (!res.ok) {
-          const err = await res.json().catch(() => null)
-          toast.error(err?.error || 'Failed to edit')
-          return
-        }
-        // Update locally — set both the new content AND the edited flag
-        useWaslStore.getState().updateMessage(activeConversationId, m.id, {
-          content: newContent.trim(),
-          edited: true,
-        })
-        getSocket().emit('message:reacted', { conversationId: activeConversationId, messageId: m.id })
-        toast.success('Message edited')
-      } catch {
-        toast.error('Failed to edit')
-      }
+    (m: ChatMessage) => {
+      setEditMessage(m)
+    },
+    []
+  )
+  const handleEditSaved = useCallback(
+    (messageId: string, newContent: string) => {
+      if (!activeConversationId) return
+      // Update locally — set both the new content AND the edited flag so
+      // the "edited" indicator appears immediately.
+      useWaslStore.getState().updateMessage(activeConversationId, messageId, {
+        content: newContent,
+        edited: true,
+      })
+      // Broadcast so other clients refetch the message. Reuses the existing
+      // `message:reacted` channel that the chat-window already listens on for
+      // reaction / pin / star / bookmark updates.
+      getSocket().emit('message:reacted', {
+        conversationId: activeConversationId,
+        messageId,
+      })
     },
     [activeConversationId]
   )
@@ -1614,6 +1617,19 @@ export function ChatWindow({
           deleteMessage.senderId === user?.id &&
           (Date.now() - new Date(deleteMessage.createdAt).getTime()) / 60000 < 60
         }
+      />
+
+      {/* Edit message dialog — replaces the old `prompt()`-based edit flow.
+          Enforces the 15-minute edit window client-side (countdown + disabled
+          Save button) and surfaces the server's 403 as a clean error toast. */}
+      <EditMessageDialog
+        open={!!editMessage}
+        onOpenChange={(v) => {
+          if (!v) setEditMessage(null)
+        }}
+        message={editMessage}
+        conversationId={activeConversationId}
+        onEdited={handleEditSaved}
       />
     </div>
   )

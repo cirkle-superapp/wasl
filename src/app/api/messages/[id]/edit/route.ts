@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { MESSAGE_EDIT_TIME_LIMIT_MS } from '@/lib/constants'
 
 export const runtime = 'nodejs'
 
@@ -15,8 +16,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!msg) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (msg.senderId !== session.id) return NextResponse.json({ error: 'Can only edit your own messages' }, { status: 403 })
 
-  const ageMin = (Date.now() - new Date(msg.createdAt).getTime()) / 60000
-  if (ageMin > 15) return NextResponse.json({ error: 'Can only edit within 15 minutes' }, { status: 403 })
+  // Enforce the edit time limit (default 15 minutes — see `MESSAGE_EDIT_TIME_LIMIT_MS`).
+  // Mirrored client-side so the Edit button + dialog disable themselves before
+  // the user even submits, but the server is the source of truth.
+  const ageMs = Date.now() - new Date(msg.createdAt).getTime()
+  if (ageMs > MESSAGE_EDIT_TIME_LIMIT_MS) {
+    return NextResponse.json(
+      { error: 'This message can no longer be edited (15-minute window has passed).' },
+      { status: 403 }
+    )
+  }
 
   // Skip if the content hasn't actually changed
   if (msg.content === content.trim()) {
