@@ -70,31 +70,77 @@ export async function GET(
   })
   const deletedSet = new Set(deletedForMeRows.map((d) => d.messageId))
 
+  // ---- Per-recipient read state for outgoing messages -----------------------
+  // For each message the current user sent, we compute whether EVERY other
+  // participant has read it (readByEveryone) and how many have read it out
+  // of the total (readCount / totalRecipients). This drives the
+  // "read by all" indicator on the message bubble.
+  //
+  // Bucketing rule (mirrors /api/messages/[id]/read-receipts):
+  //   - READ → participant.lastReadAt >= message.createdAt
+  //
+  // We fetch every other participant once (single query) and reuse the list
+  // for every outgoing message — O(participants × messages) but both are
+  // small for a single page (PAGE_SIZE messages, small groups).
+  const otherParticipants = await db.participant.findMany({
+    where: {
+      conversationId: id,
+      userId: { not: session.id },
+    },
+    select: { lastReadAt: true },
+  })
+  const totalRecipients = otherParticipants.length
+  // Pre-compute the lastReadAt timestamps once (as epoch ms) so we don't pay
+  // the Date.getTime() overhead inside the per-message loop.
+  const otherLastReadAtMs = otherParticipants.map((p) => p.lastReadAt.getTime())
+
   return NextResponse.json({
     messages: messages
       .filter((m) => !deletedSet.has(m.id))
       .reverse()
-      .map((m) => ({
-        id: m.id,
-        conversationId: m.conversationId,
-        senderId: m.senderId,
-        content: m.content,
-        type: m.type,
-        status: m.status,
-        createdAt: m.createdAt,
-        replyToId: m.replyToId,
-        commitId: m.commitId,
-        protected: m.protected,
-        edited: m.edited,
-        pinned: m.pinned,
-        transcription: m.transcription,
-        starred: starredIds.has(m.id),
-        reactions: m.reactions.map((r) => ({
-          id: r.id,
-          userId: r.userId,
-          emoji: r.emoji,
-        })),
-      })),
+      .map((m) => {
+        // Only compute read-receipt summary for messages sent by the current
+        // user. Incoming messages don't need these fields (the bubble only
+        // shows read ticks for outgoing messages).
+        let readByEveryone: boolean | undefined
+        let readCount: number | undefined
+        if (m.senderId === session.id && totalRecipients > 0) {
+          const createdAtMs = m.createdAt.getTime()
+          let read = 0
+          for (const ts of otherLastReadAtMs) {
+            if (ts >= createdAtMs) read++
+          }
+          readCount = read
+          readByEveryone = read >= totalRecipients
+        }
+        return {
+          id: m.id,
+          conversationId: m.conversationId,
+          senderId: m.senderId,
+          content: m.content,
+          type: m.type,
+          status: m.status,
+          createdAt: m.createdAt,
+          replyToId: m.replyToId,
+          commitId: m.commitId,
+          protected: m.protected,
+          edited: m.edited,
+          pinned: m.pinned,
+          transcription: m.transcription,
+          starred: starredIds.has(m.id),
+          reactions: m.reactions.map((r) => ({
+            id: r.id,
+            userId: r.userId,
+            emoji: r.emoji,
+          })),
+          // ---- Read-receipt summary (sender-only) -------------------------
+          // Undefined for incoming messages; the bubble only uses these on
+          // outgoing messages where they're meaningful.
+          readByEveryone,
+          readCount,
+          totalRecipients: m.senderId === session.id ? totalRecipients : undefined,
+        }
+      }),
   })
 }
 

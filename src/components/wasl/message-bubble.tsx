@@ -492,7 +492,16 @@ export function MessageBubble({
               <Lock className="w-3 h-3 inline opacity-60" />
             )}
             {formatChatTimestamp(message.createdAt)}
-            {mine && <StatusTicks status={message.status} className="ml-1" onClick={() => setReadReceiptsOpen(true)} />}
+            {mine && (
+              <StatusTicks
+                status={message.status}
+                className="ml-1"
+                onClick={() => setReadReceiptsOpen(true)}
+                readByEveryone={message.readByEveryone}
+                readCount={message.readCount}
+                totalRecipients={message.totalRecipients}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -772,7 +781,16 @@ export function MessageBubble({
                   <Lock className="w-3 h-3 inline opacity-60" />
                 )}
                 {formatChatTimestamp(message.createdAt)}
-                {mine && <StatusTicks status={message.status} className="ml-1" onClick={() => setReadReceiptsOpen(true)} />}
+                {mine && (
+                  <StatusTicks
+                    status={message.status}
+                    className="ml-1"
+                    onClick={() => setReadReceiptsOpen(true)}
+                    readByEveryone={message.readByEveryone}
+                    readCount={message.readCount}
+                    totalRecipients={message.totalRecipients}
+                  />
+                )}
               </div>
             </div>
           ) : message.type === 'pdf' || message.type === 'document' ? (
@@ -823,7 +841,15 @@ export function MessageBubble({
                   </button>
                 )}
                 {formatChatTimestamp(message.createdAt)}
-                {mine && <StatusTicks status={message.status} onClick={() => setReadReceiptsOpen(true)} />}
+                {mine && (
+                  <StatusTicks
+                    status={message.status}
+                    onClick={() => setReadReceiptsOpen(true)}
+                    readByEveryone={message.readByEveryone}
+                    readCount={message.readCount}
+                    totalRecipients={message.totalRecipients}
+                  />
+                )}
               </span>
             </div>
           )}
@@ -1119,7 +1145,16 @@ function PdfDocumentCardContent({
       <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
         {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
         {formatChatTimestamp(message.createdAt)}
-        {mine && <StatusTicks status={message.status} className="ml-1" onClick={onOpenReadReceipts} />}
+        {mine && (
+          <StatusTicks
+            status={message.status}
+            className="ml-1"
+            onClick={onOpenReadReceipts}
+            readByEveryone={message.readByEveryone}
+            readCount={message.readCount}
+            totalRecipients={message.totalRecipients}
+          />
+        )}
       </div>
     </div>
   )
@@ -1218,7 +1253,16 @@ function AudioUrlCardContent({
       <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
         {isProtected && <Lock className="w-3 h-3 inline opacity-60" />}
         {formatChatTimestamp(message.createdAt)}
-        {mine && <StatusTicks status={message.status} className="ml-1" onClick={onOpenReadReceipts} />}
+        {mine && (
+          <StatusTicks
+            status={message.status}
+            className="ml-1"
+            onClick={onOpenReadReceipts}
+            readByEveryone={message.readByEveryone}
+            readCount={message.readCount}
+            totalRecipients={message.totalRecipients}
+          />
+        )}
       </div>
     </div>
   )
@@ -1257,41 +1301,111 @@ function StatusTicks({
   status,
   className,
   onClick,
+  readByEveryone,
+  readCount,
+  totalRecipients,
 }: {
   status: string
   className?: string
   onClick?: () => void
+  // ---- Read-receipt summary (sender-only) -------------------------------
+  // When `readByEveryone` is true, ALL other participants have read the
+  // message — the ticks turn wasl-teal/green, get a subtle "pop" pulse
+  // animation, and a small "Read by all" label appears next to them.
+  // When `readCount > 0` but `readByEveryone` is false, the ticks turn
+  // wasl-teal/green and a small "N/M" count badge appears (e.g., "3/5").
+  // When `readCount === 0` (or undefined), the ticks render in the legacy
+  // muted color (delivered / sent).
+  readByEveryone?: boolean
+  readCount?: number
+  totalRecipients?: number
 }) {
-  if (status === 'sent') {
+  // Determine the read state. `readByEveryone` is the richest signal — when
+  // true, we know the message has been read by every recipient. The partial
+  // state (some readers, not all) is shown when readCount > 0 but readByEveryone
+  // is false. We fall back to the legacy `status === 'read'` path for
+  // 1-on-1 chats or older messages where the summary isn't populated.
+  const hasReadCount =
+    typeof readCount === 'number' &&
+    typeof totalRecipients === 'number' &&
+    totalRecipients > 0
+  const isReadAll = readByEveryone === true
+  const isPartialRead = !isReadAll && hasReadCount && readCount! > 0
+  const isRead = isReadAll || isPartialRead || status === 'read'
+
+  // Single-check for freshly sent (no delivery confirmation yet).
+  if (status === 'sent' && !isRead) {
     return <Check className={cn('w-3.5 h-3.5 inline', className)} />
   }
-  if (status === 'delivered') {
-    return <CheckCheck className={cn('w-3.5 h-3.5 inline', className)} />
+  // Pending clock for unknown / pending states.
+  if (!isRead && status !== 'delivered') {
+    return <Clock className={cn('w-3.5 h-3.5 inline', className)} />
   }
-  if (status === 'read') {
-    // When onClick is provided, the read-ticks become a clickable button that
-    // opens the read-receipts dialog (sender-only feature).
-    if (onClick) {
-      return (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onClick()
-          }}
-          className="inline-flex items-center hover:scale-110 transition-transform"
-          title="Read — click to see who read this message"
-          aria-label="Read — click to see details"
-        >
-          <CheckCheck className={cn('w-3.5 h-3.5 inline text-sky-500', className)} />
-        </button>
-      )
-    }
+
+  // Resolve tooltip text + tick color for the double-check state.
+  let title: string
+  let tickColorClass: string
+  let label: string | null = null
+  if (isReadAll) {
+    title = 'Read by all'
+    tickColorClass =
+      'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] wasl-ticks-read-all'
+    label = 'Read by all'
+  } else if (isPartialRead) {
+    title = `Read by ${readCount} of ${totalRecipients}`
+    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+    label = `${readCount}/${totalRecipients}`
+  } else if (status === 'read') {
+    // Legacy "read" status without a readCount summary (1-on-1 chats where
+    // the server didn't populate the summary, or older messages). Per the
+    // design rules, we use the wasl-teal/green palette — never blue/indigo.
+    title = 'Read — click to see details'
+    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+  } else {
+    // Delivered (no reads yet).
+    title = 'Delivered'
+    tickColorClass = 'text-foreground/50'
+  }
+
+  const ticksEl = (
+    <CheckCheck className={cn('w-3.5 h-3.5 inline', tickColorClass, className)} />
+  )
+
+  // Optional small muted label that appears next to the ticks. For "Read by
+  // all" we show the full label; for partial reads we show a compact "N/M"
+  // count badge. Both are intentionally tiny (text-[9px]) and muted so they
+  // stay unobtrusive next to the timestamp.
+  const labelEl = label ? (
+    <span className="text-[9px] font-medium leading-none text-foreground/50 ml-0.5 select-none">
+      {label}
+    </span>
+  ) : null
+
+  // When onClick is provided, the ticks become a clickable button that opens
+  // the read-receipts dialog (sender-only feature).
+  if (onClick) {
     return (
-      <CheckCheck className={cn('w-3.5 h-3.5 inline text-sky-500', className)} />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onClick()
+        }}
+        className="inline-flex items-center hover:scale-110 transition-transform"
+        title={title}
+        aria-label={title}
+      >
+        {ticksEl}
+        {labelEl}
+      </button>
     )
   }
-  return <Clock className={cn('w-3.5 h-3.5 inline', className)} />
+  return (
+    <span className="inline-flex items-center" title={title}>
+      {ticksEl}
+      {labelEl}
+    </span>
+  )
 }
 
 function groupReactions(reactions: Reaction[]) {

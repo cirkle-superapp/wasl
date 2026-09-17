@@ -3939,3 +3939,226 @@ said "proceed implementing, upgrading, and fixing".
 - Add message draft persistence (save unsent messages per conversation)
 - Add read-by-everyone indicator
 - Add message edit time limit indicator
+
+---
+Task ID: 37-a
+Agent: general-purpose (message draft persistence)
+Task: Add per-conversation message draft persistence so unsent text is saved when the user switches conversations or reloads the page, restored on return, and deleted when the message is sent. Includes a new Prisma `Draft` model, `/api/drafts` CRUD routes, debounced save + restore in the message-input, and a "Draft" badge + "Draft: <preview>" sidebar indicator.
+
+Work Log:
+- Read `worklog.md` (Tasks 35, 36 — bookmarks, global search, voice transcription) to mirror established patterns: `getSession()` auth + `db.participant.findUnique({ where: { conversationId_userId } })` membership check; `Bookmark` model as a structural template for the new `Draft` model; chat-app bootstrap-fetch pattern (bookmarks → drafts).
+- Inspected `src/components/wasl/message-input.tsx`, `src/components/wasl/sidebar.tsx`, `src/lib/store.ts`, `src/components/wasl/chat-app.tsx`, and `src/app/api/bookmarks/route.ts` (+ `[id]/route.ts`) for the exact code to extend.
+
+Step 1 — Prisma schema (`prisma/schema.prisma`, MODIFIED):
+- Added a new `Draft` model after `Bookmark` with `id`, `userId`, `conversationId`, `content`, `replyToId?`, `updatedAt`, `createdAt`, relations to `User` + `Conversation` (both `onDelete: Cascade`), `@@unique([userId, conversationId])` (one draft per user+conversation), and `@@index([userId])`. Comment block matches the task spec.
+- Added `drafts Draft[]` back-relation on `User` (next to `bookmarks`) and on `Conversation` (next to `polls`).
+- Ran `bun run db:push` — schema applied successfully, Prisma client regenerated, no data loss.
+
+Step 2 — API route `src/app/api/drafts/route.ts` (NEW):
+- `GET` — lists all drafts for the current user (`db.draft.findMany` with `select` on `conversationId, content, replyToId, updatedAt`), returns `{ drafts: [...] }`. Auth check (`getSession()` → 401 if missing).
+- `POST` — body `{ conversationId, content, replyToId? }`. Auth check + membership check (`db.participant.findUnique` → 403 if not a member). If `content` is empty after trim → DELETE the draft (idempotent, returns `{ ok: true, deleted: true }`). Otherwise → upsert on the `(userId, conversationId)` unique constraint, returns `{ ok: true }`. `replyToId` defaults to null when absent or empty.
+
+Step 3 — API route `src/app/api/drafts/[conversationId]/route.ts` (NEW):
+- `GET` — returns the draft for the given conversation + current user as `{ content, replyToId }`, or `{ content: null }` if no draft exists. Auth check.
+- `DELETE` — idempotent delete of the draft for the given conversation + current user (P2025 not-found errors are swallowed and treated as success). Returns `{ ok: true }`. Auth check.
+
+Step 4 — Zustand store (`src/lib/store.ts`, MODIFIED):
+- Added a new `drafts: Record<string, string>` state (conversationId → draft text) plus three actions:
+  - `setDrafts(drafts)` — bulk replace (used by the chat-app bootstrap fetch).
+  - `setDraft(conversationId, content)` — optimistic single update; if content is empty/whitespace, the key is removed entirely so the sidebar badge disappears cleanly.
+  - `clearDraft(conversationId)` — remove a single conversation's draft.
+- Documented the contract in a comment block (mirrors the bookmarks section style).
+
+Step 5 — Chat-app bootstrap (`src/components/wasl/chat-app.tsx`, MODIFIED):
+- Pulled `setDrafts` from the store and added a `fetch('/api/drafts')` call in the existing bootstrap `useEffect` (alongside the bookmarks fetch). Maps the response into a `Record<conversationId, content>` and calls `setDrafts`. Added `setDrafts` to the dep array.
+
+Step 6 — Message-input save/restore (`src/components/wasl/message-input.tsx`, MODIFIED):
+- Added `useCallback` to the React imports.
+- Added three refs + two store selectors:
+  - `draftSaveTimer` — debounce timer for the POST /api/drafts call.
+  - `typingSinceRestoreRef` — boolean gate so the restore fetch doesn't overwrite text the user has typed since the switch.
+  - `draftConversationRef` — tracks which conversationId the current draft state belongs to, so a late-firing debounced save writes to the correct row.
+  - `setDraft` / `clearDraft` from the store.
+- Replaced the "reset state on conversation change" `useEffect` with a draft-restore effect:
+  - Cancels any pending debounced save for the previous conversation.
+  - Optimistically seeds the textarea from the store's `drafts[conversationId]` (no flicker).
+  - GET `/api/drafts/{conversationId}` — if the user has typed since the switch, the response is ignored; otherwise the textarea is set to the server's draft text and the store is updated. If the draft has a `replyToId`, a retry-poll helper looks up the target message in `messagesByConversation` (up to 8 attempts × 250ms ≈ 2s) and restores the reply banner via `setReplyTo`.
+- Added a `saveDraft(content, replyToIdOverride?)` `useCallback` that updates the store optimistically and POSTs `/api/drafts` with `keepalive: true`. The `replyToId` resolves to: explicit override (used by the cancel-reply handler) > current `replyTo` from the store > null.
+- `handleChange` now sets `typingSinceRestoreRef = true` and arms a 500ms debounce timer that calls `saveDraft(v)`.
+- `handleSend` now cancels the pending debounced save, calls `clearDraft(sentConvId)` optimistically, resets `typingSinceRestoreRef`, and fires `DELETE /api/drafts/{sentConvId}` with `keepalive: true` after the message has been sent.
+- No new visual UI in the input itself — the existing textarea + reply banner are reused.
+
+Step 7 — Sidebar indicator (`src/components/wasl/sidebar.tsx`, MODIFIED):
+- Added `PencilLine` to the lucide-react imports.
+- `ConversationRow` now subscribes to `drafts[conversation.id]` from the store (single selector, returns a string → cheap re-render). Derived `hasDraft` boolean + `draftPreview` (whitespace-collapsed).
+- Conversation name row: when `hasDraft`, renders a small italic "Draft" badge (text-[10px], italic, `text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]`, `bg-[var(--wasl-green)]/10`, `PencilLine` icon) next to the conversation name. Wrapped the name + badge in a `flex items-center gap-1.5` container so the truncate + shrink-0 layout works.
+- Preview row (between name + timestamp): added a new `hasDraft` branch (between the typing dots and the default preview) that shows `PencilLine icon + "Draft: {preview}"` in muted foreground, replacing the regular last-message preview when a draft exists. Typing indicator still takes precedence over the draft preview.
+
+Step 8 — Verification:
+- `bun run db:push` → success, Prisma client regenerated.
+- `bun run lint` → 0 errors, 0 warnings.
+- `bunx tsc --noEmit` filtered to my touched files (`drafts/route.ts`, `drafts/[conversationId]/route.ts`, `message-input.tsx`, `wasl/sidebar.tsx`, `store.ts`, `chat-app.tsx`) → no new errors. (One pre-existing TS error in `chat-app.tsx` line 355 — the `t.id` toast library type issue — was confirmed to pre-date this task via `git stash`.)
+- Dev server (restarted on port 3000 after schema change) — `GET /` → 200 (page compiles cleanly).
+- End-to-end API smoke tests with a real session cookie (`wasl_session=<test_user_id>`):
+  - `GET /api/drafts` (no drafts) → `{ drafts: [] }` 200 ✅
+  - `GET /api/drafts/{convId}` (no draft) → `{ content: null }` 200 ✅
+  - `POST /api/drafts` (save) → `{ ok: true }` 200 ✅
+  - `POST /api/drafts` (with `replyToId`) → `{ ok: true }` 200; GET returns `replyToId` ✅
+  - `GET /api/drafts/{convId}` (after save) → `{ content, replyToId }` 200 ✅
+  - `GET /api/drafts` (list) → `{ drafts: [...] }` 200 ✅
+  - `POST /api/drafts` (empty content) → `{ ok: true, deleted: true }` 200; subsequent GET returns `{ content: null }` ✅
+  - `DELETE /api/drafts/{convId}` → `{ ok: true }` 200 (idempotent — second delete also returns ok) ✅
+  - `POST /api/drafts` with a conversation the user isn't a member of → `{ error: 'Forbidden' }` 403 ✅
+  - `POST /api/drafts` missing `conversationId` → `{ error: 'conversationId is required' }` 400 ✅
+  - `GET /api/drafts` (unauthenticated) → `{ error: 'Unauthorized' }` 401 ✅
+
+Stage Summary:
+- **Prisma** (`prisma/schema.prisma`, MODIFIED): new `Draft` model (one per user+conversation via `@@unique([userId, conversationId])`) with optional `replyToId` for reply drafts; back-relations added on `User` and `Conversation`. Applied with `bun run db:push` — no data loss.
+- **API** (NEW): `src/app/api/drafts/route.ts` — `GET` lists all drafts for the current user, `POST` upserts (or deletes if `content` is empty) with auth + conversation-membership checks. `src/app/api/drafts/[conversationId]/route.ts` — `GET` returns `{ content, replyToId }` (or `{ content: null }`), `DELETE` is idempotent.
+- **Store** (`src/lib/store.ts`, MODIFIED): added `drafts: Record<string, string>` state + `setDrafts` (bulk), `setDraft` (single, optimistic — empties auto-remove), `clearDraft` actions for the sidebar badge + preview.
+- **Chat-app** (`src/components/wasl/chat-app.tsx`, MODIFIED): bootstraps the drafts map from `GET /api/drafts` on app mount (alongside the bookmarks fetch).
+- **Message-input** (`src/components/wasl/message-input.tsx`, MODIFIED): 500ms debounced save via POST /api/drafts on every keystroke; on conversation switch, GETs the draft and restores textarea + reply banner (retry-poll for the reply target message); on send, cancels the pending save + DELETEs the draft. `typingSinceRestoreRef` guards against the restore fetch clobbering in-progress typing. `keepalive: true` on save/delete so they survive tab close.
+- **Sidebar** (`src/components/wasl/sidebar.tsx`, MODIFIED): per-conversation subscription to `drafts[id]` from the store; subtle italic "Draft" badge with `PencilLine` icon next to the conversation name; preview row replaces the last-message text with `PencilLine icon + "Draft: <preview>"` when a draft exists (typing indicator still takes precedence). All colors are from the wasl palette (`--wasl-teal` / `--wasl-green`) — no indigo/blue.
+- TypeScript-strict, no test files created, did NOT run `bun run build`. All UI uses existing shadcn primitives + the wasl color tokens.
+
+---
+Task ID: 37-b
+Agent: general-purpose (read-by-everyone indicator)
+Task: Add a "read by everyone" indicator on sent message bubbles. Currently messages only show a "Read" link that opens a breakdown panel; this task adds a visual cue on the bubble itself when ALL recipients have read the message, plus a partial "N/M" count badge while only some have read it.
+
+Work Log:
+- Read worklog + Prisma schema + read-receipts API + message-bubble.tsx + chat-window.tsx + store.ts to understand the existing patterns (Task IDs 35/36, the Participant.lastReadAt rule, the `StatusTicks` component, and the `onStatus` socket handler).
+- `src/app/api/conversations/[id]/messages/route.ts` (GET, MODIFIED): Added a single `db.participant.findMany` query for the conversation's OTHER participants (excluding the current user) once per request, then for each outgoing message computed `readByEveryone`, `readCount` (number of participants whose `lastReadAt >= message.createdAt`), and `totalRecipients`. These three fields are added to the message response. Undefined for incoming messages (the bubble only uses them on outgoing messages). Mirrors the bucketing rule in `/api/messages/[id]/read-receipts`. Pre-computed epoch ms for each `lastReadAt` so the per-message loop stays O(participants × messages).
+- `src/lib/store.ts` (MODIFIED):
+  - Extended `ChatMessage` type with `readByEveryone?: boolean`, `readCount?: number`, `totalRecipients?: number` (sender-only, computed by the messages API).
+  - Added a new `bumpMessageReadCount(conversationId, messageIds)` store action that increments `readCount` by 1 for each affected outgoing message (clamped to `totalRecipients`, no-op when `totalRecipients` is missing — i.e. for incoming messages), sets `readByEveryone = true` when the count reaches the total, and bumps `status` to at least `'read'`. This is what makes the bubble's "Read by all" indicator update incrementally as `message:status` socket events arrive (one per participant who reads).
+- `src/components/wasl/message-bubble.tsx` (MODIFIED): Rewrote the `StatusTicks` component to accept `readByEveryone`, `readCount`, `totalRecipients` props and render three distinct states:
+  - `readByEveryone === true` → wasl-teal/green `CheckCheck` with the `wasl-ticks-read-all` CSS class (drives the pulse animation), tooltip "Read by all", and a small muted "Read by all" text label next to the ticks.
+  - `readCount > 0` but `readByEveryone === false` → wasl-teal/green `CheckCheck` with a small muted "N/M" count badge next to it (e.g. "3/5"), tooltip "Read by 3 of 5".
+  - `readCount === 0` / undefined and `status === 'read'` (legacy path for 1-on-1 chats where the summary isn't populated, or older messages) → wasl-teal/green `CheckCheck` with tooltip "Read — click to see details". (Replaced the old `text-sky-500` blue with wasl-teal/green per the "no blue/indigo" design rule.)
+  - `status === 'delivered'` → muted double-check, tooltip "Delivered".
+  - `status === 'sent'` → single `Check`. Anything else → `Clock`.
+  - Clicking the ticks still opens the existing `ReadReceiptsDialog` (unchanged behaviour).
+  - Updated all 5 `StatusTicks` callers in the file (text bubble, image bubble, voice bubble, PdfDocumentCardContent, AudioUrlCardContent) to pass `message.readByEveryone`, `message.readCount`, `message.totalRecipients`.
+- `src/components/wasl/chat-window.tsx` (MODIFIED):
+  - Imported the new `bumpMessageReadCount` store action and added it to the dependency array of the socket-listener `useEffect`.
+  - Extended the existing `onStatus` socket handler: when a `message:status` event arrives with `status === 'read'` from another participant (`byUserId !== user?.id`), also call `bumpMessageReadCount` so the per-recipient read summary updates in real-time. The existing `updateMessageStatus(activeConversationId, payload.messageIds, 'read')` call (which sets the message `status` field) is preserved unchanged.
+  - Added a small additive `message:status` socket emit with `status: 'read'` in `loadMessages` (after the existing `'delivered'` emit). When the recipient opens the conversation, the GET endpoint already marks all of the sender's messages as 'read' on the server side; this new emit mirrors that over the socket so the sender's "Read by all" indicator flips in real-time without needing a refetch. The emit filters for messages whose status in the GET response was not already `'read'`, so subsequent loads (e.g. infinite scroll) don't double-count.
+- `src/app/globals.css` (MODIFIED): Added a `wasl-ticks-read-all-pop` keyframe animation (scale-up → settle, with a soft green drop-shadow that fades out) and a `.wasl-ticks-read-all` class that triggers it for 0.6s ease-out. Honors `prefers-reduced-motion`. React reuses the underlying `<svg>` element across renders, so adding this class is what triggers the browser to (re)run the animation once when the bubble transitions from "delivered / partial" → "read by all".
+- Verification:
+  - `bun run lint` → 0 errors, 0 warnings. (The only project warning is a pre-existing `react-hooks/exhaustive-deps` eslint-disable in `message-input.tsx`, which I did NOT touch.)
+  - `bunx tsc --noEmit` filtered to my touched files → no new errors. (Two pre-existing TS errors in `chat-window.tsx` at `otherUser.phone` possibly null on lines 555 & 778 — confirmed by `git stash` that they existed at lines 522 & 745 BEFORE my changes; my edits only shifted their line numbers.)
+  - Manual API smoke test with two real demo users (Demo User + Amira Hassan in a 1-on-1):
+    1. Demo sends "test read-by-all msg" via POST → response includes `status: 'sent'` (no read summary on POST response since `Message.create` doesn't compute it — that's fine, the bubble falls back to legacy `status` rendering).
+    2. Demo re-fetches → message shows `readByEveryone: false, readCount: 0, totalRecipients: 1`. ✅ (Amira's lastReadAt is older than the message createdAt.)
+    3. Amira opens the conversation (GET as Amira) → server updates Amira's `lastReadAt` to NOW.
+    4. Demo re-fetches → message now shows `readByEveryone: true, readCount: 1, totalRecipients: 1, status: 'read'`. ✅
+  - This confirms the bubble would render the wasl-teal/green `CheckCheck` with the "Read by all" label + pop animation on step 4.
+
+Stage Summary:
+- Modified files (5):
+  - `src/app/api/conversations/[id]/messages/route.ts` — GET now computes `readByEveryone` / `readCount` / `totalRecipients` for outgoing messages from `Participant.lastReadAt` vs `Message.createdAt` (single participant query reused across all messages in the page).
+  - `src/lib/store.ts` — `ChatMessage` type extended with the 3 new fields; new `bumpMessageReadCount` store action increments them incrementally as `message:status` 'read' events arrive.
+  - `src/components/wasl/message-bubble.tsx` — `StatusTicks` rewritten to render 3 states (read-by-all with wasl-teal/green + pop animation + "Read by all" label, partial-read with "N/M" count badge, legacy delivered/sent). All 5 caller sites pass the new props. Replaced `text-sky-500` (blue) with wasl-teal/green to comply with the "no blue/indigo" design rule.
+  - `src/components/wasl/chat-window.tsx` — `onStatus` socket handler now also calls `bumpMessageReadCount` on 'read' events from other participants; `loadMessages` now emits a 'read' socket event for the sender's messages that weren't already 'read' so the sender's bubble updates in real-time.
+  - `src/app/globals.css` — new `wasl-ticks-read-all-pop` keyframe + `.wasl-ticks-read-all` class (0.6s ease-out scale-pop + soft green glow, honors `prefers-reduced-motion`).
+- All UI uses the wasl color palette (`--wasl-teal` / `--wasl-green`). No indigo/blue anywhere in my changes. TypeScript-strict. No test files created. Did NOT run `bun run build`. No Prisma schema changes needed (reuses existing `Participant.lastReadAt` + `Message.createdAt` + `Message.status`).
+
+---
+Task ID: 37 — Message draft persistence + Read-by-everyone indicator
+Agent: main (COO / Project Manager role)
+
+### Task
+Continue implementing, upgrading, and fixing the Wasl messaging app. The user
+said "proceed implementing, upgrading, and fixing".
+
+### Phase 1: Message Draft Persistence (subagent 37-a)
+**Files:** `prisma/schema.prisma`, `src/app/api/drafts/route.ts` (NEW), `src/app/api/drafts/[conversationId]/route.ts` (NEW), `src/lib/store.ts`, `src/components/wasl/chat-app.tsx`, `src/components/wasl/message-input.tsx`, `src/components/wasl/sidebar.tsx`
+
+**Prisma schema:** New `Draft` model:
+- `userId`, `conversationId`, `content`, `replyToId?`
+- `@@unique([userId, conversationId])` — one draft per user per conversation
+- Back-relations on User and Conversation
+
+**API routes:**
+- `GET /api/drafts` — list all user drafts
+- `POST /api/drafts { conversationId, content, replyToId? }` — upsert (or delete if content empty)
+- `GET /api/drafts/[conversationId]` — get one draft
+- `DELETE /api/drafts/[conversationId]` — remove draft (after sending)
+
+**UI — message-input:**
+- 500ms-debounced save on keystroke via POST /api/drafts
+- On conversationId change: GET /api/drafts/{id} to restore textarea + reply banner
+- On send: cancel pending save + DELETE the draft
+- `typingSinceRestoreRef` guard prevents restore from clobbering in-progress typing
+
+**Store:** `drafts: Record<string, string>` + setDrafts/setDraft/clearDraft actions
+**Chat-app:** Bootstraps drafts from GET /api/drafts on mount
+**Sidebar:** Shows "Draft" badge (PencilLine icon) + "Draft: <preview>" for conversations with drafts
+
+**E2E verified:**
+- Save draft → 200 ✅
+- Get draft → 200, returns content ✅
+- List drafts → 1 draft ✅
+- Delete draft → 200 ✅
+- Verify deleted → content: None ✅
+
+### Phase 2: Read-by-Everyone Indicator (subagent 37-b)
+**Files:** `src/app/api/conversations/[id]/messages/route.ts`, `src/lib/store.ts`, `src/components/wasl/message-bubble.tsx`, `src/components/wasl/chat-window.tsx`, `src/app/globals.css`
+
+**API:** Messages GET now computes for each outgoing message:
+- `readByEveryone: boolean` — true if ALL recipients have read (lastReadAt >= createdAt)
+- `readCount: number` — how many recipients have read
+- `totalRecipients: number` — total recipients (excluding sender)
+
+**UI — message-bubble StatusTicks:**
+- **Read by all:** wasl-teal/green CheckCheck + "Read by all" label + pop animation
+- **Partial read:** CheckCheck + "N/M" badge (e.g. "3/5") + tooltip "Read by 3 of 5"
+- **Delivered/sent:** normal double-check (wasl-teal/green, no blue)
+- Replaced old text-sky-500 blue with wasl-teal/green
+
+**Real-time updates:**
+- `onStatus` socket handler calls `bumpMessageReadCount` on 'read' events
+- Added 'read' socket emit in loadMessages after 'delivered' emit
+- Store `bumpMessageReadCount` action increments readCount (clamped to total)
+
+**CSS:** `wasl-ticks-read-all-pop` keyframe (scale-up + green glow) with prefers-reduced-motion guard
+
+**E2E verified:**
+- Old read message: readByEveryone=true, readCount=1, totalRecipients=1 ✅
+- New unread message: readByEveryone=false, readCount=0, totalRecipients=1 ✅
+
+### Phase 3: Verification
+
+| Check | Result |
+|-------|--------|
+| POST /api/auth/login | 200 ✅ |
+| POST /api/drafts (save) | 200 ✅ |
+| GET /api/drafts/{id} | 200, returns content ✅ |
+| GET /api/drafts (list) | 200, 1 draft ✅ |
+| DELETE /api/drafts/{id} | 200 ✅ |
+| Draft after delete | content: None ✅ |
+| Messages API (readByEveryone) | 200, correct computed fields ✅ |
+| `bun run lint` | 0 errors ✅ |
+
+### Files Touched (Task 37)
+- `prisma/schema.prisma` — Draft model (subagent 37-a)
+- `src/app/api/drafts/route.ts` — NEW drafts list + upsert (subagent 37-a)
+- `src/app/api/drafts/[conversationId]/route.ts` — NEW draft get + delete (subagent 37-a)
+- `src/lib/store.ts` — drafts state + bumpMessageReadCount (subagent 37-a + 37-b)
+- `src/components/wasl/chat-app.tsx` — draft bootstrap (subagent 37-a)
+- `src/components/wasl/message-input.tsx` — draft save/restore (subagent 37-a)
+- `src/components/wasl/sidebar.tsx` — draft badge + preview (subagent 37-a)
+- `src/app/api/conversations/[id]/messages/route.ts` — readByEveryone/readCount/totalRecipients (subagent 37-b)
+- `src/components/wasl/message-bubble.tsx` — StatusTicks 3-state UI (subagent 37-b)
+- `src/components/wasl/chat-window.tsx` — bumpMessageReadCount on read event (subagent 37-b)
+- `src/app/globals.css` — wasl-ticks-read-all-pop animation (subagent 37-b)
+
+### Outstanding (next-phase priorities)
+- Server stability investigation (dev server becomes unresponsive after N requests)
+- Full agent-browser E2E verification once server is stable
+- Add contact import (from phone / CSV)
+- Add real speech-to-text for voice transcription (when a suitable API is available)
+- Add message edit time limit indicator
+- Add group invite link sharing via WhatsApp/Telegram
+- Add message copy with formatting preservation

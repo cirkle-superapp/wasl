@@ -19,6 +19,7 @@ import {
   Star,
   Bookmark as BookmarkIcon,
   TextSearch,
+  PencilLine,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -492,6 +493,11 @@ function ConversationRow({
   // to display names is done in the component body below.
   const typingByConv = useWaslStore((s) => s.typingByConversation[conversation.id])
   const myId = useWaslStore((s) => s.user?.id)
+  // Subscribe to the draft text for THIS conversation so the "Draft" badge
+  // + "Draft: <preview>" last-message text react in real-time as the user
+  // types or sends.
+  const draftText = useWaslStore((s) => s.drafts[conversation.id] || '')
+  const hasDraft = draftText.trim().length > 0
   const typingNames = typingByConv
     ? Object.entries(typingByConv)
         .filter(([uid]) => uid !== myId)
@@ -511,6 +517,11 @@ function ConversationRow({
   if (last?.type === 'audio') preview = '🎵 Audio'
   if (last?.type === 'voice') preview = '🎤 Voice message'
   if (last?.type === 'system') preview = last?.content
+
+  // Draft preview takes precedence over the last-message preview — WhatsApp
+  // shows "Draft: <text>" in the conversation row when there's an unsent
+  // message saved for that conversation.
+  const draftPreview = draftText.replace(/\s+/g, ' ').trim()
 
   const previewSender =
     conversation.isGroup && last && !isMine && last.type !== 'system'
@@ -570,11 +581,23 @@ function ConversationRow({
         <div className="flex items-center justify-between gap-2">
           <div
             className={cn(
-              'font-semibold truncate text-foreground',
+              'font-semibold truncate text-foreground flex items-center gap-1.5',
               conversation.unreadCount > 0 && 'text-foreground'
             )}
           >
-            {conversation.name}
+            <span className="truncate">{conversation.name}</span>
+            {/* Subtle "Draft" badge — shown only when there's unsent text for
+                this conversation. Uses italic muted-foreground to match
+                WhatsApp's quiet draft indicator. */}
+            {hasDraft && (
+              <span
+                title="You have an unsent draft in this conversation"
+                className="inline-flex items-center gap-0.5 text-[10px] italic font-medium text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] bg-[var(--wasl-green)]/10 rounded px-1 py-0.5 shrink-0"
+              >
+                <PencilLine className="w-2.5 h-2.5" />
+                Draft
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {last && (
@@ -611,6 +634,13 @@ function ConversationRow({
                   <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
                 </span>
                 <span className="truncate">{typingText}</span>
+              </>
+            ) : hasDraft ? (
+              <>
+                <PencilLine className="w-3.5 h-3.5 shrink-0 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" />
+                <span className="truncate">
+                  Draft: {draftPreview}
+                </span>
               </>
             ) : (
               <>

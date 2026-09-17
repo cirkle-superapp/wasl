@@ -898,6 +898,37 @@ kbd {
   .wasl-read-receipts-pop { animation: none; }
 }
 
+/* ---- "Read by all" tick pop ------------------------------------------------
+   Plays ONCE when the StatusTicks element transitions into the read-by-all
+   state — i.e. when the `wasl-ticks-read-all` class is added. React reuses
+   the underlying <svg> element across renders, so adding this class
+   triggers the browser to (re)run the keyframe animation one time. The
+   pop is a small scale-up then settle, finished with a soft green glow
+   that fades out — subtle enough to not distract from the message text. */
+@keyframes wasl-ticks-read-all-pop {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  35% {
+    transform: scale(1.28);
+    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--wasl-green) 55%, transparent));
+  }
+  60% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+.wasl-ticks-read-all {
+  animation: wasl-ticks-read-all-pop 0.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wasl-ticks-read-all { animation: none; }
+}
+
 /* ---- Avatar image fade-in — used on every WaslAvatar <img> so swapping in
    a new photo (e.g. after an admin uploads a group avatar) fades in smoothly
    instead of snapping. The `key` on the <img> forces React to remount the

@@ -69,6 +69,7 @@ export function ChatWindow({
     addMessage,
     prependMessages,
     updateMessageStatus,
+    bumpMessageReadCount,
     conversations,
     upsertConversation,
     onlineUserIds,
@@ -185,6 +186,27 @@ export function ChatWindow({
           byUserId: user?.id,
         })
       }
+
+      // Emit READ status for messages from others that weren't already 'read'.
+      // The GET endpoint already marked them as 'read' on the server (it
+      // updates `lastReadAt` + sets message.status='read' before returning),
+      // but the response carries the OLD status (the findMany ran before the
+      // updateMany), so we filter for "not yet read" here to avoid
+      // double-counting on subsequent loads (e.g. when the user scrolls up to
+      // load older pages). This socket emit is what drives the sender's
+      // "Read by all" indicator in real-time (Task 37-b) — without it, the
+      // sender would only see the updated read state on their next refetch.
+      const othersUnreadMsgIds = msgs
+        .filter((m) => m.senderId !== user?.id && m.status !== 'read')
+        .map((m) => m.id)
+      if (othersUnreadMsgIds.length > 0) {
+        getSocket().emit('message:status', {
+          conversationId: activeConversationId,
+          messageIds: othersUnreadMsgIds,
+          status: 'read',
+          byUserId: user?.id,
+        })
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -275,6 +297,17 @@ export function ChatWindow({
     }) {
       if (!payload || payload.conversationId !== activeConversationId) return
       updateMessageStatus(activeConversationId, payload.messageIds, payload.status)
+      // When another participant marks messages as READ, also incrementally
+      // update the per-recipient read summary (readCount / readByEveryone) on
+      // the affected outgoing messages. The server doesn't push the full
+      // per-recipient breakdown over the socket — we derive it locally by
+      // treating each 'read' event from a distinct participant as +1 read.
+      // `bumpMessageReadCount` is a no-op for messages without `totalRecipients`
+      // (incoming messages / older state), and clamps to the total so a repeat
+      // 'read' event from the same participant doesn't double-count.
+      if (payload.status === 'read' && payload.byUserId !== user?.id) {
+        bumpMessageReadCount(activeConversationId, payload.messageIds)
+      }
     }
 
     // When another client updates a commit (sign/complete), re-fetch it.
@@ -333,7 +366,7 @@ export function ChatWindow({
       socket.off('commit:updated', onCommitUpdated)
       socket.off('message:reacted', onMessageReacted)
     }
-  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, upsertCommit, removeMessage])
+  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, bumpMessageReadCount, upsertCommit, removeMessage])
 
   // ---- Auto-scroll to bottom when new messages arrive ------------------------
   useEffect(() => {

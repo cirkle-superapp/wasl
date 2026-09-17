@@ -77,6 +77,16 @@ export type ChatMessage = {
   // POST /api/ai/transcribe. Null/undefined when no transcription is
   // available yet (the bubble then shows a "Transcribe" CTA).
   transcription?: string | null
+  // ---- Read-receipt summary (sender-only, computed by the messages API) ----
+  // `readByEveryone` is true when EVERY other participant has read the message.
+  // `readCount` is how many of `totalRecipients` have read it.
+  // `totalRecipients` is the number of OTHER participants (excluding the sender).
+  // All three are only populated for messages the current user sent; they're
+  // undefined for incoming messages. They drive the "Read by all" indicator
+  // on the outgoing message bubble.
+  readByEveryone?: boolean
+  readCount?: number
+  totalRecipients?: number
 }
 
 // Cirkle-inspired Commit (AI-verified agreement) attached to a conversation.
@@ -141,6 +151,16 @@ type WaslState = {
     conversationId: string,
     messageIds: string[],
     status: string
+  ) => void
+  // Bumps `readCount` by 1 for each affected outgoing message (clamped to
+  // `totalRecipients`) and sets `readByEveryone = true` once the count reaches
+  // the total. Used by the chat-window socket `message:status` handler when a
+  // 'read' event arrives from another participant — the server doesn't push the
+  // full per-recipient breakdown over the socket, so we incrementally update
+  // the local summary on each 'read' receipt.
+  bumpMessageReadCount: (
+    conversationId: string,
+    messageIds: string[]
   ) => void
 
   onlineUserIds: Set<string>
@@ -209,6 +229,17 @@ type WaslState = {
   bookmarkedMessageIds: Set<string>
   setBookmarkedIds: (ids: string[]) => void
   setBookmarked: (messageId: string, bookmarked: boolean) => void
+
+  // ---- Drafts (unsent message persistence) ---------------------------------
+  // Map of `conversationId` → draft text for the current user. Kept in sync
+  // with the /api/drafts endpoint — bootstrapped on app load and updated
+  // optimistically as the user types in the message-input. The sidebar uses
+  // this to render the "Draft" badge + "Draft: <preview>" last-message text.
+  // A missing / empty entry means "no draft".
+  drafts: Record<string, string>
+  setDrafts: (drafts: Record<string, string>) => void
+  setDraft: (conversationId: string, content: string) => void
+  clearDraft: (conversationId: string) => void
 }
 
 export const useWaslStore = create<WaslState>((set) => ({
@@ -290,6 +321,41 @@ export const useWaslStore = create<WaslState>((set) => ({
       const updated = existing.map((m) =>
         idSet.has(m.id) ? { ...m, status } : m
       )
+      return {
+        messagesByConversation: {
+          ...state.messagesByConversation,
+          [conversationId]: updated,
+        },
+      }
+    }),
+
+  bumpMessageReadCount: (conversationId, messageIds) =>
+    set((state) => {
+      const existing = state.messagesByConversation[conversationId] || []
+      const idSet = new Set(messageIds)
+      let changed = false
+      const updated = existing.map((m) => {
+        if (!idSet.has(m.id)) return m
+        // Only meaningful for outgoing messages the current user sent
+        // (incoming messages have no `totalRecipients`).
+        const total = m.totalRecipients
+        if (!total || total <= 0) return m
+        const current = m.readCount ?? 0
+        // Don't double-count beyond the total (avoids runaway increments if
+        // the same participant re-emits a 'read' event for the same message).
+        if (current >= total) return m
+        const nextReadCount = current + 1
+        const nextReadByEveryone = nextReadCount >= total
+        changed = true
+        return {
+          ...m,
+          readCount: nextReadCount,
+          readByEveryone: nextReadByEveryone,
+          // Once anyone has read it, the message is at minimum 'read' status.
+          status: m.status === 'read' ? m.status : 'read',
+        }
+      })
+      if (!changed) return state
       return {
         messagesByConversation: {
           ...state.messagesByConversation,
@@ -435,6 +501,31 @@ export const useWaslStore = create<WaslState>((set) => ({
       if (bookmarked) next.add(messageId)
       else next.delete(messageId)
       return { bookmarkedMessageIds: next }
+    }),
+
+  // ---- Drafts (unsent message persistence) ---------------------------------
+  drafts: {},
+  setDrafts: (drafts) => set({ drafts }),
+  setDraft: (conversationId, content) =>
+    set((state) => {
+      // Empty / whitespace-only drafts are treated as "no draft" — remove the
+      // key entirely so the sidebar badge + preview disappear cleanly.
+      if (!content.trim()) {
+        if (!(conversationId in state.drafts)) return state
+        const next = { ...state.drafts }
+        delete next[conversationId]
+        return { drafts: next }
+      }
+      return {
+        drafts: { ...state.drafts, [conversationId]: content },
+      }
+    }),
+  clearDraft: (conversationId) =>
+    set((state) => {
+      if (!(conversationId in state.drafts)) return state
+      const next = { ...state.drafts }
+      delete next[conversationId]
+      return { drafts: next }
     }),
 }))
 

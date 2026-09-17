@@ -70,6 +70,8 @@ model User {
   contactOf         Contact[]      @relation("ContactTarget")
   // Messages this user has bookmarked for follow-up (Save for later).
   bookmarks         Bookmark[]
+  // Unsent message drafts saved per-conversation (one per user+conversation).
+  drafts            Draft[]
 }
 
 /// Contact (address book entry) — a saved contact. `ownerId` is the user who
@@ -134,6 +136,8 @@ model Conversation {
   messages     Message[]
   commits      Commit[]
   polls        Poll[]
+  // Unsent message drafts saved per-user for this conversation.
+  drafts       Draft[]
 }
 
 model Participant {
@@ -318,6 +322,25 @@ model Bookmark {
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([userId, messageId])
+  @@index([userId])
+}
+
+/// Message draft — unsent text saved per-user per-conversation. Automatically
+/// created/updated as the user types, and deleted when the message is sent.
+model Draft {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String
+  content        String
+  // Optional: the reply target if the draft is a reply
+  replyToId      String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
   @@index([userId])
 }
 

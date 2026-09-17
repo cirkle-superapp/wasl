@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Send,
   Smile,
@@ -53,6 +53,21 @@ export function MessageInput({
   //   true  → force protect this message
   //   false → force do NOT protect this message
   const [lockOverride, setLockOverride] = useState<boolean | null>(null)
+
+  // ---- Draft persistence --------------------------------------------------
+  // Debounce timer for saving the draft to the server (500ms after the user
+  // stops typing). Cleared on send and on conversation switch.
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // True once the user has typed anything since the last conversation switch.
+  // Used to guard the restore fetch — if the user starts typing before the
+  // GET /api/drafts/{id} resolves, we DON'T overwrite their text.
+  const typingSinceRestoreRef = useRef<boolean>(false)
+  // The conversationId the current draft state belongs to. Tracked in a ref
+  // so the debounced save callback (which fires later) writes to the right
+  // conversation even if the user has since switched.
+  const draftConversationRef = useRef<string>(conversationId)
+  const setDraft = useWaslStore((s) => s.setDraft)
+  const clearDraft = useWaslStore((s) => s.clearDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   // Hidden input for non-image attachments (PDF / document / audio). Routes
@@ -89,15 +104,107 @@ export function MessageInput({
   const effectiveProtect =
     lockOverride === null ? defaultProtect : lockOverride
 
-  // Reset state when conversation changes
+  // ---- Restore draft on conversation switch --------------------------------
+  // When the user switches conversations (or the component first mounts),
+  // restore the saved draft for that conversation. We DO NOT overwrite the
+  // textarea if the user has started typing since the switch — the GET
+  // resolves async and we don't want to clobber their in-progress text.
   useEffect(() => {
-    setValue('')
+    // Cancel any pending debounced save for the PREVIOUS conversation —
+    // otherwise it would fire after the switch and write stale text to the
+    // wrong conversation row.
+    if (draftSaveTimer.current) {
+      clearTimeout(draftSaveTimer.current)
+      draftSaveTimer.current = null
+    }
+    typingSinceRestoreRef.current = false
+    draftConversationRef.current = conversationId
+
+    // Optimistically seed the textarea from the store so the UI doesn't
+    // flash empty while the GET resolves (the chat-app bootstraps all
+    // drafts into the store on mount).
+    const cached = useWaslStore.getState().drafts[conversationId] || ''
+    setValue(cached)
     setEmojiOpen(false)
     setReplyTo(null)
     setLockOverride(null)
     cancelRecording()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
-  }, [conversationId, setReplyTo])
+
+    let cancelled = false
+    fetch(`/api/drafts/${encodeURIComponent(conversationId)}`, {
+      cache: 'no-store',
+    })
+      .then((r) => r.json())
+      .then((data: { content: string | null; replyToId?: string | null }) => {
+        if (cancelled) return
+        // Don't overwrite text the user has typed since the switch.
+        if (typingSinceRestoreRef.current) return
+        const content =
+          data && typeof data.content === 'string' ? data.content : ''
+        setValue(content)
+        if (content.trim()) {
+          setDraft(conversationId, content)
+        } else {
+          clearDraft(conversationId)
+        }
+        // Restore the reply banner if the draft is a reply. The chat-window
+        // loads messages in parallel on conversation switch, so the target
+        // message may not be in the store yet — retry a few times over ~2s.
+        const replyToId =
+          data && typeof data.replyToId === 'string' ? data.replyToId : null
+        if (replyToId) {
+          tryRestoreReply(replyToId)
+        }
+      })
+      .catch(() => {})
+
+    function tryRestoreReply(id: string, attemptsLeft = 8) {
+      if (cancelled) return
+      const msgs =
+        useWaslStore.getState().messagesByConversation[conversationId] || []
+      const target = msgs.find((m) => m.id === id)
+      if (target) {
+        if (!typingSinceRestoreRef.current) setReplyTo(target)
+        return
+      }
+      if (attemptsLeft > 0) {
+        setTimeout(() => tryRestoreReply(id, attemptsLeft - 1), 250)
+      }
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [conversationId])
+
+  // Debounced save: writes the current draft to the server 500ms after the
+  // last keystroke. Marked inline (`saveDraftNow`) so handleSend can flush
+  // or cancel as needed.
+  const saveDraft = useCallback(
+    (content: string, replyToIdOverride?: string | null) => {
+      const convId = draftConversationRef.current
+      // Optimistically update the store so the sidebar badge / preview
+      // updates immediately (no need to wait for the round-trip).
+      setDraft(convId, content)
+      // Resolve the replyToId: explicit override > current store replyTo > none.
+      const replyToId =
+        replyToIdOverride !== undefined
+          ? replyToIdOverride
+          : useWaslStore.getState().replyTo?.id || null
+      fetch('/api/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: convId,
+          content,
+          replyToId,
+        }),
+        keepalive: true,
+      }).catch(() => {})
+    },
+    [setDraft]
+  )
 
   // ---- Voice recording --------------------------------------------------
   async function startRecording() {
@@ -196,6 +303,13 @@ export function MessageInput({
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
     setValue(v)
+    typingSinceRestoreRef.current = true
+    // Debounce-save the draft 500ms after the user stops typing.
+    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current)
+    draftSaveTimer.current = setTimeout(() => {
+      draftSaveTimer.current = null
+      saveDraft(v)
+    }, 500)
     if (v.trim() && !typingTimer.current) {
       emitTyping(true)
     }
@@ -223,6 +337,20 @@ export function MessageInput({
         clearTimeout(typingTimer.current)
         typingTimer.current = null
       }
+      // ---- Delete the draft now that the message has been sent.
+      // Cancel any pending debounced save first so it doesn't write the
+      // just-typed text back to the DB after we've deleted it.
+      if (draftSaveTimer.current) {
+        clearTimeout(draftSaveTimer.current)
+        draftSaveTimer.current = null
+      }
+      const sentConvId = draftConversationRef.current
+      clearDraft(sentConvId)
+      typingSinceRestoreRef.current = false
+      fetch(`/api/drafts/${encodeURIComponent(sentConvId)}`, {
+        method: 'DELETE',
+        keepalive: true,
+      }).catch(() => {})
       // refocus
       textareaRef.current?.focus()
     } catch (e) {

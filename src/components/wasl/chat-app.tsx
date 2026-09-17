@@ -38,6 +38,7 @@ export function ChatApp({ user }: { user: any }) {
     setShowProfilePanel,
     showProfilePanel,
     setBookmarkedIds,
+    setDrafts,
   } = useWaslStore()
   const [newChatOpen, setNewChatOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -84,8 +85,24 @@ export function ChatApp({ user }: { user: any }) {
         }
       })
       .catch((e) => console.error(e))
-     
-  }, [user.id, setBookmarkedIds, setUser])
+    // Load all my drafts — used by the sidebar to show "Draft" badges + the
+    // "Draft: <preview>" last-message text per conversation.
+    fetch('/api/drafts', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.drafts)) {
+          const map: Record<string, string> = {}
+          for (const d of data.drafts) {
+            if (d && typeof d.conversationId === 'string' && typeof d.content === 'string') {
+              map[d.conversationId] = d.content
+            }
+          }
+          setDrafts(map)
+        }
+      })
+      .catch((e) => console.error(e))
+
+  }, [user.id, setBookmarkedIds, setUser, setDrafts])
 
   // Close contact info panel when conversation changes
   useEffect(() => {
