@@ -553,6 +553,7 @@ export function ChatWindow({
         conversation &&
         !conversation.isGroup &&
         otherUser &&
+        otherUser.phone &&
         otherUser.phone.startsWith('+20100')
       ) {
         const conversationId = activeConversationId

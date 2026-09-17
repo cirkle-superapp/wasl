@@ -14,7 +14,8 @@ function evictCache() {
   const toRemove = cache.size - CACHE_MAX
   const iter = cache.keys()
   for (let i = 0; i < toRemove; i++) {
-    cache.delete(iter.next().value)
+    const key = iter.next().value
+    if (key) cache.delete(key)
   }
 }
 

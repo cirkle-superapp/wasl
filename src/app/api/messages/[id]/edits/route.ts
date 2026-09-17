@@ -53,7 +53,7 @@ export async function GET(
     edits: edits.map((e) => ({
       id: e.id,
       content: e.content,
-      editedAt: e.createdAt,
+      editedAt: e.editedAt,
     })),
   })
 }

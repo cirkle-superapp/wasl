@@ -352,7 +352,7 @@ export function ChatApp({ user }: { user: any }) {
                 }
               }}
               onOpen={() => {
-                toast.dismiss(t.id)
+                toast.dismiss(toastId)
                 setActiveConversation(convId)
               }}
             />

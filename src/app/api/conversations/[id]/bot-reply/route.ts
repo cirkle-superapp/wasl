@@ -51,7 +51,7 @@ export async function POST(
   if (!other) {
     return NextResponse.json({ error: 'No counterparty' }, { status: 400 })
   }
-  if (!other.user.phone.startsWith('+20100')) {
+  if (!other.user.phone || !other.user.phone.startsWith('+20100')) {
     return NextResponse.json(
       { error: 'Counterparty is not a demo bot' },
       { status: 400 }

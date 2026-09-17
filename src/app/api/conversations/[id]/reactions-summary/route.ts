@@ -87,7 +87,7 @@ export async function GET(
       username: user.username,
       avatar: user.avatar,
       avatarColor: user.avatarColor,
-      reactedAt: r.createdAt,
+      reactedAt: r.createdAt.toISOString(),
     }
     if (existing) {
       existing.count++

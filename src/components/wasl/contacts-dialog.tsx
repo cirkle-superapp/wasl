@@ -283,8 +283,8 @@ function ContactRow({
     <div className="group flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-muted/40 transition-colors">
       <WaslAvatar
         name={name}
-        avatar={contact.user?.avatar}
-        avatarColor={contact.user?.avatarColor || undefined}
+        src={contact.user?.avatar}
+        color={contact.user?.avatarColor || undefined}
         size={40}
         online={contact.user?.online}
       />
@@ -451,8 +451,8 @@ function AddContactForm({
               >
                 <WaslAvatar
                   name={u.name}
-                  avatar={u.avatar}
-                  avatarColor={u.avatarColor || undefined}
+                  src={u.avatar}
+                  color={u.avatarColor || undefined}
                   size={32}
                 />
                 <div className="flex-1 min-w-0">

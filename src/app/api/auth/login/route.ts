@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     // Look up the user by the identifier type
     const type = detectIdentifierType(safeIdentifier)
-    let user = null
+    let user: Awaited<ReturnType<typeof db.user.findUnique>> = null
     if (type === 'email') {
       user = await db.user.findUnique({
         where: { email: safeIdentifier.toLowerCase() },
