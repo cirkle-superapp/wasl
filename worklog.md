@@ -5365,3 +5365,72 @@ All business features now FULLY implemented, verified, and deployed:
 13. ✅ **NEW: Business badge (🏢) in message-bubble**
 14. ✅ **NEW: senderLabelColor used for sender name color**
 15. ✅ **NEW: SP auto-approved for testing (canBroadcast=true)**
+
+---
+Task ID: 48 — Conversation export + Draft autosave indicator
+Agent: main (COO / CTO / Project Manager / UI Architect)
+
+### Task
+Implement new features: conversation export (chat history download) +
+draft autosave indicator.
+
+### Phase 1: Conversation Export API (NEW)
+**File: src/app/api/conversations/[id]/export/route.ts (NEW — 149 lines)**
+
+GET /api/conversations/[id]/export?format=text|json
+
+**Text format:**
+- Human-readable transcript with timestamps
+- Sender names (uses senderLabel for business messages)
+- Business badge (🏢) and protection indicator (🔒)
+- Edited tags, media labels ([Photo], [Voice], [PDF], etc.)
+- System messages rendered as "─── content ───"
+- Header with conversation name, type, message count, export date
+- Content-Disposition header for file download
+
+**JSON format:**
+- Structured JSON with all message fields
+- Includes senderLabel, senderLabelColor, replyToId, protected, edited
+- Header with conversation metadata
+
+**Security:**
+- Requires authentication (session check)
+- Verifies conversation membership (403 if not a participant)
+- Excludes "deleted for me" messages
+- Limited to 10,000 messages for safety
+
+### Phase 2: Export Button in Contact-Info-Panel
+**File: src/components/wasl/contact-info-panel.tsx**
+- Added "Export chat" button between "Encryption" and "Delete chat"
+- Uses Download icon from lucide-react
+- Fetches the text format and triggers browser download via Blob + anchor
+- Shows toast on success/error
+
+### Phase 3: Draft Autosave Indicator
+**File: src/components/wasl/message-input.tsx**
+- Added `draftStatus` state: 'idle' | 'saving' | 'saved'
+- saveDraft function now sets status to 'saving' before fetch, 'saved' on success
+- 'saved' auto-clears to 'idle' after 2 seconds
+- Visual indicator positioned above textarea (top-right, -top-5):
+  - 'Saving…' with spinner (Loader2)
+  - 'Saved' with green checkmark (Check)
+- Only shows when not recording and status is not idle
+- Container has `position: relative` for absolute positioning
+
+### Phase 4: Verification
+
+| Check | Result |
+|-------|--------|
+| Lint | 0 errors ✅ |
+| Git sync | 0/0 ✅ |
+| Protected files | 48/48 ✅ |
+| Export route on Vercel | 401 (requires auth) ✅ |
+| Auto-restore hook | Upload route restored ✅ |
+
+### Phase 5: Auto-restore Hook Verification
+The pre-commit hook auto-restored the upload route during this commit:
+"📦 Auto-restored protected file (cancelled staged deletion): src/app/api/upload/route.ts"
+
+This confirms the permanent fix from Task 43 is working — the upload route
+was deleted again (9th time by the cron job) and was automatically restored
+before the commit was created. No manual intervention needed.
