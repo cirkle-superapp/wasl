@@ -302,6 +302,11 @@ export function MessageBubble({
 }) {
   const me = useWaslStore((s) => s.user)
   const mine = message.senderId === me?.id
+  // Business messaging: when senderLabel is set, the message was sent "as a
+  // business" — show a business badge and use the business's avatar color
+  // for the sender name.
+  const isBusinessMessage = !!message.senderLabel
+  const senderNameColor = message.senderLabelColor || undefined
   // Search highlight state — only the message whose id matches
   // `highlightedMessageId` should wrap query matches in <mark>. Subscribing via
   // individual selectors keeps re-renders scoped: every other bubble only
@@ -484,7 +489,8 @@ export function MessageBubble({
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+            <div className="text-xs font-semibold mb-1 ml-1 flex items-center gap-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" style={{ color: senderNameColor || undefined }}>
+              {isBusinessMessage && <span className="text-[10px]">🏢</span>}
               {senderName}
             </div>
           )}
@@ -499,7 +505,8 @@ export function MessageBubble({
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-1 ml-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
+            <div className="text-xs font-semibold mb-1 ml-1 flex items-center gap-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" style={{ color: senderNameColor || undefined }}>
+              {isBusinessMessage && <span className="text-[10px]">🏢</span>}
               {senderName}
             </div>
           )}

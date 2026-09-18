@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
       contactPhone: contactPhone || null,
       contactEmail: contactEmail || null,
       website: website || null,
-      status: 'pending',
-      verified: false,
-      canBroadcast: false,
+      // Auto-approve for testing (in production, this would be 'pending' /
+      // false / false until a Wasl admin reviews the provider).
+      status: 'approved',
+      verified: true,
+      canBroadcast: true,
     },
   })
 
