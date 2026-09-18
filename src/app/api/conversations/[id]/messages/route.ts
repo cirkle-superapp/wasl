@@ -127,6 +127,9 @@ export async function GET(
           edited: m.edited,
           pinned: m.pinned,
           transcription: m.transcription,
+          senderLabel: m.senderLabel,
+          senderLabelColor: m.senderLabelColor,
+          senderAvatarPath: m.senderAvatarPath,
           starred: starredIds.has(m.id),
           reactions: m.reactions.map((r) => ({
             id: r.id,
@@ -163,9 +166,49 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await req.json()
-  const { content, type = 'text', replyToId, protected: protectedOverride } = body || {}
+  const { content, type = 'text', replyToId, protected: protectedOverride, businessId } = body || {}
   if (!content || !String(content).trim()) {
     return NextResponse.json({ error: 'content is required' }, { status: 400 })
+  }
+
+  // ---- Business messaging support --------------------------------------
+  // When `businessId` is provided, the message is sent "as a business" —
+  // the sender's display name is overridden with the business name, and
+  // a business-colored avatar is shown instead of the user's personal one.
+  // The user must be the owner (or a member with 'admin' role) of the business.
+  let senderLabel: string | null = null
+  let senderLabelColor: string | null = null
+  let senderAvatarPath: string | null = null
+  if (businessId && typeof businessId === 'string') {
+    const biz = await db.business.findUnique({
+      where: { id: businessId },
+      select: {
+        id: true,
+        name: true,
+        avatarColor: true,
+        avatarPath: true,
+        ownerId: true,
+        status: true,
+        verified: true,
+      },
+    })
+    if (biz && biz.ownerId === session.id && biz.status === 'approved') {
+      senderLabel = biz.name
+      senderLabelColor = biz.avatarColor
+      senderAvatarPath = biz.avatarPath
+    } else {
+      // Check if the user is a business member with admin role
+      const membership = await db.businessMember.findUnique({
+        where: {
+          businessId_userId: { businessId, userId: session.id },
+        },
+      })
+      if (membership && membership.role === 'admin' && biz?.status === 'approved') {
+        senderLabel = biz.name
+        senderLabelColor = biz.avatarColor
+        senderAvatarPath = biz.avatarPath
+      }
+    }
   }
 
   // Resolve the effective `protected` flag:
@@ -189,6 +232,9 @@ export async function POST(
       status: 'sent',
       replyToId: replyToId ? String(replyToId) : null,
       protected: effectiveProtected,
+      senderLabel,
+      senderLabelColor,
+      senderAvatarPath,
     },
   })
   // Bump conversation updatedAt for sorting
@@ -210,6 +256,9 @@ export async function POST(
     protected: message.protected,
     edited: message.edited,
     pinned: message.pinned,
+    senderLabel: message.senderLabel,
+    senderLabelColor: message.senderLabelColor,
+    senderAvatarPath: message.senderAvatarPath,
   })
 }
 

@@ -77,6 +77,13 @@ export type ChatMessage = {
   // POST /api/ai/transcribe. Null/undefined when no transcription is
   // available yet (the bubble then shows a "Transcribe" CTA).
   transcription?: string | null
+  // ---- Business messaging -----------------------------------------------
+  // When set, the message was sent "as a business" — the senderLabel
+  // overrides the sender's display name (e.g. "Cirkle Cafe" instead of
+  // "Ahmad Ali"). The avatar color and path are also overridden.
+  senderLabel?: string | null
+  senderLabelColor?: string | null
+  senderAvatarPath?: string | null
   // ---- Read-receipt summary (sender-only, computed by the messages API) ----
   // `readByEveryone` is true when EVERY other participant has read the message.
   // `readCount` is how many of `totalRecipients` have read it.
