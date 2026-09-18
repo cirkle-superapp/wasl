@@ -99,6 +99,8 @@ export function ChatWindow({
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
   const [toneOpen, setToneOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Approved businesses owned by the user — used for the "send as business" selector
+  const [businesses, setBusinesses] = useState<Array<{ id: string; name: string; avatarColor?: string | null }>>([])
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   // Tracks how many NEW messages have arrived while the user was scrolled up
   // (away from the bottom). Drives a badge on the scroll-to-bottom button.
@@ -507,7 +509,7 @@ export function ChatWindow({
 
   // ---- Send message ----------------------------------------------------------
   const handleSend = useCallback(
-    async (content: string, type: string = 'text', opts?: { protected?: boolean }) => {
+    async (content: string, type: string = 'text', opts?: { protected?: boolean; businessId?: string }) => {
       if (!activeConversationId || !user?.id) return
       const res = await fetch(
         `/api/conversations/${activeConversationId}/messages`,
@@ -519,6 +521,7 @@ export function ChatWindow({
             type,
             replyToId: replyTo?.id,
             protected: opts?.protected,
+            businessId: opts?.businessId,
           }),
         }
       )
@@ -1009,6 +1012,25 @@ export function ChatWindow({
     [activeConversationId, user?.id]
   )
 
+  // ---- Fetch user's approved businesses (for "send as business" selector) ---
+  useEffect(() => {
+    fetch('/api/business')
+      .then((r) => r.json())
+      .then((data) => {
+        const approved = (data.businesses || []).filter(
+          (b: any) => b.status === 'approved'
+        )
+        setBusinesses(
+          approved.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            avatarColor: b.avatarColor,
+          }))
+        )
+      })
+      .catch(() => {})
+  }, [])
+
   // ---- Mark messages read on initial load -----------------------------------
   // Capture the initial unread count BEFORE clearing it — used to show the
   // "Unread messages" separator between the last read message and the first
@@ -1375,7 +1397,7 @@ export function ChatWindow({
               const date = formatDateDivider(m.createdAt)
               const showDate = date !== lastDate
               lastDate = date
-              const senderName = conversation.participants.find(
+              const senderName = m.senderLabel || conversation.participants.find(
                 (p) => p.userId === m.senderId
               )?.name
               const replyToMsg = m.replyToId
@@ -1519,6 +1541,7 @@ export function ChatWindow({
         canCommit={!conversation.isGroup && !!otherUser}
         onOpenPoll={() => setPollOpen(true)}
         onSchedule={(content) => { setScheduleContent(content); setScheduleOpen(true) }}
+        businesses={businesses}
       />
 
       {/* New Commit dialog (Cirkle-inspired) */}

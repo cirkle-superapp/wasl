@@ -22,7 +22,7 @@ import { EmojiPicker } from './emoji-picker'
 import { useWaslStore } from '@/lib/store'
 import { toast } from 'sonner'
 
-export type SendOptions = { protected?: boolean }
+export type SendOptions = { protected?: boolean; businessId?: string }
 
 export function MessageInput({
   conversationId,
@@ -33,6 +33,7 @@ export function MessageInput({
   canCommit,
   onOpenPoll,
   onSchedule,
+  businesses = [],
 }: {
   conversationId: string
   onSend: (content: string, type?: string, opts?: SendOptions) => Promise<void>
@@ -42,6 +43,7 @@ export function MessageInput({
   canCommit?: boolean
   onOpenPoll?: () => void
   onSchedule?: (content: string) => void
+  businesses?: Array<{ id: string; name: string; avatarColor?: string | null }>
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -53,6 +55,8 @@ export function MessageInput({
   //   true  → force protect this message
   //   false → force do NOT protect this message
   const [lockOverride, setLockOverride] = useState<boolean | null>(null)
+  // Business identity: null = send as personal, or a business ID to send "as business"
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
 
   // ---- Draft persistence --------------------------------------------------
   // Debounce timer for saving the draft to the server (500ms after the user
@@ -325,7 +329,7 @@ export function MessageInput({
     if (!trimmed || sending) return
     setSending(true)
     try {
-      await onSend(trimmed, 'text', { protected: effectiveProtect })
+      await onSend(trimmed, 'text', { protected: effectiveProtect, businessId: selectedBusinessId || undefined })
       setValue('')
       // Clear the reply preview once the message is on its way. The parent
       // chat-window's handleSend also clears this, but we clear it here too
@@ -640,6 +644,22 @@ export function MessageInput({
             <Lock className="w-5 h-5" />
           )}
         </button>
+
+        {/* Business identity selector — only show if the user has approved businesses */}
+        {businesses.length > 0 && (
+          <select
+            value={selectedBusinessId || ''}
+            onChange={(e) => setSelectedBusinessId(e.target.value || null)}
+            disabled={sending}
+            className="shrink-0 h-9 px-2 text-xs rounded-full border border-border bg-background text-foreground cursor-pointer outline-none hover:border-[var(--wasl-green)]/40 transition-colors max-w-[140px]"
+            title={selectedBusinessId ? `Sending as: ${businesses.find(b => b.id === selectedBusinessId)?.name}` : 'Send as: Personal'}
+          >
+            <option value="">👤 Personal</option>
+            {businesses.map((b) => (
+              <option key={b.id} value={b.id}>🏢 {b.name}</option>
+            ))}
+          </select>
+        )}
 
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5">
