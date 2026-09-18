@@ -233,7 +233,7 @@ export function AuthScreen() {
   const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
 
   return (
-    <div className="min-h-screen w-full flex flex-col">
+    <div className="min-h-screen w-full flex flex-col" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
       {/* Top hero banner — compact with logo + tagline + trust badges */}
       <div
         className={cn(
@@ -242,9 +242,15 @@ export function AuthScreen() {
             ? 'wasl-gradient-hero-cirkle'
             : 'bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)]'
         )}
+        style={{
+          background: 'linear-gradient(135deg, #1a4a5a 0%, #2a6b7e 50%, #c2a060 100%)',
+          color: '#fff',
+          padding: '24px 24px',
+          textAlign: 'center',
+        }}
       >
-        <div className="max-w-md mx-auto text-center space-y-3">
-          <div className={cn('inline-flex items-center justify-center wasl-auth-logo-float', isCirkle && 'wasl-cirkle-splash-in')}>
+        <div className="max-w-md mx-auto text-center space-y-3" style={{ maxWidth: '28rem', marginLeft: 'auto', marginRight: 'auto', textAlign: 'center' }}>
+          <div className={cn('inline-flex items-center justify-center wasl-auth-logo-float', isCirkle && 'wasl-cirkle-splash-in')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
             <WaslLogo size={64} animated />
           </div>
           <h1
@@ -252,21 +258,31 @@ export function AuthScreen() {
               'text-3xl font-bold tracking-tight',
               isCirkle && 'wasl-text-gradient-cirkle'
             )}
+            style={{
+              fontSize: '1.875rem',
+              fontWeight: 700,
+              letterSpacing: '-0.025em',
+              background: 'linear-gradient(135deg, #e5c98a, #9a7a3e)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              color: 'transparent',
+            }}
           >
             Wasl
           </h1>
-          <p className="text-white/85 text-xs leading-relaxed">
+          <p className="text-white/85 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', lineHeight: 1.625, margin: 0 }}>
             Simple. Secure. Connected.
           </p>
           {/* Trust badges */}
-          <div className="flex items-center justify-center gap-4 mt-3">
-            <div className="wasl-feature-pill text-white/70 text-[10px]">
+          <div className="flex items-center justify-center gap-4 mt-3" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '0.75rem' }}>
+            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <ShieldCheck className="w-3 h-3" /> End-to-end encrypted
             </div>
-            <div className="wasl-feature-pill text-white/70 text-[10px]">
+            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Zap className="w-3 h-3" /> Real-time
             </div>
-            <div className="wasl-feature-pill text-white/70 text-[10px]">
+            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Users className="w-3 h-3" /> Verified agreements
             </div>
           </div>
@@ -274,10 +290,18 @@ export function AuthScreen() {
       </div>
 
       {/* Form area pinned to bottom */}
-      <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-8">
-        <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-7 space-y-5">
+      <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-8" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ebe0', padding: '32px 24px' }}>
+        <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-7 space-y-5" style={{
+          width: '100%',
+          maxWidth: '28rem',
+          background: '#fff',
+          borderRadius: '1rem',
+          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+          border: '1px solid #e5e0d5',
+          padding: '28px',
+        }}>
           {/* Tab switcher — segmented control for Sign up / Log in */}
-          <div className="relative flex p-1 bg-muted/50 rounded-xl border border-border/60">
+          <div className="relative flex p-1 bg-muted/50 rounded-xl border border-border/60" style={{ position: 'relative', display: 'flex', padding: '4px', background: 'rgba(0,0,0,0.04)', borderRadius: '0.75rem', border: '1px solid rgba(229,224,213,0.6)' }}>
             <button
               type="button"
               onClick={() => setMode('signup')}
@@ -503,6 +527,17 @@ export function AuthScreen() {
                   ? 'wasl-gradient-gold hover:opacity-90 text-[var(--cirkle-charcoal)]'
                   : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'
               )}
+              style={{
+                width: '100%',
+                fontWeight: 500,
+                background: 'linear-gradient(135deg, #e5c98a, #9a7a3e)',
+                color: '#1a1a14',
+                padding: '0.5rem 1rem',
+                borderRadius: '0.375rem',
+                border: 'none',
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+              }}
               disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
             >
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -561,7 +596,7 @@ export function AuthScreen() {
         </div>
       </div>
 
-      <footer className="bg-[var(--wasl-teal)] text-white/80 text-xs text-center py-3 px-6">
+      <footer className="bg-[var(--wasl-teal)] text-white/80 text-xs text-center py-3 px-6" style={{ background: '#1a4a5a', color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem', textAlign: 'center', padding: '0.75rem 1.5rem' }}>
         Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging &middot; Commit-verified agreements
       </footer>
     </div>
