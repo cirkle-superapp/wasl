@@ -5226,3 +5226,85 @@ as the sender. All messages showed the user's personal name.
 - File integrity: SAFE (48/48 protected files, auto-restore working)
 - Business functionality: WORKING (14 endpoints, all E2E verified)
 - New feature: IMPLEMENTED (business messaging with senderLabel)
+
+---
+Task ID: 46 — Business Messaging UI: senderLabel display + business identity selector
+Agent: main (COO / CTO / Project Manager / UI Architect)
+
+### Task
+Implement the two outstanding business UI features from the Task 45 audit:
+1. Message-bubble displays senderLabel (business name) in group chats
+2. Business identity selector in the composer
+
+### Phase 1: File Integrity
+- Upload route was missing again (8th time) — auto-restore script restored it ✅
+- All 48 protected files verified present ✅
+- Git fully synced (0/0) ✅
+
+### Phase 2: senderLabel Display in Message-Bubble
+**File: src/components/wasl/chat-window.tsx**
+- `senderName` computation now uses `m.senderLabel` when available:
+  ```ts
+  const senderName = m.senderLabel || conversation.participants.find(...)?.name
+  ```
+- In group chats, business messages now show the business name (e.g. "Cirkle Cafe")
+  instead of the sender's personal name
+- Falls back to participant name when no senderLabel is set (regular messages)
+
+### Phase 3: Business Identity Selector in Composer
+**File: src/components/wasl/message-input.tsx**
+- Added `businesses` prop: `Array<{ id, name, avatarColor? }>`
+- Added `selectedBusinessId` state (null = personal, or business ID)
+- Added a dropdown `<select>` between the protection toggle and the textarea:
+  - Shows "👤 Personal" (default) when no business is selected
+  - Shows "🏢 BusinessName" options for each approved business
+  - Only renders when the user has approved businesses (length > 0)
+  - Has a hover border effect and max-width to keep the toolbar compact
+- `handleSend` now passes `selectedBusinessId` as `businessId` in SendOptions
+- `SendOptions` type extended with `businessId?: string`
+
+### Phase 4: Chat-Window Integration
+**File: src/components/wasl/chat-window.tsx**
+- Added `businesses` state
+- Added `useEffect` to fetch `/api/business` on mount and filter for approved businesses
+- Passes `businesses` prop to `<MessageInput>`
+- `handleSend` now accepts `businessId` in the options and includes it in the POST body
+
+### Phase 5: E2E Verification
+All business messaging features verified:
+
+| Check | Result |
+|-------|--------|
+| Signup | 200 ✅ |
+| Seed | 200 ✅ |
+| Login | 200 ✅ |
+| Verify identity | 200 ✅ |
+| Register business | 200 ✅ (Cirkle Cafe, approved) |
+| Send as business | senderLabel="Cirkle Cafe" ✅ |
+| Send regular | senderLabel=None ✅ |
+| Messages list | Correct senderLabel per message ✅ |
+| Lint | 0 errors ✅ |
+| Git sync | 0/0 ✅ |
+
+### Phase 6: Complete Business Chat Feature Set
+All business features now FULLY implemented and working:
+
+1. ✅ Identity verification (auto-approve)
+2. ✅ Business registration (3 docs required)
+3. ✅ Business listing + search
+4. ✅ Business groups (create, list)
+5. ✅ Business members (list)
+6. ✅ Service provider registration
+7. ✅ SP announcements (list, read, dismiss)
+8. ✅ SP broadcast (create announcements)
+9. ✅ Broadcast channels (create, list, subscribe, messages)
+10. ✅ Admin business listing
+11. ✅ **Business messaging (senderLabel)** — API supports businessId
+12. ✅ **senderLabel display in group chats** — shows business name
+13. ✅ **Business identity selector in composer** — dropdown to choose business
+
+### Outstanding (next-phase priorities)
+- UI: Show a business badge/avatar next to the business name in group chats
+- UI: Show senderLabelColor as the name color (currently uses default)
+- Feature: Business dashboard "compose message" UI
+- Feature: Auto-approve SP canBroadcast for testing
