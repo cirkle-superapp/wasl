@@ -30,6 +30,7 @@ import {
   Info,
   Link2,
   QrCode,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1358,6 +1359,29 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
             onClick={() => setEncryptionOpen(true)}
           >
             <Shield className="w-4 h-4 mr-3" /> Encryption
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={async () => {
+              if (!activeConversationId) return
+              try {
+                const res = await fetch(`/api/conversations/${activeConversationId}/export?format=text`)
+                if (!res.ok) return
+                const blob = await res.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${(conversation?.name || 'chat').replace(/[^a-z0-9]/gi, '_')}_export.txt`
+                a.click()
+                URL.revokeObjectURL(url)
+                toast.success('Chat exported')
+              } catch {
+                toast.error('Export failed')
+              }
+            }}
+          >
+            <Download className="w-4 h-4 mr-3" /> Export chat
           </Button>
           <Button
             variant="ghost"

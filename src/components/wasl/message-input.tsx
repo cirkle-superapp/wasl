@@ -16,6 +16,7 @@ import {
   LockOpen,
   FileText,
   Loader2,
+  Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -57,6 +58,8 @@ export function MessageInput({
   const [lockOverride, setLockOverride] = useState<boolean | null>(null)
   // Business identity: null = send as personal, or a business ID to send "as business"
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
+  // Draft autosave indicator: 'idle' | 'saving' | 'saved'
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   // ---- Draft persistence --------------------------------------------------
   // Debounce timer for saving the draft to the server (500ms after the user
@@ -196,6 +199,7 @@ export function MessageInput({
         replyToIdOverride !== undefined
           ? replyToIdOverride
           : useWaslStore.getState().replyTo?.id || null
+      setDraftStatus('saving')
       fetch('/api/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,7 +209,13 @@ export function MessageInput({
           replyToId,
         }),
         keepalive: true,
-      }).catch(() => {})
+      }).then(() => {
+        setDraftStatus('saved')
+        // Clear "saved" after 2s
+        setTimeout(() => setDraftStatus('idle'), 2000)
+      }).catch(() => {
+        setDraftStatus('idle')
+      })
     },
     [setDraft]
   )
@@ -662,7 +672,7 @@ export function MessageInput({
         )}
 
         {/* Textarea */}
-        <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5">
+        <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative">
           {recording ? (
             <div className="flex items-center gap-2 py-1.5">
               <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
@@ -700,9 +710,22 @@ export function MessageInput({
               disabled={sending}
             />
           )}
+          {draftStatus !== 'idle' && !recording && (
+            <div className="absolute -top-5 right-2 text-[10px] text-muted-foreground flex items-center gap-1" style={{ opacity: 0.7 }}>
+              {draftStatus === 'saving' ? (
+                <>
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Check className="w-2.5 h-2.5 text-[var(--wasl-green)]" />
+                  Saved
+                </>
+              )}
+            </div>
+          )}
         </div>
-
-        {/* Send / Mic button */}
         {recording ? null : (
           <button
             type="button"
