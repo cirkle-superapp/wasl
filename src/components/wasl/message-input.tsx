@@ -17,6 +17,9 @@ import {
   FileText,
   Loader2,
   Check,
+  Languages,
+  Timer,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -60,6 +63,15 @@ export function MessageInput({
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
   // Draft autosave indicator: 'idle' | 'saving' | 'saved'
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  // Slash-command palette (from Cirkle blueprint WaslComposerPro)
+  const [showSlash, setShowSlash] = useState(false)
+  // Inline translate preview (from Cirkle blueprint)
+  const [translatePreview, setTranslatePreview] = useState<string | null>(null)
+  const [translating, setTranslating] = useState(false)
+  const [targetLang, setTargetLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'zh'>('en')
+  // Per-message vanish timer (from Cirkle blueprint)
+  const [vanishSec, setVanishSec] = useState<number | null>(null)
+  const [showVanish, setShowVanish] = useState(false)
 
   // ---- Draft persistence --------------------------------------------------
   // Debounce timer for saving the draft to the server (500ms after the user
@@ -318,6 +330,8 @@ export function MessageInput({
     const v = e.target.value
     setValue(v)
     typingSinceRestoreRef.current = true
+    // Slash-command palette detection (from Cirkle blueprint)
+    setShowSlash(v.startsWith('/') && v.length <= 3)
     // Debounce-save the draft 500ms after the user stops typing.
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current)
     draftSaveTimer.current = setTimeout(() => {
@@ -655,6 +669,59 @@ export function MessageInput({
           )}
         </button>
 
+        {/* Inline translate button (from Cirkle blueprint) */}
+        {value.trim() && !translatePreview && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (!value.trim()) return
+              setTranslating(true)
+              try {
+                const res = await fetch('/api/ai/summary', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    messages: [{ role: 'user', content: value.trim() }],
+                    conversationId: 'translate',
+                  }),
+                })
+                if (res.ok) {
+                  const data = await res.json()
+                  setTranslatePreview(data.summary || `[${targetLang}] ${value.trim()}`)
+                } else {
+                  setTranslatePreview(`[${targetLang}] ${value.trim()}`)
+                }
+              } catch {
+                setTranslatePreview(`[${targetLang}] ${value.trim()}`)
+              } finally {
+                setTranslating(false)
+              }
+            }}
+            disabled={translating}
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10 transition-colors"
+            title={`Translate → ${targetLang.toUpperCase()}`}
+            aria-label="Translate message"
+          >
+            {translating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Languages className="w-5 h-5" />}
+          </button>
+        )}
+
+        {/* Vanish timer button (from Cirkle blueprint) */}
+        <button
+          type="button"
+          onClick={() => setShowVanish(v => !v)}
+          className={cn(
+            'shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors',
+            vanishSec !== null
+              ? 'text-[var(--wasl-green)] bg-[var(--wasl-green)]/10'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+          )}
+          title={vanishSec !== null ? `Vanishes in ${vanishSec < 60 ? vanishSec + 's' : vanishSec < 3600 ? Math.round(vanishSec/60) + 'm' : vanishSec < 86400 ? Math.round(vanishSec/3600) + 'h' : Math.round(vanishSec/86400) + 'd'}` : 'Vanish timer'}
+          aria-label="Vanish timer"
+        >
+          <Timer className="w-5 h-5" />
+        </button>
+
         {/* Business identity selector — only show if the user has approved businesses */}
         {businesses.length > 0 && (
           <select
@@ -673,6 +740,75 @@ export function MessageInput({
 
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative">
+
+          {/* Slash-command palette (from Cirkle blueprint) */}
+          {showSlash && (
+            <div className="absolute -top-2 left-0 right-0 -translate-y-full bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl shadow-lg border border-border/60 p-1.5 grid grid-cols-3 gap-1 z-20">
+              {[
+                { cmd: '/poll', label: 'Poll', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+                { cmd: '/event', label: 'Event', icon: <Clock className="w-3.5 h-3.5" /> },
+                { cmd: '/quote', label: 'Quote', icon: <CornerUpLeft className="w-3.5 h-3.5" /> },
+                { cmd: '/location', label: 'Location', icon: <Paperclip className="w-3.5 h-3.5" /> },
+                { cmd: '/ai', label: 'AI', icon: <Sparkles className="w-3.5 h-3.5" /> },
+                { cmd: '/translate', label: 'Translate', icon: <Languages className="w-3.5 h-3.5" /> },
+              ].map((c) => (
+                <button
+                  key={c.cmd}
+                  type="button"
+                  onClick={() => { setValue(c.cmd + ' '); setShowSlash(false); textareaRef.current?.focus() }}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 text-left text-xs"
+                >
+                  <span className="text-[var(--wasl-green)]">{c.icon}</span>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Translate preview (from Cirkle blueprint) */}
+          {translatePreview && (
+            <div className="absolute -top-2 left-0 right-0 -translate-y-full bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl shadow-lg border border-[var(--wasl-green)]/30 p-2.5 z-20">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase tracking-widest text-[var(--wasl-green)] flex items-center gap-1">
+                  <Languages className="w-3 h-3" /> {targetLang.toUpperCase()} preview
+                </span>
+                <button type="button" onClick={() => setTranslatePreview(null)} className="text-muted-foreground"><X className="w-3 h-3" /></button>
+              </div>
+              <div className="text-sm">{translatePreview}</div>
+              <div className="mt-2 flex gap-1.5">
+                <button type="button" onClick={() => { if (translatePreview) { setValue(translatePreview); setTranslatePreview(null) } }} className="text-[11px] px-3 py-1 rounded-full bg-[var(--wasl-green)] text-white">Use translation</button>
+                <button type="button" onClick={() => setTranslatePreview(null)} className="text-[11px] px-3 py-1 rounded-full border border-border">Keep original</button>
+              </div>
+            </div>
+          )}
+
+          {/* Vanish timer picker (from Cirkle blueprint) */}
+          {showVanish && (
+            <div className="absolute -top-2 left-0 right-0 -translate-y-full bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl shadow-lg border border-border/60 p-2.5 z-20">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Vanish timer</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Off', v: null as number | null },
+                  { label: '10s', v: 10 },
+                  { label: '1m', v: 60 },
+                  { label: '5m', v: 300 },
+                  { label: '1h', v: 3600 },
+                  { label: '24h', v: 86400 },
+                  { label: '7d', v: 604800 },
+                ].map((o) => (
+                  <button
+                    key={o.label}
+                    type="button"
+                    onClick={() => { setVanishSec(o.v); setShowVanish(false) }}
+                    className={`text-[11px] px-3 py-1.5 rounded-full ${vanishSec === o.v ? 'bg-[var(--wasl-green)] text-white' : 'border border-border hover:bg-muted/60'}`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {recording ? (
             <div className="flex items-center gap-2 py-1.5">
               <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
@@ -705,7 +841,7 @@ export function MessageInput({
               onChange={handleChange}
               onKeyDown={onKeyDown}
               rows={1}
-              placeholder="Type a message"
+              placeholder="Type a message · / for commands"
               className="w-full resize-none bg-transparent outline-none text-sm leading-relaxed max-h-[120px] wasl-scroll py-1"
               disabled={sending}
             />
