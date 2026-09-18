@@ -2,25 +2,57 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff, ShieldCheck, Zap, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
-import { useColorTheme } from './color-theme-provider'
-import { WaslLogo } from './wasl-logo'
-import { cn } from '@/lib/utils'
+import { CirkleMark } from './cirkle-mark'
 
 const DEMO_USERNAME = 'demo'
 const DEMO_PASSWORD = 'demo123'
 
+// Cirkle color palette
+const C = {
+  teal: '#1a4a5a',
+  tealLight: '#2a6b7e',
+  tealDark: '#123843',
+  gold: '#c2a060',
+  goldLight: '#e5c98a',
+  goldDark: '#9a7a3e',
+  rose: '#c25a6e',
+  cream: '#fdfcf9',
+  charcoal: '#1a1a14',
+  white: '#ffffff',
+}
+
+// Cinematic entrance keyframes — only for animations, all visual styling is inline
+const ANIM_CSS = `
+@keyframes cinenav-bg{0%{opacity:0;transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
+@keyframes cinenav-logo{0%{opacity:0;transform:scale(0.5) translateY(20px);filter:blur(10px)}50%{opacity:0.5;filter:blur(4px)}100%{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}}
+@keyframes cinenav-up{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes cinenav-fade{0%{opacity:0}100%{opacity:1}}
+@keyframes cinenav-card{0%{opacity:0;transform:translateY(40px) scale(0.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes glow-pulse{0%,100%{box-shadow:0 0 30px rgba(194,160,96,0.15),0 0 60px rgba(26,74,90,0.1)}50%{box-shadow:0 0 50px rgba(194,160,96,0.25),0 0 80px rgba(26,74,90,0.15)}}
+@keyframes ring-rotate{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+@keyframes ring-pulse{0%,100%{opacity:0.3}50%{opacity:0.8}}
+@keyframes float-slow{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+.wasl-cirkle-spin{animation:ring-rotate 30s linear infinite;transform-origin:center}
+.wasl-cirkle-glow{animation:ring-pulse 2.5s ease-in-out infinite}
+.wasl-float{animation:float-slow 4s ease-in-out infinite}
+.wasl-glow-card{animation:glow-pulse 4s ease-in-out infinite}
+.wasl-shimmer-text{background:linear-gradient(90deg,${C.gold},${C.goldLight},${C.gold},${C.goldLight},${C.gold});background-size:200% auto;background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+`
+
+// Cinematic entrance wrapper — applies the animation with a delay
+function Cinematic({ children, delay, anim = 'cinenav-up' }: { children: React.ReactNode; delay: string; anim?: string }) {
+  return <div style={{ animation: `${anim} 0.7s cubic-bezier(0.16,1,0.3,1) ${delay} both` }}>{children}</div>
+}
+
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('signup')
-  // Unified identifier for login: email / phone / username
   const [identifier, setIdentifier] = useState('')
-  // Signup fields
-  const [signupIdentifier, setSignupIdentifier] = useState('') // email or phone
+  const [signupIdentifier, setSignupIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
@@ -35,14 +67,11 @@ export function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
-  const { colorTheme } = useColorTheme()
-  const isCirkle = colorTheme === 'cirkle'
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Live username availability check (debounced)
   useEffect(() => {
-    if (mode !== 'signup') return
-    if (!usernameTouched) return
+    if (mode !== 'signup' || !usernameTouched) return
     const u = username.trim().toLowerCase()
     if (!u) {
       setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
@@ -54,29 +83,19 @@ export function AuthScreen() {
       try {
         const res = await fetch(`/api/auth/check-username?u=${encodeURIComponent(u)}`)
         const data = await res.json()
-        setUsernameStatus({
-          checking: false,
-          available: data.available,
-          message: data.message || '',
-          suggestions: data.suggestions || [],
-        })
+        setUsernameStatus({ checking: false, available: data.available, message: data.message || '', suggestions: data.suggestions || [] })
       } catch {
         setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
       }
     }, 350)
-    return () => {
-      if (usernameTimer.current) clearTimeout(usernameTimer.current)
-    }
+    return () => { if (usernameTimer.current) clearTimeout(usernameTimer.current) }
   }, [username, usernameTouched, mode])
 
-  // Auto-generate a username from the name (live, until the user edits it)
+  // Auto-generate username from name
   useEffect(() => {
-    if (mode !== 'signup') return
-    if (usernameTouched) return
+    if (mode !== 'signup' || usernameTouched) return
     const auto = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 15)
-    if (auto && auto !== username) {
-      setUsername(auto)
-    }
+    if (auto && auto !== username) setUsername(auto)
   }, [name, usernameTouched, mode, username])
 
   const authenticate = useCallback(
@@ -94,61 +113,34 @@ export function AuthScreen() {
       try {
         if (m === 'login') {
           const id = overrideIdentifier ?? identifier
-          if (!id.trim()) {
-            toast.error('Please enter your email, phone, or username')
-            return
-          }
-          if (!p) {
-            toast.error('Please enter your password')
-            return
-          }
+          if (!id.trim()) { toast.error('Please enter your email, phone, or username'); return }
+          if (!p) { toast.error('Please enter your password'); return }
           const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifier: id, password: p }),
           })
           const data = await res.json()
-          if (!res.ok) {
-            toast.error(data?.error || 'Login failed')
-            return
-          }
+          if (!res.ok) { toast.error(data?.error || 'Login failed'); return }
           setUser(data)
           toast.success(`Welcome to Wasl, ${data.name}!`)
           router.refresh()
         } else {
-          // signup
           const n = (overrideName ?? name).trim()
           const u = (overrideUsername ?? username).trim().toLowerCase()
           const sid = overrideSignupId ?? signupIdentifier
-          if (!n || n.length < 2) {
-            toast.error('Please enter your name (at least 2 characters)')
-            return
-          }
-          if (!u || u.length < 3) {
-            toast.error('Please choose a Cirkle username (at least 3 characters)')
-            return
-          }
-          if (!p || p.length < 6) {
-            toast.error('Password must be at least 6 characters')
-            return
-          }
+          if (!n || n.length < 2) { toast.error('Please enter your name (at least 2 characters)'); return }
+          if (!u || u.length < 3) { toast.error('Please choose a Cirkle username (at least 3 characters)'); return }
+          if (!p || p.length < 6) { toast.error('Password must be at least 6 characters'); return }
           const res = await fetch('/api/auth/signup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              identifier: sid || undefined,
-              password: p,
-              name: n,
-              username: u,
-            }),
+            body: JSON.stringify({ identifier: sid || undefined, password: p, name: n, username: u }),
           })
           const data = await res.json()
           if (!res.ok) {
-            if (data.suggestions?.length) {
-              toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` })
-            } else {
-              toast.error(data?.error || 'Sign up failed')
-            }
+            if (data.suggestions?.length) { toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` }) }
+            else { toast.error(data?.error || 'Sign up failed') }
             return
           }
           setUser(data)
@@ -176,7 +168,6 @@ export function AuthScreen() {
     setMode('login')
     setLoading(true)
     try {
-      // Try login first
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,22 +180,13 @@ export function AuthScreen() {
         router.refresh()
         return
       }
-      // Sign up the demo account
       const signupRes = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: '+201001234567',
-          password: DEMO_PASSWORD,
-          name: 'Demo User',
-          username: DEMO_USERNAME,
-        }),
+        body: JSON.stringify({ identifier: '+201001234567', password: DEMO_PASSWORD, name: 'Demo User', username: DEMO_USERNAME }),
       })
       const data = await signupRes.json()
-      if (!signupRes.ok) {
-        toast.error(data?.error || 'Failed to start demo')
-        return
-      }
+      if (!signupRes.ok) { toast.error(data?.error || 'Failed to start demo'); return }
       setUser(data)
       toast.success(`Welcome to Wasl, ${data.name}!`)
       router.refresh()
@@ -216,389 +198,457 @@ export function AuthScreen() {
     }
   }
 
-  // Detect identifier type for the login input icon
-  const loginIdType = identifier.includes('@')
-    ? 'email'
-    : /^\+?[\d\s-]+$/.test(identifier) && identifier.replace(/[\s-]/g, '').length >= 8
-    ? 'phone'
-    : 'username'
+  const loginIdType = identifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(identifier) && identifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
   const LoginIcon = loginIdType === 'email' ? Mail : loginIdType === 'phone' ? Phone : AtSign
-
-  // Detect signup identifier type for the icon
-  const signupIdType = signupIdentifier.includes('@')
-    ? 'email'
-    : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8
-    ? 'phone'
-    : 'username'
+  const signupIdType = signupIdentifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
   const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
 
+  // Shared inline style objects
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    height: '44px',
+    padding: '0 12px 0 40px',
+    border: `1px solid ${C.teal}33`,
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    background: C.cream,
+    color: C.charcoal,
+    outline: 'none',
+    transition: 'border-color 0.2s, box-shadow 0.2s',
+    boxSizing: 'border-box',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: C.teal,
+    marginBottom: '6px',
+    display: 'block',
+    fontFamily: 'inherit',
+  }
+  const iconWrapStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '14px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: C.goldDark,
+    pointerEvents: 'none',
+    display: 'flex',
+    alignItems: 'center',
+  }
+
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      {/* Top hero banner — compact with logo + tagline + trust badges */}
-      <div
-        className={cn(
-          'text-white py-6 px-6',
-          isCirkle
-            ? 'wasl-gradient-hero-cirkle'
-            : 'bg-gradient-to-br from-[var(--wasl-teal)] via-[var(--wasl-teal)] to-[var(--wasl-teal-dark)]'
-        )}
-        style={{
-          background: 'linear-gradient(135deg, #1a4a5a 0%, #2a6b7e 50%, #c2a060 100%)',
-          color: '#fff',
-          padding: '24px 24px',
+    <>
+      <style dangerouslySetInnerHTML={{ __html: ANIM_CSS }} />
+      <div style={{
+        minHeight: '100vh',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        background: `linear-gradient(135deg, ${C.teal} 0%, ${C.tealLight} 40%, ${C.teal} 70%, ${C.gold} 100%)`,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Futuristic background glow orbs */}
+        <div style={{
+          position: 'absolute',
+          top: '-100px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '600px',
+          height: '600px',
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${C.gold}33 0%, transparent 60%)`,
+          animation: 'cinenav-fade 2s ease-out 0.5s both',
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-200px',
+          right: '-100px',
+          width: '500px',
+          height: '500px',
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${C.rose}22 0%, transparent 60%)`,
+          animation: 'cinenav-fade 2s ease-out 1s both',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Hero section */}
+        <div style={{
           textAlign: 'center',
-        }}
-      >
-        <div className="max-w-md mx-auto text-center space-y-3" style={{ maxWidth: '28rem', marginLeft: 'auto', marginRight: 'auto', textAlign: 'center' }}>
-          <div className={cn('inline-flex items-center justify-center wasl-auth-logo-float', isCirkle && 'wasl-cirkle-splash-in')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-            <WaslLogo size={64} animated />
-          </div>
-          <h1
-            className={cn(
-              'text-3xl font-bold tracking-tight',
-              isCirkle && 'wasl-text-gradient-cirkle'
-            )}
-            style={{
-              fontSize: '1.875rem',
-              fontWeight: 700,
-              letterSpacing: '-0.025em',
-              background: 'linear-gradient(135deg, #e5c98a, #9a7a3e)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              color: 'transparent',
-            }}
-          >
-            Wasl
-          </h1>
-          <p className="text-white/85 text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', lineHeight: 1.625, margin: 0 }}>
-            Simple. Secure. Connected.
-          </p>
-          {/* Trust badges */}
-          <div className="flex items-center justify-center gap-4 mt-3" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginTop: '0.75rem' }}>
-            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ShieldCheck className="w-3 h-3" /> End-to-end encrypted
-            </div>
-            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Zap className="w-3 h-3" /> Real-time
-            </div>
-            <div className="wasl-feature-pill text-white/70 text-[10px]" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Users className="w-3 h-3" /> Verified agreements
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Form area pinned to bottom */}
-      <div className="flex-1 flex items-center justify-center bg-[var(--wasl-chat-bg)] px-6 py-8" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ebe0', padding: '32px 24px' }}>
-        <div className="w-full max-w-md bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-xl border border-border p-7 space-y-5" style={{
-          width: '100%',
-          maxWidth: '28rem',
-          background: '#fff',
-          borderRadius: '1rem',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
-          border: '1px solid #e5e0d5',
-          padding: '28px',
+          padding: '40px 24px 20px',
+          position: 'relative',
+          zIndex: 1,
         }}>
-          {/* Tab switcher — segmented control for Sign up / Log in */}
-          <div className="relative flex p-1 bg-muted/50 rounded-xl border border-border/60" style={{ position: 'relative', display: 'flex', padding: '4px', background: 'rgba(0,0,0,0.04)', borderRadius: '0.75rem', border: '1px solid rgba(229,224,213,0.6)' }}>
-            <button
-              type="button"
-              onClick={() => setMode('signup')}
-              className={cn(
-                'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
-                mode === 'signup'
-                  ? 'text-white shadow-sm bg-[var(--wasl-green)]'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Sign up
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className={cn(
-                'flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 relative z-10',
-                mode === 'login'
-                  ? 'text-white shadow-sm bg-[var(--wasl-green)]'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              Log in
-            </button>
-          </div>
+          <Cinematic delay="0.2s" anim="cinenav-logo">
+            <div className="wasl-float" style={{ display: 'inline-block', marginBottom: '16px' }}>
+              <CirkleMark size={80} animated />
+            </div>
+          </Cinematic>
 
-          <div className="space-y-1.5">
-            <h2 className="text-2xl font-semibold text-foreground">
-              {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {mode === 'signup'
-                ? 'Sign up with your Cirkle email or phone. We will auto-suggest a username.'
-                : 'Log in with your email, phone number, or username.'}
-            </p>
-          </div>
+          <Cinematic delay="0.5s">
+            <h1 className="wasl-shimmer-text" style={{
+              fontSize: '2.5rem',
+              fontWeight: 800,
+              letterSpacing: '-0.03em',
+              margin: '0 0 4px',
+              lineHeight: 1,
+            }}>Wasl</h1>
+          </Cinematic>
 
-          <form onSubmit={submit} className="space-y-4">
-            {mode === 'login' ? (
-              <>
-                {/* Login: unified identifier */}
-                <div className="space-y-2">
-                  <Label htmlFor="identifier">Email, phone, or username</Label>
-                  <div className="relative">
-                    <LoginIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="identifier"
-                      type="text"
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="you@cirkle.app, +20..., or @username"
-                      className="wasl-auth-input pl-9"
-                      autoComplete="username"
-                      disabled={loading}
-                      autoCapitalize="none"
-                      spellCheck={false}
-                    />
-                  </div>
+          <Cinematic delay="0.7s">
+            <p style={{
+              color: 'rgba(255,255,255,0.85)',
+              fontSize: '0.875rem',
+              margin: '0 0 16px',
+              letterSpacing: '0.05em',
+            }}>Simple. Secure. Connected.</p>
+          </Cinematic>
+
+          <Cinematic delay="0.9s">
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '20px',
+              flexWrap: 'wrap' as const,
+            }}>
+              {[
+                { icon: <ShieldCheck style={{ width: 14, height: 14 }} />, text: 'End-to-end encrypted' },
+                { icon: <Zap style={{ width: 14, height: 14 }} />, text: 'Real-time' },
+                { icon: <Users style={{ width: 14, height: 14 }} />, text: 'Verified agreements' },
+              ].map((f, i) => (
+                <div key={i} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                }}>
+                  {f.icon}
+                  {f.text}
                 </div>
+              ))}
+            </div>
+          </Cinematic>
+        </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Your password"
-                      className="wasl-auth-input pl-9 pr-9"
-                      autoComplete="current-password"
-                      disabled={loading}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Signup: name */}
-                <div className="space-y-2">
-                  <Label htmlFor="name">Your name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Ahmad Ali"
-                      className="wasl-auth-input pl-9"
-                      autoComplete="name"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
+        {/* Glassmorphism card */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0 24px 40px',
+          position: 'relative',
+          zIndex: 1,
+        }}>
+          <Cinematic delay="1.1s" anim="cinenav-card">
+            <div className="wasl-glow-card" style={{
+              width: '100%',
+              maxWidth: '420px',
+              background: 'rgba(253, 252, 249, 0.95)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              borderRadius: '24px',
+              border: `1px solid ${C.gold}44`,
+              boxShadow: `0 20px 60px rgba(26, 74, 90, 0.3), 0 0 40px rgba(194, 160, 96, 0.1)`,
+              padding: '32px 28px 28px',
+              boxSizing: 'border-box' as const,
+            }}>
+              {/* Tab switcher */}
+              <div style={{
+                display: 'flex',
+                padding: '4px',
+                background: `rgba(26, 74, 90, 0.06)`,
+                borderRadius: '14px',
+                border: `1px solid ${C.teal}22`,
+                marginBottom: '24px',
+              }}>
+                {(['signup', 'login'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setMode(tab)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
+                      ...(mode === tab
+                        ? { background: `linear-gradient(135deg, ${C.gold}, ${C.goldDark})`, color: C.charcoal, boxShadow: `0 4px 12px ${C.gold}44` }
+                        : { background: 'transparent', color: C.teal + '99' }),
+                    }}
+                  >
+                    {tab === 'signup' ? 'Sign up' : 'Log in'}
+                  </button>
+                ))}
+              </div>
 
-                {/* Signup: Cirkle username with live availability */}
-                <div className="space-y-2">
-                  <Label htmlFor="username" className="flex items-center gap-1.5">
-                    Cirkle username
-                    {usernameStatus.checking && (
-                      <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-                    )}
-                    {usernameStatus.available === true && (
-                      <span className="flex items-center gap-0.5 text-[var(--wasl-green)] text-xs">
-                        <Check className="w-3 h-3" /> Available
-                      </span>
-                    )}
-                    {usernameStatus.available === false && (
-                      <span className="flex items-center gap-0.5 text-destructive text-xs">
-                        <X className="w-3 h-3" /> Taken
-                      </span>
-                    )}
-                  </Label>
-                  <div className="relative">
-                    <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="username"
-                      type="text"
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
-                        setUsernameTouched(true)
-                      }}
-                      placeholder="ahmad_ali"
-                      className="wasl-auth-input pl-9"
-                      disabled={loading}
-                      autoCapitalize="none"
-                      spellCheck={false}
-                    />
-                  </div>
-                  {usernameStatus.available === false && usernameStatus.suggestions.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" /> Try:
-                      </span>
-                      {usernameStatus.suggestions.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => {
-                            setUsername(s)
-                            setUsernameTouched(true)
-                          }}
-                          className="text-xs px-2 py-0.5 rounded-full bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/25 transition-colors"
-                        >
-                          {s}
-                        </button>
-                      ))}
+              {/* Heading */}
+              <Cinematic delay="1.3s">
+                <h2 style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  color: C.teal,
+                  margin: '0 0 4px',
+                  fontFamily: 'inherit',
+                }}>
+                  {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+                </h2>
+                <p style={{
+                  fontSize: '13px',
+                  color: C.teal + '99',
+                  margin: '0 0 24px',
+                  fontFamily: 'inherit',
+                }}>
+                  {mode === 'signup'
+                    ? 'Sign up with your Cirkle email or phone.'
+                    : 'Log in with your email, phone, or username.'}
+                </p>
+              </Cinematic>
+
+              {/* Form */}
+              <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {mode === 'signup' ? (
+                  <>
+                    {/* Name + Username */}
+                    <Cinematic delay="1.4s">
+                      <div>
+                        <label style={labelStyle} htmlFor="name">Your name</label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
+                          <input
+                            id="name"
+                            type="text"
+                            placeholder="e.g. Ahmad Ali"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            autoComplete="name"
+                            disabled={loading}
+                            style={inputStyle}
+                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+                          />
+                        </div>
+                      </div>
+                    </Cinematic>
+
+                    <Cinematic delay="1.5s">
+                      <div>
+                        <label style={labelStyle} htmlFor="username">Cirkle username</label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
+                          <input
+                            id="username"
+                            type="text"
+                            placeholder="ahmad_ali"
+                            value={username}
+                            onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
+                            autoComplete="username"
+                            disabled={loading}
+                            style={inputStyle}
+                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+                          />
+                          {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /></span>}
+                          {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
+                          {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
+                        </div>
+                      </div>
+                    </Cinematic>
+
+                    {/* Email/Phone (optional) */}
+                    <Cinematic delay="1.6s">
+                      <div>
+                        <label style={labelStyle} htmlFor="signup-id">Cirkle email or phone <span style={{ fontWeight: 400, color: C.teal + '66' }}>(optional)</span></label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={iconWrapStyle}><SignupIdIcon style={{ width: 16, height: 16 }} /></span>
+                          <input
+                            id="signup-id"
+                            type="text"
+                            placeholder="you@cirkle.app or +20 100 123 4567"
+                            value={signupIdentifier}
+                            onChange={(e) => setSignupIdentifier(e.target.value)}
+                            autoComplete="off"
+                            disabled={loading}
+                            style={inputStyle}
+                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+                          />
+                        </div>
+                        <p style={{ fontSize: '11px', color: C.teal + '77', margin: '4px 0 0' }}>
+                          Add an email or phone so you can log in later.
+                        </p>
+                      </div>
+                    </Cinematic>
+                  </>
+                ) : (
+                  <Cinematic delay="1.4s">
+                    <div>
+                      <label style={labelStyle} htmlFor="identifier">Email, phone, or username</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={iconWrapStyle}><LoginIcon style={{ width: 16, height: 16 }} /></span>
+                        <input
+                          id="identifier"
+                          type="text"
+                          placeholder="you@cirkle.app, +20..., or @username"
+                          value={identifier}
+                          onChange={(e) => setIdentifier(e.target.value)}
+                          autoComplete="username"
+                          disabled={loading}
+                          style={inputStyle}
+                          onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+                          onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+                        />
+                      </div>
                     </div>
-                  )}
-                  {!usernameTouched && name.trim() && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Auto-suggested from your name. Tap to edit.
-                    </p>
-                  )}
-                </div>
+                  </Cinematic>
+                )}
 
-                {/* Signup: email or phone (optional) */}
-                <div className="space-y-2">
-                  <Label htmlFor="signup-id">Cirkle email or phone (optional)</Label>
-                  <div className="relative">
-                    <SignupIdIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="signup-id"
-                      type="text"
-                      value={signupIdentifier}
-                      onChange={(e) => setSignupIdentifier(e.target.value)}
-                      placeholder="you@cirkle.app or +20 100 123 4567"
-                      className="wasl-auth-input pl-9"
-                      disabled={loading}
-                      autoCapitalize="none"
-                      spellCheck={false}
-                    />
+                {/* Password */}
+                <Cinematic delay={mode === 'signup' ? '1.7s' : '1.5s'}>
+                  <div>
+                    <label style={labelStyle} htmlFor="password">Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                        disabled={loading}
+                        style={{ ...inputStyle, paddingRight: '40px' }}
+                        onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+                        onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: 14,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color: C.teal + '99',
+                          padding: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Add an email or phone so you can log in with it later. You can add more in Settings.
-                  </p>
-                </div>
+                </Cinematic>
 
-                {/* Signup: password */}
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      className="wasl-auth-input pl-9 pr-9"
-                      autoComplete="new-password"
-                      disabled={loading}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+                {/* Submit button */}
+                <Cinematic delay={mode === 'signup' ? '1.8s' : '1.6s'}>
+                  <button
+                    type="submit"
+                    disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
+                    style={{
+                      width: '100%',
+                      height: '44px',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      opacity: loading ? 0.6 : 1,
+                      background: `linear-gradient(135deg, ${C.goldLight}, ${C.gold}, ${C.goldDark})`,
+                      color: C.charcoal,
+                      boxShadow: `0 4px 16px ${C.gold}44`,
+                      transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                    onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${C.gold}66` } }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 16px ${C.gold}44` }}
+                  >
+                    {loading && <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} />}
+                    {mode === 'signup' ? 'Sign up' : 'Log in'}
+                  </button>
+                </Cinematic>
+              </form>
 
-            <Button
-              type="submit"
-              className={cn(
-                'wasl-btn-shimmer w-full font-medium',
-                isCirkle
-                  ? 'wasl-gradient-gold hover:opacity-90 text-[var(--cirkle-charcoal)]'
-                  : 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white'
-              )}
-              style={{
-                width: '100%',
-                fontWeight: 500,
-                background: 'linear-gradient(135deg, #e5c98a, #9a7a3e)',
-                color: '#1a1a14',
-                padding: '0.5rem 1rem',
-                borderRadius: '0.375rem',
-                border: 'none',
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-              }}
-              disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
-            >
-              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {mode === 'signup' ? 'Sign up' : 'Log in'}
-            </Button>
+              {/* Divider */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                margin: '20px 0 16px',
+              }}>
+                <div style={{ flex: 1, height: '1px', background: C.teal + '22' }} />
+                <span style={{ fontSize: '11px', color: C.teal + '66', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or</span>
+                <div style={{ flex: 1, height: '1px', background: C.teal + '22' }} />
+              </div>
 
-            {/* Forgot password link (login mode only) */}
-            {mode === 'login' && (
-              <div className="text-right -mt-1">
+              {/* Demo button */}
+              <Cinematic delay={mode === 'signup' ? '1.9s' : '1.7s'}>
                 <button
                   type="button"
-                  onClick={() => toast.info('Password reset coming soon. For demo, use username "demo" and password "demo123".')}
-                  className={cn(
-                    'text-xs hover:underline transition-colors',
-                    isCirkle ? 'text-[#c2a060]' : 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
-                  )}
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    border: `1px solid ${C.gold}55`,
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    fontFamily: 'inherit',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    background: 'transparent',
+                    color: C.goldDark,
+                    transition: 'all 0.25s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = `${C.gold}11`; e.currentTarget.style.borderColor = C.gold }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = `${C.gold}55` }}
                 >
-                  Forgot password?
+                  {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /> : <Sparkles style={{ width: 16, height: 16 }} />}
+                  Try the live demo
                 </button>
-              </div>
-            )}
-          </form>
-
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border/60" />
+              </Cinematic>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-[var(--wasl-sidebar-bg)] px-3 text-muted-foreground">
-                or
-              </span>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(
-                'w-full',
-                isCirkle && 'border-[#c2a060]/40 text-[#9a7a3e] hover:bg-[#c2a060]/10 hover:text-[#9a7a3e]'
-              )}
-              disabled={loading}
-              onClick={handleDemoLogin}
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Sparkles className="w-4 h-4 mr-2" />
-              )}
-              Try the live demo
-            </Button>
-          </div>
+          </Cinematic>
         </div>
-      </div>
 
-      <footer className="bg-[var(--wasl-teal)] text-white/80 text-xs text-center py-3 px-6" style={{ background: '#1a4a5a', color: 'rgba(255,255,255,0.8)', fontSize: '0.75rem', textAlign: 'center', padding: '0.75rem 1.5rem' }}>
-        Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging &middot; Commit-verified agreements
-      </footer>
-    </div>
+        {/* Footer */}
+        <Cinematic delay="2s">
+          <footer style={{
+            textAlign: 'center',
+            padding: '12px 24px',
+            color: 'rgba(255,255,255,0.6)',
+            fontSize: '11px',
+            fontFamily: 'inherit',
+            position: 'relative',
+            zIndex: 1,
+          }}>
+            Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging &middot; Commit-verified agreements
+          </footer>
+        </Cinematic>
+      </div>
+    </>
   )
 }
