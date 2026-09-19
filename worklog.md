@@ -5650,3 +5650,63 @@ AND wired to real actions:
 10. ✅ Draft persistence (with autosave indicator)
 11. ✅ **NEW: Privacy halo (inline E2EE + vanish + business status)**
 12. ✅ **NEW: Slash commands wired to real actions (not just text insertion)**
+
+---
+Task ID: 52 — Fix preview cache problems
+Agent: main (COO / CTO / Project Manager / UI Architect)
+
+### Task
+Fix preview cache problems — stale data being served from caches.
+
+### Phase 1: Root Cause Analysis
+Identified 4 cache layers that could serve stale data:
+1. **Vercel edge cache** — No Cache-Control headers in vercel.json → edge CDN caches API responses
+2. **Link preview in-memory cache** — 10-minute TTL → stale link metadata for 10 minutes
+3. **Browser cache** — No cache-control meta tags → browser caches stale HTML/CSS/JS
+4. **Client-side fetch** — GET requests cached by default → stale data in Zustand store
+
+### Phase 2: Fixes Applied
+
+#### Fix 1: Vercel Edge Cache (vercel.json)
+Added Cache-Control headers for 3 route types:
+- **API routes** (`/api/*`): `no-cache, no-store, must-revalidate`
+  → Prevents Vercel edge from caching API responses (conversations, messages, search, etc.)
+- **Static chunks** (`/_next/static/*`): `public, max-age=31536000, immutable`
+  → Allows long-term caching of hashed static assets (safe because they're content-hashed)
+- **Pages** (`/.*`): `public, max-age=0, must-revalidate`
+  → Forces revalidation on every page request (no stale page content)
+
+#### Fix 2: Link Preview Cache (src/app/api/link-preview/route.ts)
+- Reduced cache TTL from **10 minutes → 2 minutes** (less stale link metadata)
+- Added `?nocache=1` query parameter to **bypass cache entirely**
+- Added `Cache-Control: no-cache, no-store, must-revalidate` header to ALL responses
+  (both cached and fresh — prevents downstream caching)
+- Fixed null-safe cache key deletion in evictCache() (from earlier fix)
+
+#### Fix 3: Browser Cache (src/app/layout.tsx)
+Added cache-control meta tags to the metadata:
+- `cache-control: no-cache, no-store, must-revalidate`
+- `pragma: no-cache`
+- `expires: 0`
+These prevent browsers from caching stale HTML/CSS/JS files.
+
+#### Fix 4: Client-Side Fetch (already correct)
+- Conversations fetch: `cache: 'no-store'` ✅ (already had this)
+- Messages fetch: `cache: 'no-store'` ✅ (already had this)
+- No changes needed — client-side fetches were already properly configured.
+
+### Phase 3: Verification
+| Check | Result |
+|-------|--------|
+| Lint | 0 errors ✅ |
+| TypeScript | 0 errors ✅ |
+| Git sync | 0/0 ✅ |
+| Protected files | 48/48 ✅ |
+| Auto-restore | Upload route restored (12th time) ✅ |
+
+### Phase 4: Impact
+After these fixes, users should:
+1. ✅ See fresh API data on every request (no stale conversations/messages)
+2. ✅ Get updated link previews within 2 minutes (was 10 minutes)
+3. ✅ Never see stale cached HTML/CSS/JS in their browser
+4. ✅ Get the latest Vercel deployment immediately (edge cache purged)
