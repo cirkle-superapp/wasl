@@ -112,6 +112,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const conversation =
     conversations.find((c) => c.id === activeConversationId) || null
   const [media, setMedia] = useState<string[]>([])
+  const [mediaCounts, setMediaCounts] = useState<{ image: number; pdf: number; document: number; audio: number; voice: number }>({ image: 0, pdf: 0, document: 0, audio: 0, voice: 0 })
   const [capture, setCapture] = useState<CaptureSummary | null>(null)
   const [captureLoading, setCaptureLoading] = useState(false)
   const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
@@ -242,17 +243,15 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       if (!activeConversationId) return
       try {
         const res = await fetch(
-          `/api/conversations/${activeConversationId}/messages?limit=100`,
+          `/api/conversations/${activeConversationId}/media`,
           { cache: 'no-store' }
         )
         if (!res.ok) return
         const data = await res.json()
-        setMedia(
-          (data.messages as any[])
-            .filter((m) => m.type === 'image')
-            .map((m) => m.content)
-            .slice(0, 9)
-        )
+        // Extract image URLs for the grid preview
+        const images = (data.media?.image || []).map((m: any) => m.content).slice(0, 9)
+        setMedia(images)
+        setMediaCounts(data.counts || { image: 0, pdf: 0, document: 0, audio: 0, voice: 0 })
       } catch {
         // ignore
       }
@@ -1244,20 +1243,49 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
             <ImageIcon className="w-3.5 h-3.5" /> Shared media
+            {(mediaCounts.image + mediaCounts.pdf + mediaCounts.document + mediaCounts.audio + mediaCounts.voice) > 0 && (
+              <span className="ml-auto text-[10px] text-muted-foreground/60">
+                {mediaCounts.image > 0 && `${mediaCounts.image} 📷`}
+                {mediaCounts.pdf > 0 && ` ${mediaCounts.pdf} 📄`}
+                {mediaCounts.document > 0 && ` ${mediaCounts.document} 📃`}
+                {mediaCounts.audio > 0 && ` ${mediaCounts.audio} 🎵`}
+                {mediaCounts.voice > 0 && ` ${mediaCounts.voice} 🎤`}
+              </span>
+            )}
           </div>
-          {media.length === 0 ? (
+          {media.length === 0 && (mediaCounts.image + mediaCounts.pdf + mediaCounts.document + mediaCounts.audio + mediaCounts.voice) === 0 ? (
             <p className="text-sm text-muted-foreground">No media shared yet</p>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5">
-              {media.map((src, i) => (
-                <img
-                  key={i}
-                  src={src}
-                  alt="shared"
-                  className="w-full aspect-square object-cover rounded-md cursor-pointer"
-                />
-              ))}
-            </div>
+            <>
+              {media.length > 0 && (
+                <div className="grid grid-cols-3 gap-1.5 mb-2">
+                  {media.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt="shared"
+                      className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity"
+                    />
+                  ))}
+                </div>
+              )}
+              {(mediaCounts.pdf + mediaCounts.document + mediaCounts.audio + mediaCounts.voice) > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {mediaCounts.pdf > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">📄 {mediaCounts.pdf} PDF</span>
+                  )}
+                  {mediaCounts.document > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">📃 {mediaCounts.document} Docs</span>
+                  )}
+                  {mediaCounts.audio > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">🎵 {mediaCounts.audio} Audio</span>
+                  )}
+                  {mediaCounts.voice > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">🎤 {mediaCounts.voice} Voice</span>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 
