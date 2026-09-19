@@ -38,6 +38,7 @@ export function MessageInput({
   onOpenPoll,
   onSchedule,
   businesses = [],
+  onOpenTone,
 }: {
   conversationId: string
   onSend: (content: string, type?: string, opts?: SendOptions) => Promise<void>
@@ -48,6 +49,7 @@ export function MessageInput({
   onOpenPoll?: () => void
   onSchedule?: (content: string) => void
   businesses?: Array<{ id: string; name: string; avatarColor?: string | null }>
+  onOpenTone?: () => void
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -770,6 +772,27 @@ export function MessageInput({
           </select>
         )}
 
+        {/* Privacy halo (from Cirkle blueprint) — inline status indicators */}
+        {(effectiveProtect || vanishSec !== null || selectedBusinessId) && (
+          <div className="flex items-center gap-2 px-1 pb-0.5 text-[10px] text-muted-foreground">
+            {effectiveProtect && (
+              <span className="inline-flex items-center gap-1 text-[var(--wasl-green)]">
+                <Lock className="w-2.5 h-2.5" /> E2EE
+              </span>
+            )}
+            {vanishSec !== null && (
+              <span className="inline-flex items-center gap-1 text-[var(--wasl-green)]">
+                <Timer className="w-2.5 h-2.5" /> Vanishes in {vanishSec < 60 ? vanishSec + 's' : vanishSec < 3600 ? Math.round(vanishSec/60) + 'm' : vanishSec < 86400 ? Math.round(vanishSec/3600) + 'h' : Math.round(vanishSec/86400) + 'd'}
+              </span>
+            )}
+            {selectedBusinessId && (
+              <span className="inline-flex items-center gap-1">
+                🏢 {businesses.find(b => b.id === selectedBusinessId)?.name || 'Business'}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Textarea */}
         <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative">
 
@@ -783,17 +806,47 @@ export function MessageInput({
                 { cmd: '/location', label: 'Location', icon: <Paperclip className="w-3.5 h-3.5" /> },
                 { cmd: '/ai', label: 'AI', icon: <Sparkles className="w-3.5 h-3.5" /> },
                 { cmd: '/translate', label: 'Translate', icon: <Languages className="w-3.5 h-3.5" /> },
-              ].map((c) => (
-                <button
-                  key={c.cmd}
-                  type="button"
-                  onClick={() => { setValue(c.cmd + ' '); setShowSlash(false); textareaRef.current?.focus() }}
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 text-left text-xs"
-                >
-                  <span className="text-[var(--wasl-green)]">{c.icon}</span>
-                  {c.label}
-                </button>
-              ))}
+              ].map((c) => {
+                const handleClick = () => {
+                  setShowSlash(false)
+                  if (c.cmd === '/poll' && onOpenPoll) {
+                    onOpenPoll()
+                  } else if (c.cmd === '/translate') {
+                    // Trigger translate preview on any text after the command
+                    const remaining = value.replace(/^\/\S*\s?/, '').trim()
+                    if (remaining) {
+                      setValue(remaining)
+                      // Trigger translate by setting a flag
+                      setTimeout(() => {
+                        const btn = document.querySelector<HTMLButtonElement>('[aria-label="Translate message"]')
+                        btn?.click()
+                      }, 100)
+                    } else {
+                      setValue('')
+                      toast.info('Type a message, then tap the Languages icon to translate')
+                    }
+                  } else if (c.cmd === '/ai' && onOpenTone) {
+                    onOpenTone()
+                  } else if (c.cmd === '/event' && onSchedule) {
+                    // Pre-fill with the schedule dialog
+                    onSchedule(value.replace(/^\/\S*\s?/, '').trim() || '')
+                  } else {
+                    setValue(c.cmd + ' ')
+                  }
+                  textareaRef.current?.focus()
+                }
+                return (
+                  <button
+                    key={c.cmd}
+                    type="button"
+                    onClick={handleClick}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 text-left text-xs"
+                  >
+                    <span className="text-[var(--wasl-green)]">{c.icon}</span>
+                    {c.label}
+                  </button>
+                )
+              })}
             </div>
           )}
 

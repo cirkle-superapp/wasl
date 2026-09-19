@@ -1542,6 +1542,7 @@ export function ChatWindow({
         onOpenPoll={() => setPollOpen(true)}
         onSchedule={(content) => { setScheduleContent(content); setScheduleOpen(true) }}
         businesses={businesses}
+        onOpenTone={() => setToneOpen(true)}
       />
 
       {/* New Commit dialog (Cirkle-inspired) */}
