@@ -320,8 +320,14 @@ export function ChatApp({ user }: { user: any }) {
       }
     }) {
       if (!payload || !payload.conversationId) return
-      // Desktop notification when tab is not focused + message from someone else
+      // Desktop notification + sound when tab is not focused + message from someone else
       if (payload.lastMessage && payload.lastMessage.senderId !== user.id) {
+        // Play a subtle notification sound
+        try {
+          const audio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=')
+          audio.volume = 0.3
+          audio.play().catch(() => {})
+        } catch {}
         if (typeof document !== 'undefined' && document.hidden) {
           try {
             if (Notification.permission === 'granted') {
