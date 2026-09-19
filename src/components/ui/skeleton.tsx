@@ -8,9 +8,13 @@ import { cn } from '@/lib/utils'
 export function Skeleton({
   className,
   rounded = 'rounded-md',
+  style,
+  ...props
 }: {
   className?: string
   rounded?: string
+  style?: React.CSSProperties
+  [key: string]: any
 }) {
   return (
     <div
@@ -19,7 +23,9 @@ export function Skeleton({
         rounded,
         className
       )}
+      style={style}
       aria-hidden
+      {...props}
     />
   )
 }

@@ -72,6 +72,9 @@ export function MessageInput({
   // Per-message vanish timer (from Cirkle blueprint)
   const [vanishSec, setVanishSec] = useState<number | null>(null)
   const [showVanish, setShowVanish] = useState(false)
+  // On-device voice transcript (from Cirkle blueprint — Web Speech API)
+  const [voiceTranscript, setVoiceTranscript] = useState('')
+  const speechRef = useRef<any>(null)
 
   // ---- Draft persistence --------------------------------------------------
   // Debounce timer for saving the draft to the server (500ms after the user
@@ -267,6 +270,29 @@ export function MessageInput({
       mediaRecorderRef.current = mr
       setRecording(true)
       setRecordSeconds(0)
+      setVoiceTranscript('')
+
+      // On-device voice transcript (Web Speech API — from Cirkle blueprint)
+      // Never uploaded — runs entirely in the browser.
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (SR) {
+        try {
+          const recog = new SR()
+          recog.continuous = true
+          recog.interimResults = true
+          recog.lang = navigator.language || 'en-US'
+          recog.onresult = (ev: any) => {
+            let txt = ''
+            for (let i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript
+            setVoiceTranscript(txt)
+          }
+          recog.onerror = () => {}
+          recog.onend = () => {}
+          recog.start()
+          speechRef.current = recog
+        } catch {}
+      }
+
       recordTimerRef.current = setInterval(() => {
         setRecordSeconds((s) => {
           if (s >= 180) {
@@ -287,10 +313,16 @@ export function MessageInput({
       clearInterval(recordTimerRef.current)
       recordTimerRef.current = null
     }
+    // Stop on-device speech recognition
+    if (speechRef.current) {
+      try { speechRef.current.stop() } catch {}
+      speechRef.current = null
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
     setRecording(false)
+    setVoiceTranscript('')
   }
 
   function cancelRecording() {
@@ -834,7 +866,14 @@ export function MessageInput({
                 <Send className="w-4 h-4" />
               </button>
             </div>
-          ) : (
+          ) : null}
+          {recording && voiceTranscript && (
+            <div className="text-[11px] text-muted-foreground italic line-clamp-2 mt-1 px-1">
+              "{voiceTranscript}"
+              <span className="text-[9px] text-[var(--wasl-green)] ml-1">· on-device · never uploaded</span>
+            </div>
+          )}
+          {!recording && (
             <textarea
               ref={textareaRef}
               value={value}
