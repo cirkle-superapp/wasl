@@ -109,6 +109,52 @@ export function ChatApp({ user }: { user: any }) {
     setShowProfilePanel(false)
   }, [activeConversationId, setShowProfilePanel])
 
+  // ---- Favicon unread badge -----------------------------------------------
+  // Updates the browser tab title and favicon to show unread count.
+  // Uses a canvas to draw a badge number on the favicon SVG.
+  useEffect(() => {
+    const allConversations = useWaslStore.getState().conversations
+    const unreadTotal = allConversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+    // Update document title
+    document.title = unreadTotal > 0 ? `(${unreadTotal}) Wasl — Simple. Secure. Connected.` : 'Wasl — Simple. Secure. Connected.'
+    // Update favicon with badge
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = 32
+      canvas.height = 32
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, 32, 32)
+          if (unreadTotal > 0) {
+            // Draw red badge circle
+            ctx.fillStyle = '#25D366'
+            ctx.beginPath()
+            ctx.arc(26, 6, 9, 0, 2 * Math.PI)
+            ctx.fill()
+            // Draw number
+            ctx.fillStyle = '#fff'
+            ctx.font = 'bold 11px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(unreadTotal > 9 ? '9+' : String(unreadTotal), 26, 6)
+          }
+          // Replace favicon
+          let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null
+          if (!link) {
+            link = document.createElement('link')
+            link.rel = 'icon'
+            document.head.appendChild(link)
+          }
+          link.href = canvas.toDataURL('image/png')
+        }
+        img.src = '/wasl-favicon.svg'
+      }
+    } catch {}
+  }, []) // Run once on mount, reads store directly
+
   // Heartbeat presence
   useEffect(() => {
     heartbeatRef.current = setInterval(() => {

@@ -20,6 +20,8 @@ import {
   Bookmark as BookmarkIcon,
   TextSearch,
   PencilLine,
+  Pin,
+  PinOff,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -126,6 +128,39 @@ export function Sidebar({
     if (filter === 'unread' && c.unreadCount === 0) return false
     if (filter === 'groups' && !c.isGroup) return false
     return true
+  })
+
+  // Client-side conversation pinning (stored in localStorage)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('wasl-pinned-conversations')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
+  })
+
+  function togglePin(id: string) {
+    setPinnedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+        toast.success('Conversation unpinned')
+      } else {
+        next.add(id)
+        toast.success('Conversation pinned to top')
+      }
+      try { localStorage.setItem('wasl-pinned-conversations', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  // Sort: pinned conversations first, then by last message time
+  const sorted = [...filtered].sort((a, b) => {
+    const aPinned = pinnedIds.has(a.id) ? 1 : 0
+    const bPinned = pinnedIds.has(b.id) ? 1 : 0
+    if (aPinned !== bPinned) return bPinned - aPinned
+    const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : new Date(a.updatedAt).getTime()
+    const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : new Date(b.updatedAt).getTime()
+    return bTime - aTime
   })
 
   async function handleLogout() {
@@ -384,12 +419,14 @@ export function Sidebar({
             </p>
           </div>
         ) : (
-          filtered.map((c) => (
+          sorted.map((c) => (
             <ConversationRow
               key={c.id}
               conversation={c}
               active={c.id === activeConversationId}
               onlineUserIds={onlineUserIds}
+              pinned={pinnedIds.has(c.id)}
+              onPin={() => togglePin(c.id)}
               onClick={() => setActiveConversation(c.id)}
               onDelete={() => handleDeleteConversation(c.id)}
               onArchive={() => handleArchive(c.id)}
@@ -467,6 +504,8 @@ function ConversationRow({
   conversation,
   active,
   onlineUserIds,
+  pinned,
+  onPin,
   onClick,
   onDelete,
   onArchive,
@@ -474,6 +513,8 @@ function ConversationRow({
   conversation: Conversation
   active: boolean
   onlineUserIds: Set<string>
+  pinned?: boolean
+  onPin?: () => void
   onClick: () => void
   onDelete: () => void
   onArchive: () => void
@@ -586,6 +627,9 @@ function ConversationRow({
             )}
           >
             <span className="truncate">{conversation.name}</span>
+            {pinned && (
+              <Pin className="w-3 h-3 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" fill="currentColor" />
+            )}
             {/* Subtle "Draft" badge — shown only when there's unsent text for
                 this conversation. Uses italic muted-foreground to match
                 WhatsApp's quiet draft indicator. */}
@@ -679,6 +723,12 @@ function ConversationRow({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {onPin && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPin() }}>
+                      {pinned ? <PinOff className="w-4 h-4 mr-2" /> : <Pin className="w-4 h-4 mr-2" />}
+                      {pinned ? 'Unpin chat' : 'Pin to top'}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchive() }}>
                     <Archive className="w-4 h-4 mr-2" /> Archive chat
                   </DropdownMenuItem>
