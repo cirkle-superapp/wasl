@@ -24,6 +24,12 @@ export const metadata: Metadata = {
   authors: [{ name: "Wasl" }],
   creator: "Cirkle",
   publisher: "Cirkle",
+  // Prevent stale cached versions from being served
+  other: {
+    "cache-control": "no-cache, no-store, must-revalidate",
+    "pragma": "no-cache",
+    "expires": "0",
+  },
   icons: {
     icon: [
       { url: "/logo.svg", type: "image/svg+xml" },

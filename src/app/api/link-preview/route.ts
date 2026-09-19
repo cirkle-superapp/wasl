@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
-// Simple in-memory cache for link previews. Each entry is cached for 10 minutes.
+// Simple in-memory cache for link previews. Each entry is cached for 2 minutes.
 // We cap the cache at 200 entries to avoid unbounded memory growth.
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+// Supports cache-bypass via ?nocache=1 query parameter.
+const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes (was 10 — prevents stale previews)
 const CACHE_MAX = 200
 const cache = new Map<string, { data: any; expiresAt: number }>()
 
@@ -42,11 +43,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
   }
 
-  // Check cache
+  // Check cache (support cache-bypass via ?nocache=1)
+  const nocache = searchParams.get('nocache')
   const cacheKey = parsedUrl.href
-  const cached = cache.get(cacheKey)
-  if (cached && cached.expiresAt > Date.now()) {
-    return NextResponse.json(cached.data)
+  if (!nocache) {
+    const cached = cache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json(cached.data, {
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+      })
+    }
   }
 
   try {
@@ -155,7 +161,9 @@ export async function GET(req: NextRequest) {
     cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS })
     evictCache()
 
-    return NextResponse.json(data)
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    })
   } catch {
     // On any error (timeout, network, etc.), return a minimal preview so the
     // UI can still show the favicon-based fallback card.
@@ -168,6 +176,8 @@ export async function GET(req: NextRequest) {
     }
     cache.set(cacheKey, { data, expiresAt: Date.now() + CACHE_TTL_MS })
     evictCache()
-    return NextResponse.json(data)
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    })
   }
 }
