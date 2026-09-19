@@ -5790,3 +5790,52 @@ implement/modify/fix/audit with honest detailed results.
 - Secrets: SAFE (.env gitignored)
 - Code: CLEAN (0 lint, 0 TS errors)
 - Deployment: LIVE (Vercel serving latest)
+
+---
+Task ID: 55 — Notification sound + .env restore + E2E verification
+Agent: main (COO / CTO / Project Manager / UI Architect)
+
+### Task
+Proceed implementing and upgrading.
+
+### Phase 1: .env Restoration
+The .env was reset to 1 line (DATABASE_URL only) by the cron job.
+Restored all 13 credential entries (Turso, Neon, Resend, Inngest, etc.)
+All gitignored — no secrets committed ✅
+
+### Phase 2: Message Notification Sound
+Added a subtle notification beep when a new message arrives:
+- Plays before the desktop notification check
+- Only fires for messages from other users (not self)
+- Volume: 0.3 (subtle, not annoying)
+- Uses minimal base64 WAV (no external file needed)
+- Wrapped in try/catch (browser autoplay restrictions)
+
+### Phase 3: E2E Verification
+All checks pass:
+- Signup: 200 ✅
+- Seed: 200 ✅
+- Login: 200 ✅
+- Conversations: 2 ✅
+- Messages: 5 ✅
+- Upload: 415 (correct — rejects non-image) ✅
+- AI replies: 3 ✅
+- Lint: 0 errors ✅
+- TS: 0 errors ✅
+- Git sync: 0/0 ✅
+
+### Phase 4: Existing Features Audit
+Verified these features are already working (no changes needed):
+- Typing indicator in sidebar (typing dots + "Name is typing…") ✅
+- Online status pulse (wasl-online-dot with pulse-ring animation) ✅
+- Conversation pinning (pin/unpin, sorted to top) ✅
+- Favicon unread badge (canvas-drawn badge + title update) ✅
+- Draft preview ("Draft: <text>") in sidebar ✅
+- Business messaging (senderLabel, badge, color) ✅
+- Slash commands (/poll, /translate, /ai, /event) ✅
+- Inline translate preview ✅
+- Vanish timer (10s-7d) ✅
+- On-device voice transcript (Web Speech API) ✅
+- Privacy halo (E2EE + vanish + business status) ✅
+- Offline smart replies (pattern-based fallback) ✅
+- Scheduled message processor (60s polling) ✅
