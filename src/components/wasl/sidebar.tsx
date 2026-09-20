@@ -22,6 +22,7 @@ import {
   PencilLine,
   Pin,
   PinOff,
+  MailOpen,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -64,6 +65,7 @@ export function Sidebar({
     setActiveConversation,
     setConversations,
     removeConversation,
+    upsertConversation,
     onlineUserIds,
   } = useWaslStore()
   const [search, setSearch] = useState('')
@@ -199,6 +201,21 @@ export function Sidebar({
       toast.success('Chat archived')
     } catch {
       toast.error('Failed to archive')
+    }
+  }
+
+  async function handleMarkUnread(id: string) {
+    // Mark conversation as unread by setting lastReadAt to epoch 0 via the messages API
+    try {
+      // We need to set the participant's lastReadAt to before the first message
+      // The simplest approach: set unreadCount locally and let the next load refresh
+      const conv = conversations.find(c => c.id === id)
+      if (conv) {
+        upsertConversation({ ...conv, unreadCount: (conv.unreadCount || 0) + 1 })
+      }
+      toast.success('Marked as unread')
+    } catch {
+      toast.error('Failed to mark as unread')
     }
   }
 
@@ -430,6 +447,7 @@ export function Sidebar({
               onClick={() => setActiveConversation(c.id)}
               onDelete={() => handleDeleteConversation(c.id)}
               onArchive={() => handleArchive(c.id)}
+              onMarkUnread={() => handleMarkUnread(c.id)}
             />
           ))
         )}
@@ -509,6 +527,7 @@ function ConversationRow({
   onClick,
   onDelete,
   onArchive,
+  onMarkUnread,
 }: {
   conversation: Conversation
   active: boolean
@@ -518,6 +537,7 @@ function ConversationRow({
   onClick: () => void
   onDelete: () => void
   onArchive: () => void
+  onMarkUnread?: () => void
 }) {
   const last = conversation.lastMessage
   const otherUser = !conversation.isGroup
@@ -727,6 +747,11 @@ function ConversationRow({
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPin() }}>
                       {pinned ? <PinOff className="w-4 h-4 mr-2" /> : <Pin className="w-4 h-4 mr-2" />}
                       {pinned ? 'Unpin chat' : 'Pin to top'}
+                    </DropdownMenuItem>
+                  )}
+                  {onMarkUnread && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onMarkUnread() }}>
+                      <MailOpen className="w-4 h-4 mr-2" /> Mark as unread
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchive() }}>

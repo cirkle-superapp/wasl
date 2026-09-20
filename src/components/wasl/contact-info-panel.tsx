@@ -689,6 +689,28 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function handleClearChat() {
+    if (!conversation) return
+    if (!confirm('Clear all messages in this conversation? This cannot be undone.')) return
+    try {
+      // Clear messages locally and on the server
+      // We set messages to empty in the store and delete all messages via the API
+      const res = await fetch(`/api/conversations/${conversation.id}/messages`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        // Clear local state
+        const { setMessages } = useWaslStore.getState()
+        setMessages(conversation.id, [])
+        toast.success('Chat cleared')
+      } else {
+        toast.error('Failed to clear chat')
+      }
+    } catch {
+      toast.error('Failed to clear chat')
+    }
+  }
+
   function toggleCaptureMessage(messageId: string) {
     setExpandedCapture((prev) => {
       const next = new Set(prev)
@@ -1414,6 +1436,13 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
             }}
           >
             <Download className="w-4 h-4 mr-3" /> Export chat
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-amber-600 hover:text-amber-600 hover:bg-amber-600/10"
+            onClick={handleClearChat}
+          >
+            <Trash2 className="w-4 h-4 mr-3" /> Clear chat
           </Button>
           <Button
             variant="ghost"
