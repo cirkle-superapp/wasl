@@ -22,7 +22,7 @@ import {
 import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
-  UserCircle, Shield, Users, Landmark, Ghost, Clock,
+  UserCircle, Shield, Users, Landmark, Ghost, Clock, Camera,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -215,14 +215,55 @@ export function SettingsDialog({
 
           {/* ---- Profile Tab ---- */}
           <TabsContent value="profile" className="flex-1 overflow-y-auto wasl-scroll -mx-1 px-1 space-y-4 mt-2">
-            {/* Avatar preview */}
+            {/* Avatar preview with upload */}
             <div className="flex items-center gap-3">
-              <WaslAvatar
-                name={name || user?.name || 'Me'}
-                src={user?.avatar}
-                color={user?.avatarColor}
-                size={64}
-              />
+              <div className="relative">
+                <WaslAvatar
+                  name={name || user?.name || 'Me'}
+                  src={user?.avatar}
+                  color={user?.avatarColor}
+                  size={64}
+                />
+                <label
+                  className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[var(--wasl-green)] text-white flex items-center justify-center cursor-pointer border-2 border-white dark:border-[var(--wasl-sidebar-bg)] hover:bg-[var(--wasl-green-dark)] transition-colors"
+                  title="Upload avatar"
+                >
+                  <Camera className="w-3 h-3" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (file.size > 1.5 * 1024 * 1024) {
+                        toast.error('Image too large (max 1.5MB)')
+                        return
+                      }
+                      const reader = new FileReader()
+                      reader.onload = async () => {
+                        try {
+                          const res = await fetch('/api/profile', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ avatar: reader.result }),
+                          })
+                          if (res.ok) {
+                            const data = await res.json()
+                            setUser(data)
+                            toast.success('Avatar updated')
+                          } else {
+                            toast.error('Failed to upload avatar')
+                          }
+                        } catch {
+                          toast.error('Network error')
+                        }
+                      }
+                      reader.readAsDataURL(file)
+                    }}
+                  />
+                </label>
+              </div>
               <div className="min-w-0">
                 <div className="font-semibold truncate">{user?.name}</div>
                 <div className="text-sm text-muted-foreground truncate">

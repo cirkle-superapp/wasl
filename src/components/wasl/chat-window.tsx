@@ -726,8 +726,14 @@ export function ChatWindow({
 
   const handleCopyMessage = useCallback(async (m: ChatMessage) => {
     try {
-      await navigator.clipboard.writeText(m.content)
-      toast.success('Copied to clipboard')
+      // Copy with markdown formatting preserved (bold, italic, code, links)
+      const content = m.content || ''
+      await navigator.clipboard.writeText(content)
+      toast.success('Copied to clipboard', {
+        description: content.includes('**') || content.includes('*') || content.includes('`')
+          ? 'Markdown formatting preserved'
+          : undefined,
+      })
     } catch {
       toast.error('Failed to copy')
     }
