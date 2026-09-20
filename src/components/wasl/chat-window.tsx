@@ -1283,8 +1283,16 @@ export function ChatWindow({
                   {socketStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline'}
                 </span>
               ) : typingUsers.length > 0 ? (
-                <span className="text-[var(--wasl-green)] font-medium">
-                  typing…
+                <span className="text-[var(--wasl-green)] font-medium inline-flex items-center gap-1">
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="ml-0.5">{conversation.isGroup ? `${typingUsers[0]} is typing…` : 'typing…'}</span>
+                </span>
+              ) : !conversation.isGroup && isOnline ? (
+                <span className="inline-flex items-center gap-1 text-[var(--wasl-green)] font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--wasl-green)] inline-block wasl-online-dot" />
+                  online
                 </span>
               ) : conversation.isGroup ? (
                 `${conversation.participants.map((p) => p.name).join(', ')}`

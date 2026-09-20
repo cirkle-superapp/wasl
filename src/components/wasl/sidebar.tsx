@@ -111,15 +111,22 @@ export function Sidebar({
      
   }, [search])
 
-  // Global keyboard shortcut: Ctrl/Cmd+Shift+F opens the global message
-  // search dialog from anywhere in the app. (Ctrl/Cmd+K already opens the
-  // command palette, so we use Shift+F to keep the two distinct.)
+  // Global keyboard shortcuts:
+  // - Ctrl/Cmd+Shift+F: open global message search
+  // - Ctrl/Cmd+N: open new chat dialog
+  // - Ctrl/Cmd+/: open keyboard shortcuts help
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setGlobalSearchInitialQuery('')
         setGlobalSearchOpen(true)
+      }
+      // Ctrl/Cmd+N → new chat (don't conflict with browser's new window
+      // because we preventDefault)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        onNewChat()
       }
     }
     window.addEventListener('keydown', onKey)

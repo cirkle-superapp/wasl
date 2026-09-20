@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { Keyboard, Command, ArrowUp, ArrowDown, Search, MessageSquare, Settings, Lock, Send } from 'lucide-react'
+import { Keyboard, Command, ArrowUp, ArrowDown, Search, MessageSquare, Settings, Lock, Send, Plus } from 'lucide-react'
 
 type Shortcut = {
   keys: string[]
@@ -20,6 +20,7 @@ type Shortcut = {
 const SHORTCUTS: Shortcut[] = [
   // Navigation
   { keys: ['Ctrl', 'K'], label: 'Open command palette', icon: Command, group: 'Navigation' },
+  { keys: ['Ctrl', 'N'], label: 'Start a new chat', icon: Plus, group: 'Navigation' },
   { keys: ['Ctrl', '/'], label: 'Show this shortcuts dialog', icon: Keyboard, group: 'Navigation' },
   { keys: ['Esc'], label: 'Close dialog / cancel action', icon: Keyboard, group: 'Navigation' },
 
@@ -31,6 +32,7 @@ const SHORTCUTS: Shortcut[] = [
 
   // Search
   { keys: ['Ctrl', 'F'], label: 'Search messages in chat', icon: Search, group: 'Search' },
+  { keys: ['Ctrl', 'Shift', 'F'], label: 'Search across all conversations', icon: Search, group: 'Search' },
 
   // Settings
   { keys: ['Ctrl', ','], label: 'Open settings', icon: Settings, group: 'Settings' },
