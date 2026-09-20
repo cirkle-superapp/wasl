@@ -834,13 +834,23 @@ export function MessageBubble({
             </button>
           )}
           {message.type === 'image' ? (
-            <div className="rounded-lg overflow-hidden max-w-xs">
+            <div className="rounded-lg overflow-hidden" style={{ maxWidth: 'min(100%, 320px)' }}>
               <img
                 src={message.content}
                 alt="sent"
-                className={cn('w-full h-auto', blocked && 'pointer-events-none select-none')}
+                className={cn('block w-auto h-auto', blocked && 'pointer-events-none select-none')}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '400px',
+                  objectFit: 'contain',
+                  borderRadius: '8px',
+                }}
                 draggable={!blocked}
                 onDragStart={onDragStart}
+                loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }}
               />
               <div className="text-[10px] text-right text-foreground/60 mt-0.5 flex items-center justify-end gap-1">
                 {protection.isProtected && (

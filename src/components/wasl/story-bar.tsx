@@ -279,11 +279,12 @@ export function StoryBar() {
             }
           >
             {currentStory.type === 'image' ? (
-               
               <img
                 src={currentStory.content}
                 alt="story"
                 className="w-full h-full object-contain"
+                style={{ maxHeight: '100%', maxWidth: '100%' }}
+                loading="lazy"
               />
             ) : (
               <p className="text-white text-2xl font-medium text-center px-8 whitespace-pre-wrap">

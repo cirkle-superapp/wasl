@@ -56,12 +56,14 @@ export function LinkPreviewCard({
       >
         {/* OG image (if available) */}
         {og.image && (
-          <div className="w-full h-32 overflow-hidden bg-muted/30">
+          <div className="w-full overflow-hidden bg-muted/30" style={{ maxHeight: '160px' }}>
             <img
               src={og.image}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-auto block"
+              style={{ maxHeight: '160px', objectFit: 'cover', objectPosition: 'center' }}
               referrerPolicy="no-referrer"
+              loading="lazy"
               onError={(e) => {
                 ;(e.target as HTMLImageElement).style.display = 'none'
               }}

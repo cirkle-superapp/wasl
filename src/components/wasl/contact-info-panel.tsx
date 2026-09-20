@@ -1265,6 +1265,10 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
                       src={src}
                       alt="shared"
                       className="w-full aspect-square object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).parentElement?.style.setProperty('display', 'none')
+                      }}
                     />
                   ))}
                 </div>
