@@ -1431,10 +1431,11 @@ export function ChatWindow({
                   key={m.id}
                   data-message-id={m.id}
                   className="wasl-message-wrapper"
+                  title={new Date(m.createdAt).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 >
                   {showDate && (
-                    <div className="flex justify-center my-3">
-                      <div className="wasl-date-pill text-xs px-3 py-1 rounded-lg font-medium">
+                    <div className="flex justify-center my-3 sticky top-2 z-10" style={{ position: 'sticky', top: '8px', zIndex: 10 }}>
+                      <div className="wasl-date-pill text-xs px-3 py-1 rounded-full font-medium shadow-sm" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
                         {date}
                       </div>
                     </div>
