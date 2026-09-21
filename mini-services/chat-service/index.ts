@@ -211,6 +211,125 @@ io.on('connection', (socket) => {
     }
   )
 
+  // ----- Voice / Video call signaling (Cirkle-inspired WebRTC relay) ---------
+  // All call signaling is targeted at a specific user via their socket set,
+  // so callers and callees don't need to share a conversation room (they can
+  // start a call from any conversation in which both participants exist).
+  // The actual media stream is peer-to-peer via the browser's RTCPeerConnection;
+  // the socket is only used to relay the SDP offer / answer and ICE candidates.
+
+  // Helper: send an event to every socket owned by a user.
+  function sendToUser(targetUserId: string, event: string, payload: any) {
+    const sockets = userSockets.get(targetUserId)
+    if (!sockets) return false
+    for (const sid of sockets) {
+      io.to(sid).emit(event, payload)
+    }
+    return sockets.size > 0
+  }
+
+  // call:invite — caller → callee. Includes the WebRTC SDP offer so the callee
+  // can immediately render an "incoming call" UI and prepare their answer.
+  socket.on(
+    'call:invite',
+    (data: {
+      toUserId: string
+      fromUserId: string
+      fromName: string
+      fromAvatarColor?: string | null
+      conversationId?: string
+      callType: 'audio' | 'video'
+      offer: any
+    }) => {
+      if (!data || !data.toUserId || !data.fromUserId || !data.offer) return
+      const delivered = sendToUser(data.toUserId, 'call:incoming', {
+        fromUserId: data.fromUserId,
+        fromName: data.fromName,
+        fromAvatarColor: data.fromAvatarColor ?? null,
+        conversationId: data.conversationId ?? null,
+        callType: data.callType,
+        offer: data.offer,
+        at: Date.now(),
+      })
+      // Tell the caller whether the callee is reachable, so they can show
+      // "User is offline — call failed" when nobody is on the other end.
+      socket.emit('call:invite-status', {
+        toUserId: data.toUserId,
+        delivered,
+      })
+    }
+  )
+
+  // call:accept — callee → caller. Carries the SDP answer.
+  socket.on(
+    'call:accept',
+    (data: {
+      toUserId: string
+      fromUserId: string
+      answer: any
+    }) => {
+      if (!data || !data.toUserId || !data.fromUserId || !data.answer) return
+      sendToUser(data.toUserId, 'call:accepted', {
+        fromUserId: data.fromUserId,
+        answer: data.answer,
+        at: Date.now(),
+      })
+    }
+  )
+
+  // call:reject — callee → caller. Callee declined or timed out.
+  socket.on(
+    'call:reject',
+    (data: {
+      toUserId: string
+      fromUserId: string
+      reason?: 'declined' | 'busy' | 'timeout' | 'unavailable'
+    }) => {
+      if (!data || !data.toUserId || !data.fromUserId) return
+      sendToUser(data.toUserId, 'call:rejected', {
+        fromUserId: data.fromUserId,
+        reason: data.reason || 'declined',
+        at: Date.now(),
+      })
+    }
+  )
+
+  // call:end — either party → other. The other side tears down its peer
+  // connection and shows the "call ended" UI.
+  socket.on(
+    'call:end',
+    (data: {
+      toUserId: string
+      fromUserId: string
+      reason?: 'ended' | 'busy' | 'missed' | 'failed'
+    }) => {
+      if (!data || !data.toUserId || !data.fromUserId) return
+      sendToUser(data.toUserId, 'call:ended', {
+        fromUserId: data.fromUserId,
+        reason: data.reason || 'ended',
+        at: Date.now(),
+      })
+    }
+  )
+
+  // call:signal — bidirectional ICE candidate relay. Both sides fire these as
+  // the underlying RTCPeerConnection discovers network paths to the peer.
+  socket.on(
+    'call:signal',
+    (data: {
+      toUserId: string
+      fromUserId: string
+      candidate: any
+    }) => {
+      if (!data || !data.toUserId || !data.fromUserId || !data.candidate) return
+      sendToUser(data.toUserId, 'call:signal', {
+        fromUserId: data.fromUserId,
+        candidate: data.candidate,
+        at: Date.now(),
+      })
+    }
+  )
+
   socket.on('disconnect', () => {
     const userId = socketToUser.get(socket.id)
     socketToUser.delete(socket.id)

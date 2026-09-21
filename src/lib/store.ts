@@ -138,6 +138,60 @@ export type Conversation = {
   updatedAt: string
 }
 
+// ---- Voice / Video call (Cirkle-inspired WebRTC) ---------------------------
+// The local user can place an outgoing call, receive an incoming call, or be
+// in an active call. The peer connection itself lives in <CallOverlay> — the
+// store only carries the signaling metadata so any component can render UI
+// against it (incoming-call modal, header pill, "call ended" toast, etc.).
+
+export type CallType = 'audio' | 'video'
+
+export type ActiveCall = {
+  // The conversation this call originated from. Used for back-navigation
+  // and to render the contact name when the peer's profile isn't loaded.
+  conversationId: string | null
+  // The OTHER party's user id (always the peer, regardless of who placed
+  // the call). For group calls this would be the room id, but Wasl currently
+  // only supports 1:1 calls.
+  peerUserId: string
+  peerName: string
+  peerAvatarColor: string | null
+  // 'audio' = voice only, 'video' = voice + camera
+  callType: CallType
+  // 'outgoing' = we placed the call (waiting for the peer to answer)
+  // 'incoming'  = the peer placed the call (we accepted)
+  // 'connected'  = the peer connection is established and media is flowing
+  // 'reconnecting' = the ICE connection dropped temporarily and is recovering
+  direction: 'outgoing' | 'incoming' | 'connected' | 'reconnecting'
+  // Wall-clock start of the call (ms since epoch). Used to render the live
+  // duration timer. Set when the call is *placed* (outgoing) or *accepted*
+  // (incoming) — not when the peer actually picks up.
+  startedAt: number
+}
+
+export type IncomingCall = {
+  conversationId: string | null
+  fromUserId: string
+  fromName: string
+  fromAvatarColor: string | null
+  callType: CallType
+  // The WebRTC SDP offer from the caller. Stored in the store so the
+  // <CallOverlay> can pick it up when the user accepts and immediately
+  // generate the answer — there's no second round-trip to the caller.
+  offer: any
+  receivedAt: number
+}
+
+export type CallEndedInfo = {
+  peerName: string
+  peerAvatarColor: string | null
+  // 'ended' = normal hangup, 'declined' = callee rejected,
+  // 'missed' = caller gave up before answer, 'failed' = network error,
+  // 'busy' = callee was already in a call, 'timeout' = no answer
+  reason: 'ended' | 'declined' | 'missed' | 'failed' | 'busy' | 'timeout' | 'unavailable'
+  durationMs: number
+}
+
 type WaslState = {
   user: CurrentUser | null
   setUser: (u: CurrentUser | null) => void
@@ -247,6 +301,26 @@ type WaslState = {
   setDrafts: (drafts: Record<string, string>) => void
   setDraft: (conversationId: string, content: string) => void
   clearDraft: (conversationId: string) => void
+
+  // ---- Voice / Video call state (Cirkle-inspired WebRTC) -------------------
+  // `activeCall` is the call currently being placed (outgoing) or in progress.
+  // `incomingCall` is a call waiting for the user to accept / reject.
+  // At most one of these is non-null at a time.
+  //
+  // Lifecycle:
+  //   1. Caller clicks Phone/Video → startCall(outgoing) → outgoing call placed
+  //   2. Callee receives call:incoming → incomingCall set
+  //   3. Callee accepts → incomingCall cleared, activeCall set (incoming)
+  //   4. Either ends → endCall() clears state and tears down the peer connection
+  activeCall: ActiveCall | null
+  incomingCall: IncomingCall | null
+  callEnded: CallEndedInfo | null
+  startCall: (call: ActiveCall) => void
+  setIncomingCall: (call: IncomingCall | null) => void
+  acceptIncomingCall: () => void
+  rejectIncomingCall: () => void
+  endCall: (info?: CallEndedInfo) => void
+  setCallEnded: (info: CallEndedInfo | null) => void
 }
 
 export const useWaslStore = create<WaslState>((set) => ({
@@ -534,6 +608,61 @@ export const useWaslStore = create<WaslState>((set) => ({
       delete next[conversationId]
       return { drafts: next }
     }),
+
+  // ---- Voice / Video call state (Cirkle-inspired WebRTC) -------------------
+  activeCall: null,
+  incomingCall: null,
+  callEnded: null,
+
+  startCall: (call) =>
+    set({
+      activeCall: call,
+      incomingCall: null,
+      callEnded: null,
+    }),
+
+  setIncomingCall: (call) => set({ incomingCall: call }),
+
+  acceptIncomingCall: () =>
+    set((state) => {
+      if (!state.incomingCall) return state
+      const ic = state.incomingCall
+      return {
+        incomingCall: null,
+        activeCall: {
+          conversationId: ic.conversationId,
+          peerUserId: ic.fromUserId,
+          peerName: ic.fromName,
+          peerAvatarColor: ic.fromAvatarColor,
+          callType: ic.callType,
+          direction: 'incoming',
+          startedAt: Date.now(),
+        },
+        callEnded: null,
+      }
+    }),
+
+  rejectIncomingCall: () => set({ incomingCall: null }),
+
+  endCall: (info) =>
+    set((state) => {
+      const prev = state.activeCall
+      const peerName = prev?.peerName ?? ''
+      const peerAvatarColor = prev?.peerAvatarColor ?? null
+      const startedAt = prev?.startedAt ?? Date.now()
+      return {
+        activeCall: null,
+        incomingCall: null,
+        callEnded: info ?? {
+          peerName,
+          peerAvatarColor,
+          reason: 'ended',
+          durationMs: Date.now() - startedAt,
+        },
+      }
+    }),
+
+  setCallEnded: (info) => set({ callEnded: info }),
 }))
 
 function cryptoId(): string {

@@ -87,6 +87,8 @@ export function ChatWindow({
     socketStatus,
     bookmarkedMessageIds,
     setBookmarked,
+    startCall,
+    activeCall,
   } = useWaslStore()
 
   const [commitOpen, setCommitOpen] = useState(false)
@@ -876,6 +878,43 @@ export function ChatWindow({
     [handleSend]
   )
 
+  // ---- Voice / Video call (Cirkle-inspired WebRTC) --------------------------
+  // Initiates an outgoing 1:1 call. Group calls are not yet supported — the
+  // button is hidden for group conversations. If a call is already in
+  // progress, clicking again focuses the existing overlay (no-op).
+  const handleStartCall = useCallback(
+    (callType: 'audio' | 'video') => {
+      if (!conversation || !user) {
+        toast.error('Conversation or user missing — cannot start call')
+        return
+      }
+      if (conversation.isGroup) {
+        toast.info('Group calls are coming soon — start a 1-on-1 chat to call.')
+        return
+      }
+      const peer = conversation.participants.find((p) => p.userId !== user.id)
+      if (!peer) {
+        toast.error('Could not find the other participant')
+        return
+      }
+      if (activeCall) {
+        // A call is already in progress — don't start a second one.
+        toast.info('A call is already in progress')
+        return
+      }
+      startCall({
+        conversationId: conversation.id,
+        peerUserId: peer.userId,
+        peerName: peer.name,
+        peerAvatarColor: peer.avatarColor,
+        callType,
+        direction: 'outgoing',
+        startedAt: Date.now(),
+      })
+    },
+    [conversation, user, activeCall, startCall]
+  )
+
   // ---- Paste image upload (Ctrl+V with image in clipboard) ------------------
   // Reads any image file from the clipboard `items` list, converts it to a
   // data URL, and sends it via the existing image-send flow.
@@ -1331,12 +1370,32 @@ export function ChatWindow({
           </span>
         )}
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Video call is not available in this demo')}>
-            <Video className="w-5 h-5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Voice call is not available in this demo')}>
-            <Phone className="w-5 h-5" />
-          </Button>
+          {!conversation?.isGroup && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex"
+                onClick={() => handleStartCall('video')}
+                title="Video call"
+                aria-label="Start video call"
+                disabled={!!activeCall}
+              >
+                <Video className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex"
+                onClick={() => handleStartCall('audio')}
+                title="Voice call"
+                aria-label="Start voice call"
+                disabled={!!activeCall}
+              >
+                <Phone className="w-5 h-5" />
+              </Button>
+            </>
+          )}
           <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
             <Search className="w-5 h-5" />
           </Button>

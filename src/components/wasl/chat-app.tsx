@@ -13,6 +13,7 @@ import { NewChatDialog } from './new-chat-dialog'
 import { SettingsDialog } from './settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 import { QuickReplyToast } from './quick-reply-toast'
+import { CallOverlay } from './call-overlay'
 import {
   Dialog,
   DialogContent,
@@ -513,6 +514,11 @@ export function ChatApp({ user }: { user: any }) {
       <NewChatDialog open={newChatOpen} onOpenChange={setNewChatOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <KeyboardShortcutsDialog />
+
+      {/* Voice / video call overlay (Cirkle-inspired WebRTC). Mounted once
+          globally so incoming-call events arriving on the socket can flip the
+          overlay to "incoming" state from anywhere in the app. */}
+      <CallOverlay />
 
       {/* Invite-link join dialog. Reads `?join={token}` from the URL so the
           same link works whether the visitor is logged in already or signs

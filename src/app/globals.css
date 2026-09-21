@@ -1056,6 +1056,27 @@ kbd {
   animation: pulse-ring 2s ease-in-out infinite;
 }
 
+/* ---- Voice / Video call pulse ring ----
+   Used by the CallOverlay avatar during an incoming / outgoing call to
+   draw a soft expanding ring around the avatar — mimics the WhatsApp /
+   FaceTime incoming-call ring. */
+@keyframes wasl-call-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 28px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+@keyframes wasl-call-pulse-ring-dark {
+  0%   { box-shadow: 0 0 0 0 rgba(7, 94, 84, 0.55); }
+  70%  { box-shadow: 0 0 0 22px rgba(7, 94, 84, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(7, 94, 84, 0); }
+}
+.wasl-call-pulse {
+  animation: wasl-call-pulse-ring 1.6s ease-out infinite;
+}
+.dark .wasl-call-pulse {
+  animation: wasl-call-pulse-ring-dark 1.6s ease-out infinite;
+}
+
 /* ---- Search shortcut hint ---- */
 kbd {
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
