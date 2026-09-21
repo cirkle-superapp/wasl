@@ -1,0 +1,1380 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useRef, useState, useCallback } from 'react'
+     4→import {
+     5→  ArrowLeft,
+     6→  MoreVertical,
+     7→  Phone,
+     8→  Video,
+     9→  Search,
+    10→  Trash2,
+    11→  Info,
+    12→  Users,
+    13→  Reply as ReplyIcon,
+    14→  Copy,
+    15→  ChevronDown,
+    16→  Sparkles,
+    17→  Lock,
+    18→  ListChecks,
+    19→  Wand2,
+    20→  Timer,
+    21→  Paperclip,
+    22→  Pin,
+    23→  PinOff,
+    24→} from 'lucide-react'
+    25→import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
+    26→import { WaslLogo } from './wasl-logo'
+    27→import { MessageBubble } from './message-bubble'
+    28→import { MessageInput } from './message-input'
+    29→import { NewCommitDialog } from './new-commit-dialog'
+    30→import { NewPollDialog } from './new-poll-dialog'
+    31→import { ChatSearchDialog } from './chat-search-dialog'
+    32→import { SmartReplyChips } from './smart-reply-chips'
+    33→import { ScheduleDialog } from './schedule-dialog'
+    34→import { ChatSummaryDialog } from './chat-summary-dialog'
+    35→import { AppLockDialog } from './app-lock-dialog'
+    36→import { ActionItemsDialog } from './action-items-dialog'
+    37→import { ToneAdjusterDialog } from './tone-adjuster-dialog'
+    38→import { CommandPalette } from './command-palette'
+    39→import { ForwardDialog } from './forward-dialog'
+    40→import { DeleteMessageDialog } from './delete-message-dialog'
+    41→import { useWaslStore, type ChatMessage } from '@/lib/store'
+    42→import { connectSocket, getSocket } from '@/lib/socket'
+    43→import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/time'
+    44→import { cn } from '@/lib/utils'
+    45→import { Button } from '@/components/ui/button'
+    46→import {
+    47→  DropdownMenu,
+    48→  DropdownMenuContent,
+    49→  DropdownMenuItem,
+    50→  DropdownMenuTrigger,
+    51→} from '@/components/ui/dropdown-menu'
+    52→import { toast } from 'sonner'
+    53→import { Skeleton, MessageSkeleton } from '@/components/ui/skeleton'
+    54→
+    55→const PAGE_SIZE = 40
+    56→
+    57→export function ChatWindow({
+    58→  onBack,
+    59→  onOpenInfo,
+    60→}: {
+    61→  onBack: () => void
+    62→  onOpenInfo: () => void
+    63→}) {
+    64→  const {
+    65→    activeConversationId,
+    66→    user,
+    67→    messagesByConversation,
+    68→    setMessages,
+    69→    addMessage,
+    70→    prependMessages,
+    71→    updateMessageStatus,
+    72→    conversations,
+    73→    upsertConversation,
+    74→    onlineUserIds,
+    75→    typingByConversation,
+    76→    setShowProfilePanel,
+    77→    setReplyTo,
+    78→    replyTo,
+    79→    upsertCommit,
+    80→    commitsByConversation,
+    81→    setCommits,
+    82→    toggleReaction,
+    83→    setStarred,
+    84→    removeMessage,
+    85→    socketStatus,
+    86→  } = useWaslStore()
+    87→
+    88→  const [commitOpen, setCommitOpen] = useState(false)
+    89→  const [pollOpen, setPollOpen] = useState(false)
+    90→  const [searchOpen, setSearchOpen] = useState(false)
+    91→  const [scheduleOpen, setScheduleOpen] = useState(false)
+    92→  const [scheduleContent, setScheduleContent] = useState('')
+    93→  const [summaryOpen, setSummaryOpen] = useState(false)
+    94→  const [appLockOpen, setAppLockOpen] = useState(false)
+    95→  const [actionItemsOpen, setActionItemsOpen] = useState(false)
+    96→  const [toneOpen, setToneOpen] = useState(false)
+    97→  const [paletteOpen, setPaletteOpen] = useState(false)
+    98→  const [showScrollBtn, setShowScrollBtn] = useState(false)
+    99→  const [botReplying, setBotReplying] = useState(false)
+   100→  // Drop zone state — shown when a file is dragged over the chat window
+   101→  const [isDragging, setIsDragging] = useState(false)
+   102→  const dragDepthRef = useRef(0)
+   103→
+   104→  const conversation = conversations.find((c) => c.id === activeConversationId)
+   105→  const messages = activeConversationId
+   106→    ? messagesByConversation[activeConversationId] || []
+   107→    : []
+   108→
+   109→  const [loading, setLoading] = useState(false)
+   110→  const [loadingMore, setLoadingMore] = useState(false)
+   111→  const [hasMore, setHasMore] = useState(true)
+   112→  const [oldestLoaded, setOldestLoaded] = useState<string | null>(null)
+   113→  const scrollRef = useRef<HTMLDivElement>(null)
+   114→  const bottomRef = useRef<HTMLDivElement>(null)
+   115→  const wasNearBottomRef = useRef(true)
+   116→  const lastMessageHeightRef = useRef(0)
+   117→  const messageIdsRef = useRef<Set<string>>(new Set())
+   118→  const didInitialScrollRef = useRef(false)
+   119→
+   120→  // Find other user for 1-on-1
+   121→  const otherUser =
+   122→    conversation && !conversation.isGroup
+   123→      ? conversation.participants.find((p) => p.userId !== user?.id)
+   124→      : null
+   125→  const isOnline =
+   126→    !!otherUser &&
+   127→    (onlineUserIds.has(otherUser.userId) || otherUser.online)
+   128→
+   129→  // Typing users (excluding me)
+   130→  const typingUsers = activeConversationId
+   131→    ? Object.entries(typingByConversation[activeConversationId] || {})
+   132→        .filter(([uid]) => uid !== user?.id)
+   133→        .map(([uid]) => {
+   134→          const p = conversation?.participants.find((pp) => pp.userId === uid)
+   135→          return p?.name || 'Someone'
+   136→        })
+   137→    : []
+   138→
+   139→  // ---- Load initial messages on conversation change --------------------------
+   140→  const loadMessages = useCallback(async () => {
+   141→    if (!activeConversationId) return
+   142→    setLoading(true)
+   143→    setHasMore(true)
+   144→    setOldestLoaded(null)
+   145→    messageIdsRef.current = new Set()
+   146→    didInitialScrollRef.current = false
+   147→    try {
+   148→      const res = await fetch(
+   149→        `/api/conversations/${activeConversationId}/messages?limit=${PAGE_SIZE}`,
+   150→        { cache: 'no-store' }
+   151→      )
+   152→      if (!res.ok) return
+   153→      const data = await res.json()
+   154→      const msgs: ChatMessage[] = data.messages
+   155→      setMessages(activeConversationId, msgs)
+   156→      msgs.forEach((m) => messageIdsRef.current.add(m.id))
+   157→      if (msgs.length < PAGE_SIZE) setHasMore(false)
+   158→      if (msgs.length > 0) setOldestLoaded(msgs[0].createdAt)
+   159→
+   160→      // Emit delivered status for messages not from me
+   161→      const othersMsgIds = msgs
+   162→        .filter((m) => m.senderId !== user?.id && m.status === 'sent')
+   163→        .map((m) => m.id)
+   164→      if (othersMsgIds.length > 0) {
+   165→        getSocket().emit('message:status', {
+   166→          conversationId: activeConversationId,
+   167→          messageIds: othersMsgIds,
+   168→          status: 'delivered',
+   169→          byUserId: user?.id,
+   170→        })
+   171→      }
+   172→    } catch (e) {
+   173→      console.error(e)
+   174→    } finally {
+   175→      setLoading(false)
+   176→    }
+   177→  }, [activeConversationId, setMessages, user?.id])
+   178→
+   179→  useEffect(() => {
+   180→    loadMessages()
+   181→  }, [loadMessages])
+   182→
+   183→  // ---- Load commits for the active conversation -------------------------------
+   184→  useEffect(() => {
+   185→    if (!activeConversationId) return
+   186→    let cancelled = false
+   187→    ;(async () => {
+   188→      try {
+   189→        const res = await fetch(
+   190→          `/api/commits?conversationId=${activeConversationId}`,
+   191→          { cache: 'no-store' }
+   192→        )
+   193→        if (!res.ok) return
+   194→        const data = await res.json()
+   195→        if (!cancelled && Array.isArray(data.commits)) {
+   196→          setCommits(activeConversationId, data.commits)
+   197→        }
+   198→      } catch {
+   199→        // ignore
+   200→      }
+   201→    })()
+   202→    return () => {
+   203→      cancelled = true
+   204→    }
+   205→  }, [activeConversationId, setCommits])
+   206→
+   207→  // ---- Join conversation socket room on change -------------------------------
+   208→  useEffect(() => {
+   209→    if (!activeConversationId || !user?.id) return
+   210→    const socket = connectSocket(user.id)
+   211→    socket.emit('conversation:join', { conversationId: activeConversationId })
+   212→    return () => {
+   213→      socket.emit('conversation:leave', { conversationId: activeConversationId })
+   214→    }
+   215→  }, [activeConversationId, user?.id])
+   216→
+   217→  // ---- Listen for socket events (new message, status, typing) ----------------
+   218→  useEffect(() => {
+   219→    if (!activeConversationId || !user?.id) return
+   220→    const socket = connectSocket(user.id)
+   221→
+   222→    function onMessageReceived(payload: { conversationId: string; message: ChatMessage }) {
+   223→      if (!payload || !payload.message || payload.conversationId !== activeConversationId) return
+   224→      const m = payload.message
+   225→      if (messageIdsRef.current.has(m.id)) return
+   226→      messageIdsRef.current.add(m.id)
+   227→      addMessage(activeConversationId, m)
+   228→
+   229→      // If message is from someone else, mark as delivered
+   230→      if (m.senderId !== user?.id) {
+   231→        getSocket().emit('message:status', {
+   232→          conversationId: activeConversationId,
+   233→          messageIds: [m.id],
+   234→          status: 'delivered',
+   235→          byUserId: user?.id,
+   236→        })
+   237→        // Also persist delivered
+   238→        fetch(`/api/conversations/${activeConversationId}/messages`, {
+   239→          method: 'PATCH',
+   240→          headers: { 'Content-Type': 'application/json' },
+   241→          body: JSON.stringify({ status: 'delivered', messageIds: [m.id] }),
+   242→        }).catch(() => {})
+   243→      }
+   244→    }
+   245→
+   246→    function onStatus(payload: {
+   247→      conversationId: string
+   248→      messageIds: string[]
+   249→      status: string
+   250→      byUserId: string
+   251→    }) {
+   252→      if (!payload || payload.conversationId !== activeConversationId) return
+   253→      updateMessageStatus(activeConversationId, payload.messageIds, payload.status)
+   254→    }
+   255→
+   256→    // When another client updates a commit (sign/complete), re-fetch it.
+   257→    async function onCommitUpdated(payload: {
+   258→      conversationId: string
+   259→      commitId: string
+   260→    }) {
+   261→      if (!payload || payload.conversationId !== activeConversationId || !payload.commitId) return
+   262→      try {
+   263→        const res = await fetch(`/api/commits/${payload.commitId}`, {
+   264→          cache: 'no-store',
+   265→        })
+   266→        if (!res.ok) return
+   267→        const data = await res.json()
+   268→        if (data.commit) upsertCommit(data.commit)
+   269→      } catch {
+   270→        // ignore
+   271→      }
+   272→    }
+   273→
+   274→    // When another client reacts to / stars / deletes a message, refetch it.
+   275→    async function onMessageReacted(payload: {
+   276→      conversationId: string
+   277→      messageId: string
+   278→    }) {
+   279→      if (!payload || payload.conversationId !== activeConversationId || !payload.messageId) return
+   280→      try {
+   281→        const res = await fetch(`/api/messages/${payload.messageId}`, {
+   282→          cache: 'no-store',
+   283→        })
+   284→        if (!res.ok) {
+   285→          // 404 means the message was deleted — remove it locally.
+   286→          if (res.status === 404) {
+   287→            removeMessage(activeConversationId, payload.messageId)
+   288→          }
+   289→          return
+   290→        }
+   291→        const data = await res.json()
+   292→        if (data.message) {
+   293→          // Replace the message in-place with the updated one (reactions/star).
+   294→          useWaslStore.getState().updateMessage(activeConversationId, payload.messageId, data.message)
+   295→        }
+   296→      } catch {
+   297→        // ignore
+   298→      }
+   299→    }
+   300→
+   301→    socket.on('message:received', onMessageReceived)
+   302→    socket.on('message:status', onStatus)
+   303→    socket.on('commit:updated', onCommitUpdated)
+   304→    socket.on('message:reacted', onMessageReacted)
+   305→
+   306→    return () => {
+   307→      socket.off('message:received', onMessageReceived)
+   308→      socket.off('message:status', onStatus)
+   309→      socket.off('commit:updated', onCommitUpdated)
+   310→      socket.off('message:reacted', onMessageReacted)
+   311→    }
+   312→  }, [activeConversationId, user?.id, addMessage, updateMessageStatus, upsertCommit, removeMessage])
+   313→
+   314→  // ---- Auto-scroll to bottom when new messages arrive ------------------------
+   315→  useEffect(() => {
+   316→    if (!scrollRef.current) return
+   317→    if (wasNearBottomRef.current && !loadingMore) {
+   318→      // scroll to bottom
+   319→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+   320→    }
+   321→  }, [messages.length, loadingMore])
+   322→
+   323→  useEffect(() => {
+   324→    // After initial load, scroll to bottom once
+   325→    if (loading) return
+   326→    if (didInitialScrollRef.current) return
+   327→    if (scrollRef.current) {
+   328→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+   329→      didInitialScrollRef.current = true
+   330→    }
+   331→  }, [loading])
+   332→
+   333→  // ---- Track whether user is near bottom -------------------------------------
+   334→  function onScroll() {
+   335→    const el = scrollRef.current
+   336→    if (!el) return
+   337→    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+   338→    wasNearBottomRef.current = distFromBottom < 80
+   339→    setShowScrollBtn(distFromBottom > 240)
+   340→    // Load more when near top
+   341→    if (el.scrollTop < 40 && hasMore && !loadingMore && !loading) {
+   342→      void loadMore()
+   343→    }
+   344→  }
+   345→
+   346→  function scrollToBottom() {
+   347→    const el = scrollRef.current
+   348→    if (!el) return
+   349→    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+   350→    wasNearBottomRef.current = true
+   351→    setShowScrollBtn(false)
+   352→  }
+   353→
+   354→  // ---- Scroll to a specific message (by ID) ---------------------------------
+   355→  // Used by the "jump to message" feature from the StarredMessagesDialog
+   356→  // and the ChatSearchDialog. Listens for a custom window event so any
+   357→  // component can trigger it.
+   358→  useEffect(() => {
+   359→    function onJumpToMessage(e: Event) {
+   360→      const messageId = (e as CustomEvent<string>).detail
+   361→      if (!messageId) return
+   362→      // Prefer the scroll container scope, but fall back to a document-wide
+   363→      // search if the ref isn't attached yet (e.g. during a re-render cycle)
+   364→      // or if the message lives outside the current scroll container.
+   365→      const target =
+   366→        (scrollRef.current?.querySelector(
+   367→          `[data-message-id="${messageId}"]`
+   368→        ) as HTMLElement | null) ||
+   369→        (document.querySelector(
+   370→          `[data-message-id="${messageId}"]`
+   371→        ) as HTMLElement | null)
+   372→      if (target) {
+   373→        // Scroll the message into view (smooth, centered in the container)
+   374→        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+   375→        // Briefly flash the message to draw attention
+   376→        target.classList.add('wasl-message-flash')
+   377→        setTimeout(() => target.classList.remove('wasl-message-flash'), 2000)
+   378→      }
+   379→    }
+   380→    // Remove a message from the local state after deletion (triggered by the
+   381→    // DeleteMessageDialog after the API confirms the deletion).
+   382→    function onMessageDeleted(e: Event) {
+   383→      const messageId = (e as CustomEvent<string>).detail
+   384→      if (!messageId || !activeConversationId) return
+   385→      removeMessage(activeConversationId, messageId)
+   386→      // Broadcast via socket so other clients also remove it
+   387→      getSocket().emit('message:reacted', {
+   388→        conversationId: activeConversationId,
+   389→        messageId,
+   390→      })
+   391→    }
+   392→    window.addEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+   393→    window.addEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
+   394→    return () => {
+   395→      window.removeEventListener('wasl:jump-to-message', onJumpToMessage as EventListener)
+   396→      window.removeEventListener('wasl:message-deleted', onMessageDeleted as EventListener)
+   397→    }
+   398→  }, [activeConversationId, removeMessage])
+   399→
+   400→  // ---- Load older messages ---------------------------------------------------
+   401→  async function loadMore() {
+   402→    if (!activeConversationId || !oldestLoaded) return
+   403→    setLoadingMore(true)
+   404→    lastMessageHeightRef.current = scrollRef.current?.scrollHeight || 0
+   405→    try {
+   406→      const res = await fetch(
+   407→        `/api/conversations/${activeConversationId}/messages?before=${encodeURIComponent(
+   408→          oldestLoaded
+   409→        )}&limit=${PAGE_SIZE}`,
+   410→        { cache: 'no-store' }
+   411→      )
+   412→      if (!res.ok) return
+   413→      const data = await res.json()
+   414→      const msgs: ChatMessage[] = data.messages
+   415→      if (msgs.length === 0) {
+   416→        setHasMore(false)
+   417→      } else {
+   418→        prependMessages(activeConversationId, msgs)
+   419→        msgs.forEach((m) => messageIdsRef.current.add(m.id))
+   420→        setOldestLoaded(msgs[0].createdAt)
+   421→        if (msgs.length < PAGE_SIZE) setHasMore(false)
+   422→        // Preserve scroll position
+   423→        requestAnimationFrame(() => {
+   424→          if (scrollRef.current) {
+   425→            const newHeight = scrollRef.current.scrollHeight
+   426→            scrollRef.current.scrollTop =
+   427→              newHeight - lastMessageHeightRef.current
+   428→          }
+   429→        })
+   430→      }
+   431→    } catch (e) {
+   432→      console.error(e)
+   433→    } finally {
+   434→      setLoadingMore(false)
+   435→    }
+   436→  }
+   437→
+   438→  // ---- Send message ----------------------------------------------------------
+   439→  const handleSend = useCallback(
+   440→    async (content: string, type: string = 'text', opts?: { protected?: boolean }) => {
+   441→      if (!activeConversationId || !user?.id) return
+   442→      const res = await fetch(
+   443→        `/api/conversations/${activeConversationId}/messages`,
+   444→        {
+   445→          method: 'POST',
+   446→          headers: { 'Content-Type': 'application/json' },
+   447→          body: JSON.stringify({
+   448→            content,
+   449→            type,
+   450→            replyToId: replyTo?.id,
+   451→            protected: opts?.protected,
+   452→          }),
+   453→        }
+   454→      )
+   455→      if (!res.ok) {
+   456→        throw new Error('Failed to send')
+   457→      }
+   458→      const msg: ChatMessage = await res.json()
+   459→      if (messageIdsRef.current.has(msg.id)) return
+   460→      messageIdsRef.current.add(msg.id)
+   461→      addMessage(activeConversationId, msg)
+   462→      setReplyTo(null)
+   463→      // Broadcast via socket
+   464→      const socket = getSocket()
+   465→      socket.emit('message:send', {
+   466→        conversationId: activeConversationId,
+   467→        message: msg,
+   468→      })
+   469→      // Update sidebar conversation preview
+   470→      if (conversation) {
+   471→        upsertConversation({
+   472→          ...conversation,
+   473→          lastMessage: msg,
+   474→          updatedAt: msg.createdAt,
+   475→        })
+   476→      }
+   477→      wasNearBottomRef.current = true
+   478→
+   479→      // ---- Demo companion bot: if this is a 1-on-1 chat with a demo user,
+   480→      // simulate a typing indicator + contextual reply after a short delay.
+   481→      if (
+   482→        type === 'text' &&
+   483→        conversation &&
+   484→        !conversation.isGroup &&
+   485→        otherUser &&
+   486→        otherUser.phone.startsWith('+20100')
+   487→      ) {
+   488→        const conversationId = activeConversationId
+   489→        const userId = user.id
+   490→        // Show typing — the socket.io server broadcasts typing:update to all
+   491→        // clients EXCEPT the sender, so we also set it locally to ensure the
+   492→        // current user sees the typing indicator in the chat window and sidebar.
+   493→        setTimeout(() => {
+   494→          getSocket().emit('typing:start', {
+   495→            conversationId,
+   496→            userId: otherUser.userId,
+   497→            name: otherUser.name,
+   498→          })
+   499→          useWaslStore.getState().setTyping(conversationId, otherUser.userId, true)
+   500→        }, 600)
+   501→        setBotReplying(true)
+   502→        const delay = 1200 + Math.min(content.length * 30, 1800)
+   503→        setTimeout(async () => {
+   504→          getSocket().emit('typing:stop', {
+   505→            conversationId,
+   506→            userId: otherUser.userId,
+   507→          })
+   508→          useWaslStore.getState().setTyping(conversationId, otherUser.userId, false)
+   509→          try {
+   510→            const botRes = await fetch(
+   511→              `/api/conversations/${conversationId}/bot-reply`,
+   512→              { method: 'POST' }
+   513→            )
+   514→            if (!botRes.ok) return
+   515→            const data = await botRes.json()
+   516→            if (data.message && !messageIdsRef.current.has(data.message.id)) {
+   517→              messageIdsRef.current.add(data.message.id)
+   518→              addMessage(conversationId, data.message)
+   519→              getSocket().emit('message:send', {
+   520→                conversationId,
+   521→                message: data.message,
+   522→              })
+   523→              if (conversation) {
+   524→                upsertConversation({
+   525→                  ...conversation,
+   526→                  lastMessage: data.message,
+   527→                  updatedAt: data.message.createdAt,
+   528→                })
+   529→              }
+   530→            }
+   531→          } catch (e) {
+   532→            console.error(e)
+   533→          } finally {
+   534→            setBotReplying(false)
+   535→          }
+   536→        }, delay)
+   537→      }
+   538→    },
+   539→    [activeConversationId, user?.id, replyTo, addMessage, setReplyTo, conversation, upsertConversation, otherUser]
+   540→  )
+   541→
+   542→  // ---- Message actions: react / star / copy / delete ------------------------
+   543→  const handleReact = useCallback(
+   544→    async (messageId: string, emoji: string) => {
+   545→      if (!activeConversationId || !user?.id) return
+   546→      // Optimistic toggle
+   547→      const msgs = messagesByConversation[activeConversationId] || []
+   548→      const existing = msgs
+   549→        .find((m) => m.id === messageId)
+   550→        ?.reactions?.find((r) => r.userId === user.id)
+   551→      // If the user already reacted with the same emoji → remove; else set.
+   552→      if (existing && existing.emoji === emoji) {
+   553→        toggleReaction(activeConversationId, messageId, null)
+   554→      } else {
+   555→        toggleReaction(activeConversationId, messageId, {
+   556→          id: existing?.id,
+   557→          userId: user.id,
+   558→          emoji,
+   559→        })
+   560→      }
+   561→      try {
+   562→        await fetch(`/api/messages/${messageId}/reactions`, {
+   563→          method: 'POST',
+   564→          headers: { 'Content-Type': 'application/json' },
+   565→          body: JSON.stringify({ emoji }),
+   566→        })
+   567→        getSocket().emit('message:reacted', {
+   568→          conversationId: activeConversationId,
+   569→          messageId,
+   570→        })
+   571→      } catch (e) {
+   572→        console.error(e)
+   573→      }
+   574→    },
+   575→    [activeConversationId, user?.id, messagesByConversation, toggleReaction]
+   576→  )
+   577→
+   578→  const handleStar = useCallback(
+   579→    async (messageId: string) => {
+   580→      if (!activeConversationId) return
+   581→      const msgs = messagesByConversation[activeConversationId] || []
+   582→      const currentlyStarred = msgs.find((m) => m.id === messageId)?.starred
+   583→      setStarred(activeConversationId, messageId, !currentlyStarred)
+   584→      try {
+   585→        await fetch(`/api/messages/${messageId}/star`, { method: 'POST' })
+   586→      } catch (e) {
+   587→        console.error(e)
+   588→      }
+   589→    },
+   590→    [activeConversationId, messagesByConversation, setStarred]
+   591→  )
+   592→
+   593→  const handleCopyMessage = useCallback(async (m: ChatMessage) => {
+   594→    try {
+   595→      await navigator.clipboard.writeText(m.content)
+   596→      toast.success('Copied to clipboard')
+   597→    } catch {
+   598→      toast.error('Failed to copy')
+   599→    }
+   600→  }, [])
+   601→
+   602→  // ---- Delete message — opens the DeleteMessageDialog -----------------------
+   603→  const [deleteMessage, setDeleteMessage] = useState<ChatMessage | null>(null)
+   604→  const handleDeleteMessage = useCallback(
+   605→    async (messageId: string) => {
+   606→      // Find the message object to pass to the dialog
+   607→      const msgs = useWaslStore.getState().messagesByConversation[activeConversationId || ''] || []
+   608→      const m = msgs.find((mm) => mm.id === messageId)
+   609→      if (m) {
+   610→        setDeleteMessage(m)
+   611→      } else {
+   612→        // Fallback: if we can't find the message, use the old confirm() flow
+   613→        if (!confirm('Delete this message? This cannot be undone.')) return
+   614→        if (!activeConversationId) return
+   615→        removeMessage(activeConversationId, messageId)
+   616→        try {
+   617→          await fetch(`/api/messages/${messageId}`, { method: 'DELETE' })
+   618→          getSocket().emit('message:reacted', {
+   619→            conversationId: activeConversationId,
+   620→            messageId,
+   621→          })
+   622→          toast.success('Message deleted')
+   623→        } catch (e) {
+   624→          console.error(e)
+   625→          toast.error('Failed to delete')
+   626→        }
+   627→      }
+   628→    },
+   629→    [activeConversationId, removeMessage]
+   630→  )
+   631→
+   632→  // ---- Edit message --------------------------------------------------------
+   633→  const handleEditMessage = useCallback(
+   634→    async (m: ChatMessage) => {
+   635→      const newContent = prompt('Edit your message:', m.content)
+   636→      if (!newContent || newContent.trim() === m.content) return
+   637→      try {
+   638→        const res = await fetch(`/api/messages/${m.id}/edit`, {
+   639→          method: 'PATCH',
+   640→          headers: { 'Content-Type': 'application/json' },
+   641→          body: JSON.stringify({ content: newContent.trim() }),
+   642→        })
+   643→        if (!res.ok) {
+   644→          const err = await res.json().catch(() => null)
+   645→          toast.error(err?.error || 'Failed to edit')
+   646→          return
+   647→        }
+   648→        // Update locally — set both the new content AND the edited flag
+   649→        useWaslStore.getState().updateMessage(activeConversationId, m.id, {
+   650→          content: newContent.trim(),
+   651→          edited: true,
+   652→        })
+   653→        getSocket().emit('message:reacted', { conversationId: activeConversationId, messageId: m.id })
+   654→        toast.success('Message edited')
+   655→      } catch {
+   656→        toast.error('Failed to edit')
+   657→      }
+   658→    },
+   659→    [activeConversationId]
+   660→  )
+   661→
+   662→  // ---- Forward message -----------------------------------------------------
+   663→  // Opens the ForwardDialog (multi-select) instead of using prompt().
+   664→  const [forwardOpen, setForwardOpen] = useState(false)
+   665→  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null)
+   666→  const handleForwardMessage = useCallback(
+   667→    async (m: ChatMessage) => {
+   668→      setForwardMessage(m)
+   669→      setForwardOpen(true)
+   670→    },
+   671→    []
+   672→  )
+   673→
+   674→  // ---- Pin/unpin message ---------------------------------------------------
+   675→  const handlePinMessage = useCallback(
+   676→    async (m: ChatMessage) => {
+   677→      if (!activeConversationId) return
+   678→      const newPinned = !m.pinned
+   679→      // Optimistic update
+   680→      useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: newPinned })
+   681→      // If pinning, unpin any other pinned messages in this conversation
+   682→      if (newPinned) {
+   683→        const msgs = useWaslStore.getState().messagesByConversation[activeConversationId] || []
+   684→        for (const msg of msgs) {
+   685→          if (msg.id !== m.id && msg.pinned) {
+   686→            useWaslStore.getState().updateMessage(activeConversationId, msg.id, { pinned: false })
+   687→          }
+   688→        }
+   689→      }
+   690→      try {
+   691→        const res = await fetch(`/api/messages/${m.id}/pin`, {
+   692→          method: 'POST',
+   693→          headers: { 'Content-Type': 'application/json' },
+   694→          body: JSON.stringify({ pinned: newPinned }),
+   695→        })
+   696→        if (!res.ok) {
+   697→          // Rollback
+   698→          useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: !newPinned })
+   699→          toast.error('Failed to pin message')
+   700→          return
+   701→        }
+   702→        // Broadcast via socket so other clients update
+   703→        getSocket().emit('message:reacted', {
+   704→          conversationId: activeConversationId,
+   705→          messageId: m.id,
+   706→        })
+   707→        toast.success(newPinned ? 'Message pinned' : 'Message unpinned')
+   708→      } catch {
+   709→        useWaslStore.getState().updateMessage(activeConversationId, m.id, { pinned: !newPinned })
+   710→        toast.error('Network error')
+   711→      }
+   712→    },
+   713→    [activeConversationId]
+   714→  )
+   715→
+   716→  const handleSendImage = useCallback(
+   717→    async (dataUrl: string, opts?: { protected?: boolean }) => {
+   718→      await handleSend(dataUrl, 'image', opts)
+   719→    },
+   720→    [handleSend]
+   721→  )
+   722→
+   723→  // ---- Paste image upload (Ctrl+V with image in clipboard) ------------------
+   724→  // Reads any image file from the clipboard `items` list, converts it to a
+   725→  // data URL, and sends it via the existing image-send flow.
+   726→  const handlePaste = useCallback(
+   727→    (e: ClipboardEvent) => {
+   728→      // Only intercept when there's no active text input focus (so we don't
+   729→      // break paste-into-message-composer).
+   730→      const active = document.activeElement
+   731→      const inTextarea =
+   732→        active &&
+   733→        (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')
+   734→      if (inTextarea) return
+   735→      const items = e.clipboardData?.items
+   736→      if (!items) return
+   737→      for (let i = 0; i < items.length; i++) {
+   738→        const item = items[i]
+   739→        if (item.kind === 'file' && item.type.startsWith('image/')) {
+   740→          const file = item.getAsFile()
+   741→          if (!file) continue
+   742→          if (file.size > 1.5 * 1024 * 1024) {
+   743→            toast.error('Image too large (max 1.5MB)')
+   744→            return
+   745→          }
+   746→          e.preventDefault()
+   747→          const reader = new FileReader()
+   748→          reader.onload = () => {
+   749→            const dataUrl = reader.result as string
+   750→            void handleSendImage(dataUrl)
+   751→            toast.success('Pasted image sent')
+   752→          }
+   753→          reader.onerror = () => toast.error('Failed to read pasted image')
+   754→          reader.readAsDataURL(file)
+   755→          return
+   756→        }
+   757→      }
+   758→    },
+   759→    [handleSendImage]
+   760→  )
+   761→
+   762→  // Mount the paste listener on the window whenever the chat window mounts.
+   763→  useEffect(() => {
+   764→    window.addEventListener('paste', handlePaste)
+   765→    return () => window.removeEventListener('paste', handlePaste)
+   766→  }, [handlePaste])
+   767→
+   768→  // ---- Drag-and-drop image upload ------------------------------------------
+   769→  const handleDragEnter = useCallback((e: React.DragEvent) => {
+   770→    e.preventDefault()
+   771→    e.stopPropagation()
+   772→    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+   773→    dragDepthRef.current += 1
+   774→    setIsDragging(true)
+   775→  }, [])
+   776→
+   777→  const handleDragOver = useCallback((e: React.DragEvent) => {
+   778→    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+   779→    e.preventDefault()
+   780→    e.dataTransfer.dropEffect = 'copy'
+   781→  }, [])
+   782→
+   783→  const handleDragLeave = useCallback((e: React.DragEvent) => {
+   784→    e.preventDefault()
+   785→    e.stopPropagation()
+   786→    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+   787→    if (dragDepthRef.current === 0) setIsDragging(false)
+   788→  }, [])
+   789→
+   790→  const handleDrop = useCallback(
+   791→    (e: React.DragEvent) => {
+   792→      e.preventDefault()
+   793→      e.stopPropagation()
+   794→      dragDepthRef.current = 0
+   795→      setIsDragging(false)
+   796→      const files = Array.from(e.dataTransfer.files || [])
+   797→      const images = files.filter((f) => f.type.startsWith('image/'))
+   798→      if (images.length === 0) {
+   799→        if (files.length > 0) {
+   800→          toast.error('Only image files are supported')
+   801→        }
+   802→        return
+   803→      }
+   804→      for (const file of images) {
+   805→        if (file.size > 1.5 * 1024 * 1024) {
+   806→          toast.error(`Image too large: ${file.name} (max 1.5MB)`)
+   807→          continue
+   808→        }
+   809→        const reader = new FileReader()
+   810→        reader.onload = () => {
+   811→          void handleSendImage(reader.result as string)
+   812→        }
+   813→        reader.onerror = () =>
+   814→          toast.error(`Failed to read ${file.name}`)
+   815→        reader.readAsDataURL(file)
+   816→      }
+   817→      toast.success(
+   818→        images.length === 1
+   819→          ? `Sent ${images[0].name}`
+   820→          : `Sent ${images.length} images`
+   821→      )
+   822→    },
+   823→    [handleSendImage]
+   824→  )
+   825→
+   826→  // ---- Typing indicator ------------------------------------------------------
+   827→  const onTypingChange = useCallback(
+   828→    (typing: boolean) => {
+   829→      if (!activeConversationId || !user?.id) return
+   830→      const socket = getSocket()
+   831→      if (typing) {
+   832→        socket.emit('typing:start', {
+   833→          conversationId: activeConversationId,
+   834→          userId: user.id,
+   835→          name: user.name,
+   836→        })
+   837→      } else {
+   838→        socket.emit('typing:stop', {
+   839→          conversationId: activeConversationId,
+   840→          userId: user.id,
+   841→        })
+   842→      }
+   843→    },
+   844→    [activeConversationId, user?.id]
+   845→  )
+   846→
+   847→  // ---- Mark messages read on initial load -----------------------------------
+   848→  // Capture the initial unread count BEFORE clearing it — used to show the
+   849→  // "Unread messages" separator between the last read message and the first
+   850→  // unread message. The separator stays as a visual marker even after the
+   851→  // messages are marked as read.
+   852→  const initialUnreadRef = useRef<number>(0)
+   853→  useEffect(() => {
+   854→    if (!activeConversationId || !conversation) return
+   855→    initialUnreadRef.current = conversation.unreadCount || 0
+   856→    // The GET messages endpoint already marks as read on the server.
+   857→    // We just need to update the sidebar unread count for this conversation.
+   858→    upsertConversation({
+   859→      ...conversation,
+   860→      unreadCount: 0,
+   861→    })
+   862→
+   863→  }, [activeConversationId])
+   864→
+   865→  // ---- Delete conversation ---------------------------------------------------
+   866→  async function handleDelete() {
+   867→    if (!activeConversationId) return
+   868→    try {
+   869→      await fetch(`/api/conversations/${activeConversationId}`, {
+   870→        method: 'DELETE',
+   871→      })
+   872→      useWaslStore.getState().removeConversation(activeConversationId)
+   873→      onBack()
+   874→      toast.success('Chat deleted')
+   875→    } catch {
+   876→      toast.error('Failed to delete')
+   877→    }
+   878→  }
+   879→
+   880→  async function handleCopyLast() {
+   881→    if (!messages.length) return
+   882→    const last = messages[messages.length - 1]
+   883→    await navigator.clipboard.writeText(last.content)
+   884→    toast.success('Copied to clipboard')
+   885→  }
+   886→
+   887→  if (!activeConversationId || !conversation) {
+   888→    const conversationCount = conversations.length
+   889→    const groupCount = conversations.filter(c => c.isGroup).length
+   890→    const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+   891→    return (
+   892→      <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6 overflow-y-auto wasl-scroll">
+   893→        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
+   894→          <WaslLogo size={72} animated />
+   895→          <h2 className="text-xl font-semibold text-foreground">
+   896→            Welcome to Wasl
+   897→          </h2>
+   898→          <p className="text-sm text-muted-foreground">
+   899→            {conversationCount > 0
+   900→              ? `You have ${conversationCount} conversation${conversationCount === 1 ? '' : 's'}. Select one to start chatting.`
+   901→              : 'Tap the + button to create a new chat.'}
+   902→          </p>
+   903→          {/* Stats row */}
+   904→          {conversationCount > 0 && (
+   905→            <div className="flex items-center justify-center gap-4 w-full py-2">
+   906→              <div className="flex flex-col items-center">
+   907→                <span className="text-lg font-bold text-[var(--wasl-green)]">{conversationCount}</span>
+   908→                <span className="text-[10px] text-muted-foreground">Chats</span>
+   909→              </div>
+   910→              <div className="w-px h-8 bg-border" />
+   911→              <div className="flex flex-col items-center">
+   912→                <span className="text-lg font-bold text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">{groupCount}</span>
+   913→                <span className="text-[10px] text-muted-foreground">Groups</span>
+   914→              </div>
+   915→              <div className="w-px h-8 bg-border" />
+   916→              <div className="flex flex-col items-center">
+   917→                <span className="text-lg font-bold text-amber-500">{unreadTotal}</span>
+   918→                <span className="text-[10px] text-muted-foreground">Unread</span>
+   919→              </div>
+   920→            </div>
+   921→          )}
+   922→          {/* Feature hint cards */}
+   923→          <div className="grid grid-cols-2 gap-2 w-full mt-2">
+   924→            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-green)]/30 transition-colors">
+   925→              <Lock className="w-4 h-4 text-[var(--wasl-green)] mb-1" />
+   926→              <div className="text-[11px] font-medium text-foreground">Protected messages</div>
+   927→              <div className="text-[10px] text-muted-foreground leading-tight">Lock icon in composer</div>
+   928→            </div>
+   929→            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-[var(--wasl-teal)]/30 transition-colors">
+   930→              <Paperclip className="w-4 h-4 text-[var(--wasl-teal)] mb-1" />
+   931→              <div className="text-[11px] font-medium text-foreground">Drag & drop</div>
+   932→              <div className="text-[10px] text-muted-foreground leading-tight">Images up to 1.5MB</div>
+   933→            </div>
+   934→            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-amber-500/30 transition-colors">
+   935→              <Sparkles className="w-4 h-4 text-amber-500 mb-1" />
+   936→              <div className="text-[11px] font-medium text-foreground">AI powered</div>
+   937→              <div className="text-[10px] text-muted-foreground leading-tight">Summary, tone, replies</div>
+   938→            </div>
+   939→            <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-left hover:border-sky-500/30 transition-colors">
+   940→              <Search className="w-4 h-4 text-sky-500 mb-1" />
+   941→              <div className="text-[11px] font-medium text-foreground">Search</div>
+   942→              <div className="text-[10px] text-muted-foreground leading-tight">Ctrl+K palette</div>
+   943→            </div>
+   944→          </div>
+   945→          {/* Keyboard shortcut hint */}
+   946→          <div className="flex items-center gap-2 mt-3 text-[11px] text-muted-foreground">
+   947→            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">Ctrl</kbd>
+   948→            <span>+</span>
+   949→            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">K</kbd>
+   950→            <span>to search ·</span>
+   951→            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">Ctrl</kbd>
+   952→            <span>+</span>
+   953→            <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted/60 text-[10px] font-medium">/</kbd>
+   954→            <span>for shortcuts</span>
+   955→          </div>
+   956→        </div>
+   957→      </div>
+   958→    )
+   959→  }
+   960→
+   961→  // Build message groups for date dividers
+   962→  let lastDate = ''
+   963→
+   964→  return (
+   965→    <div
+   966→      className="flex-1 flex flex-col min-w-0 wasl-chat-pattern relative"
+   967→      onDragEnter={handleDragEnter}
+   968→      onDragOver={handleDragOver}
+   969→      onDragLeave={handleDragLeave}
+   970→      onDrop={handleDrop}
+   971→    >
+   972→      {/* Drop zone overlay — shown only while a file is being dragged over */}
+   973→      {isDragging && (
+   974→        <div className="absolute inset-0 z-40 bg-[var(--wasl-green)]/10 backdrop-blur-sm border-2 border-dashed border-[var(--wasl-green)] rounded-lg flex items-center justify-center pointer-events-none">
+   975→          <div className="bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl px-6 py-4 shadow-lg flex items-center gap-3">
+   976→            <Paperclip className="w-6 h-6 text-[var(--wasl-green)] rotate-45" />
+   977→            <div>
+   978→              <div className="font-semibold text-foreground">
+   979→                Drop image to send
+   980→              </div>
+   981→              <div className="text-xs text-muted-foreground">
+   982→                PNG / JPG / WEBP / GIF · max 1.5MB
+   983→              </div>
+   984→            </div>
+   985→          </div>
+   986→        </div>
+   987→      )}
+   988→      {/* Pinned message bar — shows the currently pinned message at the top
+   989→          of the chat. Clicking it scrolls to the pinned message. */}
+   990→      {messages.find((m) => m.pinned) && (() => {
+   991→        const pinned = messages.find((m) => m.pinned)!
+   992→        const pinnedSender = conversation.participants.find((p) => p.userId === pinned.senderId)?.name
+   993→        return (
+   994→          <button
+   995→            type="button"
+   996→            onClick={() => {
+   997→              window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: pinned.id }))
+   998→            }}
+   999→            className="wasl-pinned-bar w-full flex items-center gap-2.5 px-4 py-2 bg-[var(--wasl-green)]/5 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin"
+  1000→          >
+  1001→            <Pin className="w-4 h-4 text-[var(--wasl-green)] shrink-0 rotate-45" />
+  1002→            <div className="flex-1 min-w-0">
+  1003→              <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--wasl-green)] flex items-center gap-1.5">
+  1004→                Pinned {pinnedSender && <span className="normal-case font-normal text-muted-foreground">by {pinnedSender}</span>}
+  1005→              </div>
+  1006→              <div className="text-xs text-foreground truncate">
+  1007→                {pinned.content.slice(0, 80)}
+  1008→                {pinned.content.length > 80 ? '…' : ''}
+  1009→              </div>
+  1010→            </div>
+  1011→            <PinOff
+  1012→              className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/pin:opacity-100 transition-opacity shrink-0"
+  1013→              onClick={(e) => {
+  1014→                e.stopPropagation()
+  1015→                handlePinMessage(pinned)
+  1016→              }}
+  1017→            />
+  1018→          </button>
+  1019→        )
+  1020→      })()}
+  1021→      {/* Chat header */}
+  1022→      <div className="bg-[var(--wasl-sidebar-bg)] px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border shadow-sm">
+  1023→        <button
+  1024→          onClick={onBack}
+  1025→          className="md:hidden p-2 -ml-1 rounded-full hover:bg-muted text-foreground"
+  1026→        >
+  1027→          <ArrowLeft className="w-5 h-5" />
+  1028→        </button>
+  1029→        <button
+  1030→          onClick={onOpenInfo}
+  1031→          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+  1032→        >
+  1033→          {conversation.isGroup ? (
+  1034→            <WaslGroupAvatar
+  1035→              name={conversation.name}
+  1036→              participants={conversation.participants.map((p) => ({
+  1037→                name: p.name,
+  1038→                avatar: p.avatar,
+  1039→                avatarColor: p.avatarColor,
+  1040→              }))}
+  1041→              size={42}
+  1042→            />
+  1043→          ) : (
+  1044→            <WaslAvatar
+  1045→              name={conversation.name}
+  1046→              src={conversation.avatar}
+  1047→              color={conversation.avatarColor}
+  1048→              size={42}
+  1049→              online={isOnline}
+  1050→              showStatus
+  1051→            />
+  1052→          )}
+  1053→          <div className="min-w-0 flex-1">
+  1054→            <div className="font-semibold text-foreground truncate">
+  1055→              {conversation.name}
+  1056→            </div>
+  1057→            <div className="text-xs text-muted-foreground truncate">
+  1058→              {socketStatus === 'reconnecting' || socketStatus === 'disconnected' ? (
+  1059→                <span className="inline-flex items-center gap-1 text-amber-500 dark:text-amber-400 font-medium">
+  1060→                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+  1061→                  {socketStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline'}
+  1062→                </span>
+  1063→              ) : typingUsers.length > 0 ? (
+  1064→                <span className="text-[var(--wasl-green)] font-medium">
+  1065→                  typing…
+  1066→                </span>
+  1067→              ) : conversation.isGroup ? (
+  1068→                `${conversation.participants.map((p) => p.name).join(', ')}`
+  1069→              ) : (
+  1070→                formatLastSeen(otherUser?.lastSeen || new Date().toISOString(), isOnline)
+  1071→              )}
+  1072→            </div>
+  1073→          </div>
+  1074→        </button>
+  1075→        {/* Socket connection pill — only shown when the socket is not healthy */}
+  1076→        {(socketStatus === 'reconnecting' || socketStatus === 'disconnected') && (
+  1077→          <span
+  1078→            title={
+  1079→              socketStatus === 'reconnecting'
+  1080→                ? 'Real-time connection lost — Wasl is reconnecting…'
+  1081→                : 'You are offline. Messages will be sent when you reconnect.'
+  1082→            }
+  1083→            className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium border bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 mr-1"
+  1084→          >
+  1085→            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+  1086→            {socketStatus === 'reconnecting' ? 'Reconnecting' : 'Offline'}
+  1087→          </span>
+  1088→        )}
+  1089→        <div className="flex items-center gap-1">
+  1090→          <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Video call is not available in this demo')}>
+  1091→            <Video className="w-5 h-5" />
+  1092→          </Button>
+  1093→          <Button variant="ghost" size="icon" className="hidden sm:flex" onClick={() => toast.info('Voice call is not available in this demo')}>
+  1094→            <Phone className="w-5 h-5" />
+  1095→          </Button>
+  1096→          <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
+  1097→            <Search className="w-5 h-5" />
+  1098→          </Button>
+  1099→          <DropdownMenu>
+  1100→            <DropdownMenuTrigger asChild>
+  1101→              <Button variant="ghost" size="icon">
+  1102→                <MoreVertical className="w-5 h-5" />
+  1103→              </Button>
+  1104→            </DropdownMenuTrigger>
+  1105→            <DropdownMenuContent align="end">
+  1106→              <DropdownMenuItem onClick={onOpenInfo}>
+  1107→                <Info className="w-4 h-4 mr-2" /> Contact info
+  1108→              </DropdownMenuItem>
+  1109→              <DropdownMenuItem onClick={() => setSummaryOpen(true)}>
+  1110→                <Sparkles className="w-4 h-4 mr-2" /> AI summary
+  1111→              </DropdownMenuItem>
+  1112→              <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
+  1113→                <ListChecks className="w-4 h-4 mr-2" /> Action items
+  1114→              </DropdownMenuItem>
+  1115→              <DropdownMenuItem onClick={() => setToneOpen(true)}>
+  1116→                <Wand2 className="w-4 h-4 mr-2" /> Tone adjuster
+  1117→              </DropdownMenuItem>
+  1118→              <DropdownMenuItem onClick={handleCopyLast}>
+  1119→                <Copy className="w-4 h-4 mr-2" /> Copy last message
+  1120→              </DropdownMenuItem>
+  1121→              {conversation.isGroup && (
+  1122→                <DropdownMenuItem onClick={() => toast.info('Group members')}>
+  1123→                  <Users className="w-4 h-4 mr-2" /> Group members
+  1124→                </DropdownMenuItem>
+  1125→              )}
+  1126→              <DropdownMenuItem onClick={() => setAppLockOpen(true)}>
+  1127→                <Lock className="w-4 h-4 mr-2" /> App lock
+  1128→              </DropdownMenuItem>
+  1129→              <DropdownMenuItem onClick={async () => {
+  1130→                const setting = await fetch(`/api/disappearing?conversationId=${activeConversationId}`).then(r => r.json())
+  1131→                const enabled = !setting.setting?.enabled
+  1132→                await fetch('/api/disappearing', {
+  1133→                  method: 'POST',
+  1134→                  headers: { 'Content-Type': 'application/json' },
+  1135→                  body: JSON.stringify({ conversationId: activeConversationId, enabled, duration: 86400 }),
+  1136→                })
+  1137→                toast.success(enabled ? 'Disappearing messages ON (24h)' : 'Disappearing messages OFF')
+  1138→              }}>
+  1139→                <Timer className="w-4 h-4 mr-2" /> Disappearing messages
+  1140→              </DropdownMenuItem>
+  1141→              <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
+  1142→                <Trash2 className="w-4 h-4 mr-2" /> Delete chat
+  1143→              </DropdownMenuItem>
+  1144→            </DropdownMenuContent>
+  1145→          </DropdownMenu>
+  1146→        </div>
+  1147→      </div>
+  1148→
+  1149→      {/* Messages */}
+  1150→      <div
+  1151→        ref={scrollRef}
+  1152→        onScroll={onScroll}
+  1153→        className="flex-1 overflow-y-auto wasl-scroll px-2 sm:px-4 py-4 max-w-4xl w-full mx-auto"
+  1154→      >
+  1155→        {loading && messages.length === 0 ? (
+  1156→          // Skeleton placeholders while the first batch of messages loads.
+  1157→          // Alternates between incoming and outgoing so the layout matches
+  1158→          // what users will see once messages render.
+  1159→          <div className="space-y-3">
+  1160→            <div className="flex justify-center mb-2">
+  1161→              <Skeleton className="h-5 w-24" />
+  1162→            </div>
+  1163→            <MessageSkeleton />
+  1164→            <MessageSkeleton mine />
+  1165→            <MessageSkeleton />
+  1166→            <MessageSkeleton mine />
+  1167→            <MessageSkeleton />
+  1168→            <MessageSkeleton mine />
+  1169→          </div>
+  1170→        ) : (
+  1171→          <>
+  1172→            {loadingMore && (
+  1173→              <div className="text-center text-xs text-muted-foreground py-2 flex items-center justify-center gap-2">
+  1174→                <Skeleton className="h-2 w-2 rounded-full" />
+  1175→                <Skeleton className="h-2 w-2 rounded-full" />
+  1176→                <Skeleton className="h-2 w-2 rounded-full" />
+  1177→                <span className="ml-2">Loading older messages…</span>
+  1178→              </div>
+  1179→            )}
+  1180→            {messages.map((m, idx) => {
+  1181→              const date = formatDateDivider(m.createdAt)
+  1182→              const showDate = date !== lastDate
+  1183→              lastDate = date
+  1184→              const senderName = conversation.participants.find(
+  1185→                (p) => p.userId === m.senderId
+  1186→              )?.name
+  1187→              const replyToMsg = m.replyToId
+  1188→                ? messages.find((mm) => mm.id === m.replyToId)
+  1189→                : null
+  1190→              // Compute the index of the first unread message. The separator
+  1191→              // appears before that message (only if there are unread messages
+  1192→              // and they're not the very first message in the visible batch).
+  1193→              const unreadBoundary = messages.length - (initialUnreadRef.current || 0)
+  1194→              const showUnreadSeparator =
+  1195→                initialUnreadRef.current > 0 &&
+  1196→                idx === unreadBoundary &&
+  1197→                unreadBoundary > 0
+  1198→              return (
+  1199→                <div
+  1200→                  key={m.id}
+  1201→                  data-message-id={m.id}
+  1202→                  className="wasl-message-wrapper"
+  1203→                >
+  1204→                  {showDate && (
+  1205→                    <div className="flex justify-center my-3">
+  1206→                      <div className="wasl-date-pill text-xs px-3 py-1 rounded-lg font-medium">
+  1207→                        {date}
+  1208→                      </div>
+  1209→                    </div>
+  1210→                  )}
+  1211→                  {showUnreadSeparator && (
+  1212→                    <div className="wasl-unread-separator flex items-center gap-3 my-3 select-none">
+  1213→                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
+  1214→                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--wasl-green)] px-2">
+  1215→                        Unread messages
+  1216→                      </span>
+  1217→                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
+  1218→                    </div>
+  1219→                  )}
+  1220→                  <div className="group mb-1.5">
+  1221→                    <MessageBubble
+  1222→                      message={m}
+  1223→                      senderName={senderName}
+  1224→                      isGroup={conversation.isGroup}
+  1225→                      replyTo={replyToMsg}
+  1226→                      onReact={(emoji) => handleReact(m.id, emoji)}
+  1227→                      onReply={() => setReplyTo(m)}
+  1228→                      onStar={() => handleStar(m.id)}
+  1229→                      onCopy={() => handleCopyMessage(m)}
+  1230→                      onDelete={() => handleDeleteMessage(m.id)}
+  1231→                      onEdit={() => handleEditMessage(m)}
+  1232→                      onForward={() => handleForwardMessage(m)}
+  1233→                      onPin={() => handlePinMessage(m)}
+  1234→                      starred={m.starred}
+  1235→                      reactions={m.reactions}
+  1236→                      currentUserId={user?.id}
+  1237→                    />
+  1238→                  </div>
+  1239→                </div>
+  1240→              )
+  1241→            })}
+  1242→            {/* Typing indicator */}
+  1243→            {typingUsers.length > 0 && (
+  1244→              <div className="flex justify-start mb-2">
+  1245→                <div className="wasl-bubble-in px-3 py-2 shadow-sm flex items-center gap-1.5">
+  1246→                  <span className="text-xs text-muted-foreground mr-1">
+  1247→                    {conversation.isGroup ? typingUsers[0] : ''} typing
+  1248→                  </span>
+  1249→                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
+  1250→                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
+  1251→                  <span className="wasl-typing-dot w-1.5 h-1.5 bg-muted-foreground rounded-full inline-block" />
+  1252→                </div>
+  1253→              </div>
+  1254→            )}
+  1255→            <div ref={bottomRef} />
+  1256→          </>
+  1257→        )}
+  1258→
+  1259→        {/* Scroll-to-bottom button */}
+  1260→        {showScrollBtn && (
+  1261→          <button
+  1262→            type="button"
+  1263→            onClick={scrollToBottom}
+  1264→            className="wasl-scroll-btn sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border border-border flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-colors z-10"
+  1265→            title="Scroll to latest"
+  1266→            aria-label="Scroll to latest"
+  1267→          >
+  1268→            <ChevronDown className="w-5 h-5" />
+  1269→          </button>
+  1270→        )}
+  1271→      </div>
+  1272→
+  1273→      {/* Smart reply chips + Input */}
+  1274→      <SmartReplyChips conversationId={activeConversationId} />
+  1275→      <MessageInput
+  1276→        conversationId={activeConversationId}
+  1277→        onSend={handleSend}
+  1278→        onTypingChange={onTypingChange}
+  1279→        onSendImage={handleSendImage}
+  1280→        onOpenCommit={() => setCommitOpen(true)}
+  1281→        canCommit={!conversation.isGroup && !!otherUser}
+  1282→        onOpenPoll={() => setPollOpen(true)}
+  1283→        onSchedule={(content) => { setScheduleContent(content); setScheduleOpen(true) }}
+  1284→      />
+  1285→
+  1286→      {/* New Commit dialog (Cirkle-inspired) */}
+  1287→      <NewCommitDialog
+  1288→        open={commitOpen}
+  1289→        onOpenChange={setCommitOpen}
+  1290→        conversationId={activeConversationId}
+  1291→        counterpartyId={otherUser?.userId || null}
+  1292→        counterpartyName={otherUser?.name}
+  1293→      />
+  1294→
+  1295→      {/* New Poll dialog (Cirkle-inspired chat-poll) */}
+  1296→      <NewPollDialog
+  1297→        open={pollOpen}
+  1298→        onOpenChange={setPollOpen}
+  1299→        conversationId={activeConversationId}
+  1300→      />
+  1301→
+  1302→      {/* In-chat search dialog */}
+  1303→      <ChatSearchDialog
+  1304→        open={searchOpen}
+  1305→        onOpenChange={setSearchOpen}
+  1306→        conversationId={activeConversationId}
+  1307→        conversationName={conversation.name}
+  1308→        conversationAvatar={conversation.avatar}
+  1309→        conversationAvatarColor={conversation.avatarColor}
+  1310→      />
+  1311→
+  1312→      {/* Schedule message dialog */}
+  1313→      <ScheduleDialog
+  1314→        open={scheduleOpen}
+  1315→        onOpenChange={setScheduleOpen}
+  1316→        conversationId={activeConversationId}
+  1317→        content={scheduleContent}
+  1318→      />
+  1319→
+  1320→      {/* AI chat summary dialog */}
+  1321→      <ChatSummaryDialog
+  1322→        open={summaryOpen}
+  1323→        onOpenChange={setSummaryOpen}
+  1324→        conversationId={activeConversationId}
+  1325→      />
+  1326→
+  1327→      {/* App lock dialog */}
+  1328→      <AppLockDialog
+  1329→        open={appLockOpen}
+  1330→        onOpenChange={setAppLockOpen}
+  1331→      />
+  1332→
+  1333→      {/* AI action items dialog */}
+  1334→      <ActionItemsDialog
+  1335→        open={actionItemsOpen}
+  1336→        onOpenChange={setActionItemsOpen}
+  1337→        conversationId={activeConversationId}
+  1338→      />
+  1339→
+  1340→      {/* AI tone adjuster dialog */}
+  1341→      <ToneAdjusterDialog
+  1342→        open={toneOpen}
+  1343→        onOpenChange={setToneOpen}
+  1344→        initialContent=""
+  1345→        onApply={() => {}}
+  1346→      />
+  1347→
+  1348→      {/* Command palette (Ctrl+K) */}
+  1349→      <CommandPalette
+  1350→        open={paletteOpen}
+  1351→        onOpenChange={setPaletteOpen}
+  1352→      />
+  1353→
+  1354→      {/* Forward dialog (multi-select) */}
+  1355→      <ForwardDialog
+  1356→        open={forwardOpen}
+  1357→        onOpenChange={setForwardOpen}
+  1358→        messageId={forwardMessage?.id || null}
+  1359→        messageContent={forwardMessage?.content || ''}
+  1360→      />
+  1361→
+  1362→      {/* Delete message dialog (delete for me / for everyone) */}
+  1363→      <DeleteMessageDialog
+  1364→        open={!!deleteMessage}
+  1365→        onOpenChange={(v) => {
+  1366→          if (!v) setDeleteMessage(null)
+  1367→        }}
+  1368→        messageId={deleteMessage?.id || null}
+  1369→        messageContent={deleteMessage?.content || ''}
+  1370→        isOwnMessage={deleteMessage?.senderId === user?.id}
+  1371→        canDeleteForEveryone={
+  1372→          !!deleteMessage &&
+  1373→          deleteMessage.senderId === user?.id &&
+  1374→          (Date.now() - new Date(deleteMessage.createdAt).getTime()) / 60000 < 60
+  1375→        }
+  1376→      />
+  1377→    </div>
+  1378→  )
+  1379→}
+  1380→

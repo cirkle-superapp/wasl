@@ -1414,6 +1414,33 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           >
             <Shield className="w-4 h-4 mr-3" /> Encryption
           </Button>
+          <div className="px-2 py-1">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Chat wallpaper</div>
+            <div className="flex gap-2">
+              {[
+                { id: 'wasl-chat-pattern', label: 'Default' },
+                { id: 'wasl-chat-wallpaper-solid', label: 'Solid' },
+                { id: 'wasl-chat-wallpaper-dots', label: 'Dots' },
+                { id: 'wasl-chat-wallpaper-grid', label: 'Grid' },
+                { id: 'wasl-chat-wallpaper-diagonal', label: 'Diagonal' },
+                { id: 'wasl-chat-wallpaper-waves', label: 'Waves' },
+              ].map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  className={`${w.id} w-8 h-8 rounded-lg border border-border cursor-pointer hover:scale-110 transition-transform`}
+                  title={w.label}
+                  onClick={() => {
+                    try {
+                      localStorage.setItem('wasl-chat-wallpaper', w.id)
+                      toast.success(`Wallpaper: ${w.label}`)
+                      window.dispatchEvent(new CustomEvent('wasl:wallpaper-change', { detail: w.id }))
+                    } catch {}
+                  }}
+                />
+              ))}
+            </div>
+          </div>
           <Button
             variant="ghost"
             className="w-full justify-start"

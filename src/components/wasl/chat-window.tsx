@@ -99,6 +99,10 @@ export function ChatWindow({
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
   const [toneOpen, setToneOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Chat wallpaper — user-selectable from contact info panel (stored in localStorage)
+  const [wallpaperClass, setWallpaperClass] = useState<string>(() => {
+    try { return localStorage.getItem('wasl-chat-wallpaper') || 'wasl-chat-pattern' } catch { return 'wasl-chat-pattern' }
+  })
   // Approved businesses owned by the user — used for the "send as business" selector
   const [businesses, setBusinesses] = useState<Array<{ id: string; name: string; avatarColor?: string | null }>>([])
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -468,6 +472,16 @@ export function ChatWindow({
       window.removeEventListener('wasl:message-hidden-for-me', onMessageHiddenForMe as EventListener)
     }
   }, [activeConversationId, removeMessage])
+
+  // Listen for wallpaper changes from the contact info panel
+  useEffect(() => {
+    function onWallpaperChange(e: Event) {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setWallpaperClass(detail)
+    }
+    window.addEventListener('wasl:wallpaper-change', onWallpaperChange as EventListener)
+    return () => window.removeEventListener('wasl:wallpaper-change', onWallpaperChange as EventListener)
+  }, [])
 
   // ---- Load older messages ---------------------------------------------------
   async function loadMore() {
@@ -1084,7 +1098,7 @@ export function ChatWindow({
     const groupCount = conversations.filter(c => c.isGroup).length
     const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
     return (
-      <div className="flex-1 flex flex-col items-center justify-center wasl-chat-pattern text-center px-6 overflow-y-auto wasl-scroll">
+      <div className={cn('flex-1 flex flex-col items-center justify-center text-center px-6 overflow-y-auto wasl-scroll', wallpaperClass)}>
         <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
           <WaslLogo size={72} animated />
           <h2 className="text-xl font-semibold text-foreground">
@@ -1158,7 +1172,7 @@ export function ChatWindow({
 
   return (
     <div
-      className="flex-1 flex flex-col min-w-0 wasl-chat-pattern relative"
+      className={cn('flex-1 flex flex-col min-w-0 relative', wallpaperClass)}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

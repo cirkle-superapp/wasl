@@ -1,0 +1,1129 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useCallback, useRef } from 'react'
+     4→import {
+     5→  Phone,
+     6→  Bell,
+     7→  BellOff,
+     8→  Trash2,
+     9→  X,
+    10→  Image as ImageIcon,
+    11→  Users,
+    12→  Star,
+    13→  Shield,
+    14→  ShieldCheck,
+    15→  Lock,
+    16→  Camera,
+    17→  Copy,
+    18→  Forward,
+    19→  MousePointerClick,
+    20→  AlertTriangle,
+    21→  ChevronDown,
+    22→  ChevronRight,
+    23→  SmilePlus,
+    24→  UserPlus,
+    25→  Pencil,
+    26→  UserX,
+    27→  Search,
+    28→  Loader2,
+    29→  Crown,
+    30→} from 'lucide-react'
+    31→import { Button } from '@/components/ui/button'
+    32→import { Input } from '@/components/ui/input'
+    33→import { Label } from '@/components/ui/label'
+    34→import {
+    35→  Dialog,
+    36→  DialogContent,
+    37→  DialogHeader,
+    38→  DialogTitle,
+    39→  DialogDescription,
+    40→  DialogFooter,
+    41→} from '@/components/ui/dialog'
+    42→import { WaslAvatar } from './wasl-avatar'
+    43→import { useWaslStore, type Commit, type Participant } from '@/lib/store'
+    44→import { formatLastSeen, formatChatTimestamp } from '@/lib/time'
+    45→import { toast } from 'sonner'
+    46→import { cn } from '@/lib/utils'
+    47→import { StarredMessagesDialog } from './starred-messages-dialog'
+    48→import { EncryptionDialog } from './encryption-dialog'
+    49→import { ReactionsSummaryDialog } from './reactions-summary-dialog'
+    50→
+    51→// Icon mapping for screenshot-attempt kinds → human-readable label + icon
+    52→const KIND_META: Record<string, { label: string; icon: typeof Camera }> = {
+    53→  printscreen: { label: 'Screenshot key', icon: Camera },
+    54→  copy: { label: 'Copy attempt', icon: Copy },
+    55→  save: { label: 'Save attempt', icon: Forward },
+    56→  contextmenu: { label: 'Right-click', icon: MousePointerClick },
+    57→  drag: { label: 'Drag attempt', icon: MousePointerClick },
+    58→  forward: { label: 'Forward attempt', icon: Forward },
+    59→}
+    60→
+    61→type CaptureAttempt = {
+    62→  id: string
+    63→  kind: string
+    64→  note: string | null
+    65→  createdAt: string
+    66→  reporter: {
+    67→    id: string
+    68→    name: string
+    69→    username: string
+    70→    avatar: string | null
+    71→    avatarColor: string | null
+    72→  } | null
+    73→}
+    74→
+    75→type CaptureMessage = {
+    76→  id: string
+    77→  content: string
+    78→  type: string
+    79→  createdAt: string
+    80→  attempts: CaptureAttempt[]
+    81→}
+    82→
+    83→type CaptureSummary = {
+    84→  messages: CaptureMessage[]
+    85→  totalAttempts: number
+    86→  byKind: Record<string, number>
+    87→  protectedMessageCount: number
+    88→}
+    89→
+    90→export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
+    91→  const {
+    92→    activeConversationId,
+    93→    conversations,
+    94→    user,
+    95→    onlineUserIds,
+    96→    setShowProfilePanel,
+    97→    commitsByConversation,
+    98→    upsertConversation,
+    99→  } = useWaslStore()
+   100→  const conversation =
+   101→    conversations.find((c) => c.id === activeConversationId) || null
+   102→  const [media, setMedia] = useState<string[]>([])
+   103→  const [capture, setCapture] = useState<CaptureSummary | null>(null)
+   104→  const [captureLoading, setCaptureLoading] = useState(false)
+   105→  const [expandedCapture, setExpandedCapture] = useState<Set<string>>(new Set())
+   106→  const [starredOpen, setStarredOpen] = useState(false)
+   107→  const [muted, setMuted] = useState(false)
+   108→  const [encryptionOpen, setEncryptionOpen] = useState(false)
+   109→  const [reactionsOpen, setReactionsOpen] = useState(false)
+   110→
+   111→  // --- Group admin controls ------------------------------------------------
+   112→  const [addMemberOpen, setAddMemberOpen] = useState(false)
+   113→  const [renameOpen, setRenameOpen] = useState(false)
+   114→  const [removingUserId, setRemovingUserId] = useState<string | null>(null)
+   115→  // local override of participants (used right after add/remove so the UI
+   116→  // updates immediately without waiting for the global refetch)
+   117→  const [localParticipants, setLocalParticipants] = useState<Participant[] | null>(null)
+   118→  const commits: Commit[] = activeConversationId
+   119→    ? commitsByConversation[activeConversationId] || []
+   120→    : []
+   121→
+   122→  // Reset local override whenever the active conversation changes so we
+   123→  // don't accidentally show stale members from a previous chat.
+   124→  useEffect(() => {
+   125→    setLocalParticipants(null)
+   126→  }, [activeConversationId])
+   127→
+   128→  const participants: Participant[] =
+   129→    localParticipants ?? conversation?.participants ?? []
+   130→  const isAdmin =
+   131→    !!conversation?.isGroup &&
+   132→    participants.some((p) => p.userId === user?.id && p.role === 'admin')
+   133→
+   134→  const loadCapture = useCallback(async () => {
+   135→    if (!activeConversationId) return
+   136→    setCaptureLoading(true)
+   137→    try {
+   138→      const res = await fetch(
+   139→        `/api/conversations/${activeConversationId}/screenshot-attempts`,
+   140→        { cache: 'no-store' }
+   141→      )
+   142→      if (!res.ok) {
+   143→        setCapture(null)
+   144→        return
+   145→      }
+   146→      const data: CaptureSummary = await res.json()
+   147→      setCapture(data)
+   148→      // Auto-expand the most-recent message's attempts list
+   149→      if (data.messages.length > 0) {
+   150→        setExpandedCapture(new Set([data.messages[0].id]))
+   151→      }
+   152→    } catch {
+   153→      setCapture(null)
+   154→    } finally {
+   155→      setCaptureLoading(false)
+   156→    }
+   157→  }, [activeConversationId])
+   158→
+   159→  useEffect(() => {
+   160→    async function loadMedia() {
+   161→      if (!activeConversationId) return
+   162→      try {
+   163→        const res = await fetch(
+   164→          `/api/conversations/${activeConversationId}/messages?limit=100`,
+   165→          { cache: 'no-store' }
+   166→        )
+   167→        if (!res.ok) return
+   168→        const data = await res.json()
+   169→        setMedia(
+   170→          (data.messages as any[])
+   171→            .filter((m) => m.type === 'image')
+   172→            .map((m) => m.content)
+   173→            .slice(0, 9)
+   174→        )
+   175→      } catch {
+   176→        // ignore
+   177→      }
+   178→    }
+   179→    loadMedia()
+   180→    loadCapture()
+   181→    loadMuted()
+   182→  }, [activeConversationId, loadCapture])
+   183→
+   184→  const loadMuted = useCallback(async () => {
+   185→    if (!activeConversationId) return
+   186→    try {
+   187→      const res = await fetch(
+   188→        `/api/conversations/${activeConversationId}/mute`,
+   189→        { cache: 'no-store' }
+   190→      )
+   191→      if (!res.ok) return
+   192→      const data = await res.json()
+   193→      setMuted(!!data.muted)
+   194→    } catch {
+   195→      // ignore
+   196→    }
+   197→  }, [activeConversationId])
+   198→
+   199→  async function toggleMute() {
+   200→    const next = !muted
+   201→    setMuted(next) // optimistic
+   202→    try {
+   203→      const res = await fetch(
+   204→        `/api/conversations/${activeConversationId}/mute`,
+   205→        {
+   206→          method: 'POST',
+   207→          headers: { 'Content-Type': 'application/json' },
+   208→          body: JSON.stringify({ muted: next }),
+   209→        }
+   210→      )
+   211→      if (!res.ok) {
+   212→        setMuted(!next) // rollback
+   213→        toast.error('Failed to update mute setting')
+   214→        return
+   215→      }
+   216→      toast.success(next ? 'Notifications muted' : 'Notifications unmuted')
+   217→    } catch {
+   218→      setMuted(!next) // rollback
+   219→      toast.error('Network error')
+   220→    }
+   221→  }
+   222→
+   223→  // Refresh the conversation in the global store after an admin action so
+   224→  // the sidebar + chat header reflect the new name / member count.
+   225→  const refreshConversation = useCallback(async () => {
+   226→    if (!activeConversationId) return
+   227→    try {
+   228→      const res = await fetch('/api/conversations', { cache: 'no-store' })
+   229→      if (!res.ok) return
+   230→      const data = await res.json()
+   231→      const updated = (data.conversations as any[]).find(
+   232→        (c) => c.id === activeConversationId
+   233→      )
+   234→      if (updated) upsertConversation(updated)
+   235→    } catch {
+   236→      // ignore — the local override already updated the UI
+   237→    }
+   238→  }, [activeConversationId, upsertConversation])
+   239→
+   240→  // Remove a member from the group (admin only).
+   241→  async function handleRemoveMember(userId: string, name: string) {
+   242→    if (!activeConversationId) return
+   243→    if (
+   244→      !confirm(
+   245→        `Remove ${name} from this group? They will no longer be able to see or send messages here.`
+   246→      )
+   247→    )
+   248→      return
+   249→    setRemovingUserId(userId)
+   250→    try {
+   251→      const res = await fetch(
+   252→        `/api/conversations/${activeConversationId}/members?userId=${encodeURIComponent(userId)}`,
+   253→        { method: 'DELETE' }
+   254→      )
+   255→      if (!res.ok) {
+   256→        const data = await res.json().catch(() => null)
+   257→        toast.error(data?.error || 'Failed to remove member')
+   258→        return
+   259→      }
+   260→      // Optimistic local update — drop the removed member from the list
+   261→      setLocalParticipants((prev) => {
+   262→        const base = prev ?? conversation?.participants ?? []
+   263→        return base.filter((p) => p.userId !== userId)
+   264→      })
+   265→      toast.success(`${name} removed`)
+   266→      // Refetch so the sidebar member count + last-message preview refresh.
+   267→      void refreshConversation()
+   268→    } catch {
+   269→      toast.error('Network error')
+   270→    } finally {
+   271→      setRemovingUserId(null)
+   272→    }
+   273→  }
+   274→
+   275→  // After a member is added via the dialog, merge them into the local
+   276→  // participants list so the panel updates instantly (the dialog hands us
+   277→  // the user object it just added).
+   278→  function handleMemberAdded(added: SearchUser) {
+   279→    setLocalParticipants((prev) => {
+   280→      const base = prev ?? conversation?.participants ?? []
+   281→      if (base.some((p) => p.userId === added.id)) return base
+   282→      return [
+   283→        ...base,
+   284→        {
+   285→          userId: added.id,
+   286→          username: added.username,
+   287→          name: added.name,
+   288→          phone: added.phone,
+   289→          avatar: added.avatar,
+   290→          avatarColor: added.avatarColor,
+   291→          online: added.online,
+   292→          lastSeen: added.lastSeen,
+   293→          about: added.about,
+   294→          verified: added.verified,
+   295→          role: 'member' as const,
+   296→        },
+   297→      ]
+   298→    })
+   299→    void refreshConversation()
+   300→  }
+   301→
+   302→  // After the group is renamed, optimistically update the conversation name
+   303→  // in the local store so the header / sidebar reflect the new name.
+   304→  function handleRenamed(newName: string) {
+   305→    if (!conversation) return
+   306→    upsertConversation({
+   307→      ...conversation,
+   308→      name: newName,
+   309→    })
+   310→    void refreshConversation()
+   311→  }
+   312→
+   313→  if (!conversation) return null
+   314→
+   315→  const otherUser =
+   316→    !conversation.isGroup
+   317→      ? conversation.participants.find((p) => p.userId !== user?.id)
+   318→      : null
+   319→  const isOnline =
+   320→    !!otherUser &&
+   321→    (onlineUserIds.has(otherUser.userId) || otherUser.online)
+   322→
+   323→  async function handleDelete() {
+   324→    if (!conversation) return
+   325→    if (!confirm('Delete this conversation? This cannot be undone.')) return
+   326→    try {
+   327→      await fetch(`/api/conversations/${conversation.id}`, {
+   328→        method: 'DELETE',
+   329→      })
+   330→      useWaslStore.getState().removeConversation(conversation.id)
+   331→      setShowProfilePanel(false)
+   332→      toast.success('Conversation deleted')
+   333→    } catch {
+   334→      toast.error('Failed to delete')
+   335→    }
+   336→  }
+   337→
+   338→  function toggleCaptureMessage(messageId: string) {
+   339→    setExpandedCapture((prev) => {
+   340→      const next = new Set(prev)
+   341→      if (next.has(messageId)) next.delete(messageId)
+   342→      else next.add(messageId)
+   343→      return next
+   344→    })
+   345→  }
+   346→
+   347→  return (
+   348→    <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)] border-l border-border w-full">
+   349→      <div className="bg-[var(--wasl-teal)] text-white px-4 py-3 flex items-center justify-between">
+   350→        <div className="font-medium">Info</div>
+   351→        <Button
+   352→          variant="ghost"
+   353→          size="icon"
+   354→          className="text-white hover:bg-white/10"
+   355→          onClick={onClose}
+   356→        >
+   357→          <X className="w-5 h-5" />
+   358→        </Button>
+   359→      </div>
+   360→
+   361→      <div className="flex-1 overflow-y-auto wasl-scroll p-4 space-y-6">
+   362→        {/* Hero */}
+   363→        <div className="flex flex-col items-center text-center">
+   364→          <WaslAvatar
+   365→            name={conversation.name}
+   366→            src={conversation.avatar}
+   367→            color={conversation.avatarColor}
+   368→            size={120}
+   369→            online={isOnline}
+   370→            showStatus={!conversation.isGroup}
+   371→          />
+   372→          <h2 className="text-xl font-semibold mt-3">{conversation.name}</h2>
+   373→          {!conversation.isGroup && otherUser && (
+   374→            <p className="text-sm text-muted-foreground">
+   375→              {formatLastSeen(otherUser.lastSeen, isOnline)}
+   376→            </p>
+   377→          )}
+   378→          {conversation.isGroup && (
+   379→            <p className="text-sm text-muted-foreground">
+   380→              Group · {participants.length} member
+   381→              {participants.length === 1 ? '' : 's'}
+   382→            </p>
+   383→          )}
+   384→          {conversation.isGroup && isAdmin && (
+   385→            <Button
+   386→              variant="ghost"
+   387→              size="sm"
+   388→              className="mt-2 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-[var(--wasl-teal)]/10"
+   389→              onClick={() => setRenameOpen(true)}
+   390→            >
+   391→              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit group name
+   392→            </Button>
+   393→          )}
+   394→        </div>
+   395→
+   396→        {/* About */}
+   397→        {!conversation.isGroup && otherUser && (
+   398→          <div className="bg-white dark:bg-[var(--wasl-chat-bg)] rounded-lg p-3 border border-border/60">
+   399→            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+   400→              About
+   401→            </div>
+   402→            <p className="text-sm">{otherUser.about || 'No bio yet'}</p>
+   403→          </div>
+   404→        )}
+   405→
+   406→        {/* Phone */}
+   407→        {!conversation.isGroup && otherUser && (
+   408→          <div className="bg-white dark:bg-[var(--wasl-chat-bg)] rounded-lg p-3 border border-border/60">
+   409→            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+   410→              Phone
+   411→            </div>
+   412→            <div className="flex items-center gap-2">
+   413→              <Phone className="w-4 h-4 text-[var(--wasl-teal)]" />
+   414→              <p className="text-sm font-medium">{otherUser.phone}</p>
+   415→            </div>
+   416→          </div>
+   417→        )}
+   418→
+   419→        {/* Participants */}
+   420→        {conversation.isGroup && (
+   421→          <div>
+   422→            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+   423→              <Users className="w-3.5 h-3.5" /> Members
+   424→              <span className="ml-auto text-[10px] normal-case tracking-normal">
+   425→                {participants.length}
+   426→              </span>
+   427→            </div>
+   428→            <div className="space-y-1">
+   429→              {participants.map((p) => {
+   430→                const memberIsAdmin = p.role === 'admin'
+   431→                const isSelf = p.userId === user?.id
+   432→                return (
+   433→                  <div
+   434→                    key={p.userId}
+   435→                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/60"
+   436→                  >
+   437→                    <WaslAvatar
+   438→                      name={p.name}
+   439→                      src={p.avatar}
+   440→                      color={p.avatarColor}
+   441→                      size={36}
+   442→                      online={onlineUserIds.has(p.userId) || p.online}
+   443→                      showStatus
+   444→                    />
+   445→                    <div className="flex-1 min-w-0">
+   446→                      <div className="text-sm font-medium truncate flex items-center gap-1.5">
+   447→                        <span className="truncate">{p.name}</span>
+   448→                        {isSelf && (
+   449→                          <span className="text-xs text-muted-foreground shrink-0">
+   450→                            (you)
+   451→                          </span>
+   452→                        )}
+   453→                        {memberIsAdmin ? (
+   454→                          <span
+   455→                            className="inline-flex items-center gap-0.5 shrink-0 px-1.5 py-0.5 rounded-full bg-[var(--wasl-teal)]/15 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] text-[10px] font-semibold"
+   456→                            title="Group admin"
+   457→                          >
+   458→                            <Crown className="w-2.5 h-2.5" />
+   459→                            Admin
+   460→                          </span>
+   461→                        ) : (
+   462→                          <span
+   463→                            className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium"
+   464→                            title="Member"
+   465→                          >
+   466→                            Member
+   467→                          </span>
+   468→                        )}
+   469→                      </div>
+   470→                      <div className="text-xs text-muted-foreground truncate">
+   471→                        {formatLastSeen(
+   472→                          p.lastSeen,
+   473→                          onlineUserIds.has(p.userId) || p.online
+   474→                        )}
+   475→                      </div>
+   476→                    </div>
+   477→                    {isAdmin && !isSelf && (
+   478→                      <Button
+   479→                        variant="ghost"
+   480→                        size="sm"
+   481→                        className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+   482→                        disabled={removingUserId === p.userId}
+   483→                        onClick={() => handleRemoveMember(p.userId, p.name)}
+   484→                        title={`Remove ${p.name} from group`}
+   485→                      >
+   486→                        {removingUserId === p.userId ? (
+   487→                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+   488→                        ) : (
+   489→                          <UserX className="w-3.5 h-3.5" />
+   490→                        )}
+   491→                      </Button>
+   492→                    )}
+   493→                  </div>
+   494→                )
+   495→              })}
+   496→            </div>
+   497→            {isAdmin && (
+   498→              <Button
+   499→                variant="outline"
+   500→                size="sm"
+   501→                className="mt-2 w-full border-dashed"
+   502→                onClick={() => setAddMemberOpen(true)}
+   503→              >
+   504→                <UserPlus className="w-4 h-4 mr-2" /> Add member
+   505→              </Button>
+   506→            )}
+   507→          </div>
+   508→        )}
+   509→
+   510→        {/* Capture attempts (sender-side audit log of protected messages) */}
+   511→        <div>
+   512→          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+   513→            <Lock className="w-3.5 h-3.5 text-[var(--wasl-green)]" /> Capture attempts
+   514→            {capture && capture.totalAttempts > 0 && (
+   515→              <span className="ml-auto text-[10px] normal-case tracking-normal px-1.5 py-0.5 rounded-full bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] font-semibold">
+   516→                {capture.totalAttempts}
+   517→              </span>
+   518→            )}
+   519→          </div>
+   520→          {captureLoading ? (
+   521→            <div className="space-y-1.5">
+   522→              {[0, 1, 2].map((i) => (
+   523→                <div
+   524→                  key={i}
+   525→                  className="h-12 rounded-md bg-muted/40 animate-pulse"
+   526→                />
+   527→              ))}
+   528→            </div>
+   529→          ) : !capture || capture.totalAttempts === 0 ? (
+   530→            <div className="rounded-lg border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
+   531→              <Lock className="w-3.5 h-3.5 inline mr-1.5 text-[var(--wasl-green)]" />
+   532→              {capture && capture.protectedMessageCount > 0
+   533→                ? 'No capture attempts recorded on your protected messages in this chat.'
+   534→                : 'No protected messages yet. Use the lock icon in the composer to send a protected message; attempts to screenshot or forward it will be shown here.'}
+   535→            </div>
+   536→          ) : (
+   537→            <div className="space-y-2">
+   538→              {/* Kind summary chips */}
+   539→              {Object.keys(capture.byKind).length > 0 && (
+   540→                <div className="flex flex-wrap gap-1.5 mb-2">
+   541→                  {Object.entries(capture.byKind).map(([kind, count]) => {
+   542→                    const meta = KIND_META[kind] || {
+   543→                      label: kind,
+   544→                      icon: AlertTriangle,
+   545→                    }
+   546→                    const Icon = meta.icon
+   547→                    return (
+   548→                      <span
+   549→                        key={kind}
+   550→                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-medium border border-amber-500/20"
+   551→                        title={meta.label}
+   552→                      >
+   553→                        <Icon className="w-3 h-3" />
+   554→                        {count} {meta.label.toLowerCase()}
+   555→                      </span>
+   556→                    )
+   557→                  })}
+   558→                </div>
+   559→              )}
+   560→
+   561→              {/* Per-message attempt list */}
+   562→              {capture.messages.map((m) => {
+   563→                const isExpanded = expandedCapture.has(m.id)
+   564→                return (
+   565→                  <div
+   566→                    key={m.id}
+   567→                    className="rounded-lg border border-border bg-white/70 dark:bg-white/5 overflow-hidden"
+   568→                  >
+   569→                    <button
+   570→                      type="button"
+   571→                      onClick={() => toggleCaptureMessage(m.id)}
+   572→                      className="w-full flex items-center gap-2 p-2.5 text-left hover:bg-muted/40 transition-colors"
+   573→                    >
+   574→                      <Lock className="w-3.5 h-3.5 text-[var(--wasl-green)] shrink-0" />
+   575→                      <div className="flex-1 min-w-0">
+   576→                        <div className="text-xs text-muted-foreground truncate">
+   577→                          {m.content.slice(0, 80) || '(empty message)'}
+   578→                        </div>
+   579→                        <div className="text-[10px] text-muted-foreground mt-0.5">
+   580→                          {formatChatTimestamp(m.createdAt)} · {m.attempts.length} attempt
+   581→                          {m.attempts.length === 1 ? '' : 's'}
+   582→                        </div>
+   583→                      </div>
+   584→                      {isExpanded ? (
+   585→                        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+   586→                      ) : (
+   587→                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+   588→                      )}
+   589→                    </button>
+   590→                    {isExpanded && (
+   591→                      <div className="border-t border-border/60 bg-amber-50/40 dark:bg-amber-500/5 p-2 space-y-1.5">
+   592→                        {m.attempts.map((a) => {
+   593→                          const meta = KIND_META[a.kind] || {
+   594→                            label: a.kind,
+   595→                            icon: AlertTriangle,
+   596→                          }
+   597→                          const Icon = meta.icon
+   598→                          return (
+   599→                            <div
+   600→                              key={a.id}
+   601→                              className="flex items-center gap-2 text-xs p-1.5 rounded-md hover:bg-amber-100/40 dark:hover:bg-amber-500/10"
+   602→                            >
+   603→                              <WaslAvatar
+   604→                                name={a.reporter?.name || 'Unknown'}
+   605→                                src={a.reporter?.avatar || undefined}
+   606→                                color={a.reporter?.avatarColor || undefined}
+   607→                                size={22}
+   608→                              />
+   609→                              <div className="flex-1 min-w-0">
+   610→                                <div className="font-medium truncate">
+   611→                                  {a.reporter?.name || 'Unknown user'}
+   612→                                </div>
+   613→                                <div className="text-[10px] text-muted-foreground">
+   614→                                  {formatChatTimestamp(a.createdAt)}
+   615→                                </div>
+   616→                              </div>
+   617→                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-medium shrink-0">
+   618→                                <Icon className="w-3 h-3" />
+   619→                                {meta.label}
+   620→                              </span>
+   621→                            </div>
+   622→                          )
+   623→                        })}
+   624→                      </div>
+   625→                    )}
+   626→                  </div>
+   627→                )
+   628→              })}
+   629→            </div>
+   630→          )}
+   631→          {capture && capture.totalAttempts > 0 && (
+   632→            <button
+   633→              type="button"
+   634→              onClick={loadCapture}
+   635→              className="mt-2 text-[11px] text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:underline flex items-center gap-1"
+   636→            >
+   637→              <Camera className="w-3 h-3" /> Refresh
+   638→            </button>
+   639→          )}
+   640→        </div>
+   641→
+   642→        {/* Media */}
+   643→        <div>
+   644→          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+   645→            <ImageIcon className="w-3.5 h-3.5" /> Shared media
+   646→          </div>
+   647→          {media.length === 0 ? (
+   648→            <p className="text-sm text-muted-foreground">No media shared yet</p>
+   649→          ) : (
+   650→            <div className="grid grid-cols-3 gap-1.5">
+   651→              {media.map((src, i) => (
+   652→                <img
+   653→                  key={i}
+   654→                  src={src}
+   655→                  alt="shared"
+   656→                  className="w-full aspect-square object-cover rounded-md cursor-pointer"
+   657→                />
+   658→              ))}
+   659→            </div>
+   660→          )}
+   661→        </div>
+   662→
+   663→        {/* Commits (Cirkle-inspired) */}
+   664→        <div>
+   665→          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1">
+   666→            <ShieldCheck className="w-3.5 h-3.5" /> Commits
+   667→            <span className="ml-auto text-[10px] normal-case tracking-normal">
+   668→              {commits.length} agreement{commits.length === 1 ? '' : 's'}
+   669→            </span>
+   670→          </div>
+   671→          {commits.length === 0 ? (
+   672→            <p className="text-sm text-muted-foreground">
+   673→              No commits yet. Tap the shield icon in the composer to create a
+   674→              verified agreement.
+   675→            </p>
+   676→          ) : (
+   677→            <div className="space-y-2">
+   678→              {commits.map((c) => (
+   679→                <div
+   680→                  key={c.id}
+   681→                  className="rounded-lg border border-border bg-white/70 dark:bg-white/5 p-2.5 text-xs"
+   682→                >
+   683→                  <div className="flex items-center justify-between gap-2 mb-1">
+   684→                    <div className="flex items-center gap-1.5 min-w-0">
+   685→                      <span className="text-base">{c.typeEmoji}</span>
+   686→                      <span className="font-medium truncate">{c.title}</span>
+   687→                    </div>
+   688→                    <span
+   689→                      className={cn(
+   690→                        'wasl-commit-status-pill wasl-commit-status-' + c.status
+   691→                      )}
+   692→                    >
+   693→                      {c.status === 'pending'
+   694→                        ? 'Pending'
+   695→                        : c.status === 'active'
+   696→                        ? 'Active'
+   697→                        : c.status === 'completed'
+   698→                        ? 'Done'
+   699→                        : 'Disputed'}
+   700→                    </span>
+   701→                  </div>
+   702→                  {c.amount > 0 && (
+   703→                    <div className="text-muted-foreground">
+   704→                      {c.amount.toLocaleString()} {c.currency}
+   705→                    </div>
+   706→                  )}
+   707→                  <div className="flex items-center gap-1 mt-1 text-[10px] text-muted-foreground">
+   708→                    <ShieldCheck className="w-3 h-3 text-[var(--wasl-green)]" />
+   709→                    {c.creatorSigned && c.counterpartySigned
+   710→                      ? 'Both parties signed'
+   711→                      : c.counterpartySigned
+   712→                      ? 'Counterparty signed'
+   713→                      : 'Awaiting counterparty signature'}
+   714→                  </div>
+   715→                </div>
+   716→              ))}
+   717→            </div>
+   718→          )}
+   719→        </div>
+   720→
+   721→        {/* Actions */}
+   722→        <div className="space-y-2">
+   723→          <Button
+   724→            variant="ghost"
+   725→            className={cn(
+   726→              'w-full justify-start text-foreground hover:bg-muted',
+   727→              muted && 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+   728→            )}
+   729→            onClick={toggleMute}
+   730→          >
+   731→            {muted ? (
+   732→              <>
+   733→                <BellOff className="w-4 h-4 mr-3" /> Unmute notifications
+   734→              </>
+   735→            ) : (
+   736→              <>
+   737→                <Bell className="w-4 h-4 mr-3" /> Mute notifications
+   738→              </>
+   739→            )}
+   740→          </Button>
+   741→          <Button
+   742→            variant="ghost"
+   743→            className="w-full justify-start"
+   744→            onClick={() => setStarredOpen(true)}
+   745→          >
+   746→            <Star className="w-4 h-4 mr-3" /> Starred messages
+   747→          </Button>
+   748→          <Button
+   749→            variant="ghost"
+   750→            className="w-full justify-start"
+   751→            onClick={() => setReactionsOpen(true)}
+   752→          >
+   753→            <SmilePlus className="w-4 h-4 mr-3" /> Reactions
+   754→          </Button>
+   755→          <Button
+   756→            variant="ghost"
+   757→            className="w-full justify-start"
+   758→            onClick={() => setEncryptionOpen(true)}
+   759→          >
+   760→            <Shield className="w-4 h-4 mr-3" /> Encryption
+   761→          </Button>
+   762→          <Button
+   763→            variant="ghost"
+   764→            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+   765→            onClick={handleDelete}
+   766→          >
+   767→            <Trash2 className="w-4 h-4 mr-3" /> Delete chat
+   768→          </Button>
+   769→        </div>
+   770→      </div>
+   771→
+   772→      {/* Starred messages dialog */}
+   773→      <StarredMessagesDialog
+   774→        open={starredOpen}
+   775→        onOpenChange={setStarredOpen}
+   776→        conversationId={activeConversationId}
+   777→        conversationName={conversation?.name}
+   778→      />
+   779→
+   780→      {/* Reactions summary dialog */}
+   781→      <ReactionsSummaryDialog
+   782→        open={reactionsOpen}
+   783→        onOpenChange={setReactionsOpen}
+   784→        conversationId={activeConversationId}
+   785→        conversationName={conversation?.name}
+   786→      />
+   787→
+   788→      {/* Encryption info dialog */}
+   789→      <EncryptionDialog open={encryptionOpen} onOpenChange={setEncryptionOpen} />
+   790→
+   791→      {/* Add-member dialog (admin only) */}
+   792→      {conversation.isGroup && (
+   793→        <AddMemberDialog
+   794→          open={addMemberOpen}
+   795→          onOpenChange={setAddMemberOpen}
+   796→          conversationId={conversation.id}
+   797→          currentMemberIds={participants.map((p) => p.userId)}
+   798→          onMemberAdded={handleMemberAdded}
+   799→        />
+   800→      )}
+   801→
+   802→      {/* Rename group dialog (admin only) */}
+   803→      {conversation.isGroup && (
+   804→        <RenameGroupDialog
+   805→          open={renameOpen}
+   806→          onOpenChange={setRenameOpen}
+   807→          conversationId={conversation.id}
+   808→          currentName={conversation.name}
+   809→          onRenamed={handleRenamed}
+   810→        />
+   811→      )}
+   812→    </div>
+   813→  )
+   814→}
+   815→
+   816→// ---------------------------------------------------------------------------
+   817→// AddMemberDialog — search users and add them to the group (admin only).
+   818→// Excludes existing members from the search results. Calls
+   819→// POST /api/conversations/:id/members with { userId } when a search result
+   820→// is clicked.
+   821→// ---------------------------------------------------------------------------
+   822→
+   823→type SearchUser = {
+   824→  id: string
+   825→  username: string
+   826→  name: string
+   827→  phone: string | null
+   828→  avatar: string | null
+   829→  avatarColor: string | null
+   830→  about: string
+   831→  online: boolean
+   832→  lastSeen: string
+   833→  verified: boolean
+   834→}
+   835→
+   836→function AddMemberDialog({
+   837→  open,
+   838→  onOpenChange,
+   839→  conversationId,
+   840→  currentMemberIds,
+   841→  onMemberAdded,
+   842→}: {
+   843→  open: boolean
+   844→  onOpenChange: (v: boolean) => void
+   845→  conversationId: string
+   846→  currentMemberIds: string[]
+   847→  onMemberAdded: (u: SearchUser) => void
+   848→}) {
+   849→  const [query, setQuery] = useState('')
+   850→  const [results, setResults] = useState<SearchUser[]>([])
+   851→  const [loading, setLoading] = useState(false)
+   852→  const [addingId, setAddingId] = useState<string | null>(null)
+   853→  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   854→  const memberSet = useRef<Set<string>>(new Set(currentMemberIds))
+   855→
+   856→  // Keep the current-member Set in sync whenever the prop changes (e.g. after
+   857→  // an optimistic add/remove in the parent).
+   858→  useEffect(() => {
+   859→    memberSet.current = new Set(currentMemberIds)
+   860→  }, [currentMemberIds])
+   861→
+   862→  // Reset search state whenever the dialog closes so it's clean on re-open.
+   863→  useEffect(() => {
+   864→    if (!open) {
+   865→      setQuery('')
+   866→      setResults([])
+   867→      setAddingId(null)
+   868→      if (debounceRef.current) {
+   869→        clearTimeout(debounceRef.current)
+   870→        debounceRef.current = null
+   871→      }
+   872→    }
+   873→  }, [open])
+   874→
+   875→  // Debounced search — fires 300ms after the user stops typing.
+   876→  useEffect(() => {
+   877→    if (!open) return
+   878→    const q = query.trim()
+   879→    if (!q) {
+   880→      setResults([])
+   881→      setLoading(false)
+   882→      return
+   883→    }
+   884→    setLoading(true)
+   885→    if (debounceRef.current) clearTimeout(debounceRef.current)
+   886→    debounceRef.current = setTimeout(async () => {
+   887→      try {
+   888→        const res = await fetch(
+   889→          `/api/users/search?q=${encodeURIComponent(q)}`,
+   890→          { cache: 'no-store' }
+   891→        )
+   892→        if (!res.ok) {
+   893→          setResults([])
+   894→          return
+   895→        }
+   896→        const data = await res.json()
+   897→        setResults((data.users as SearchUser[]) || [])
+   898→      } catch {
+   899→        setResults([])
+   900→      } finally {
+   901→        setLoading(false)
+   902→      }
+   903→    }, 300)
+   904→    return () => {
+   905→      if (debounceRef.current) {
+   906→        clearTimeout(debounceRef.current)
+   907→        debounceRef.current = null
+   908→      }
+   909→    }
+   910→  }, [query, open])
+   911→
+   912→  async function handleAdd(user: SearchUser) {
+   913→    setAddingId(user.id)
+   914→    try {
+   915→      const res = await fetch(
+   916→        `/api/conversations/${conversationId}/members`,
+   917→        {
+   918→          method: 'POST',
+   919→          headers: { 'Content-Type': 'application/json' },
+   920→          body: JSON.stringify({ userId: user.id }),
+   921→        }
+   922→      )
+   923→      if (!res.ok) {
+   924→        const data = await res.json().catch(() => null)
+   925→        toast.error(data?.error || 'Failed to add member')
+   926→        return
+   927→      }
+   928→      toast.success(`${user.name} added to the group`)
+   929→      onMemberAdded(user)
+   930→      // Remove from the visible search results so the user can't add twice.
+   931→      setResults((prev) => prev.filter((u) => u.id !== user.id))
+   932→      // Close after a successful add.
+   933→      onOpenChange(false)
+   934→    } catch {
+   935→      toast.error('Network error')
+   936→    } finally {
+   937→      setAddingId(null)
+   938→    }
+   939→  }
+   940→
+   941→  return (
+   942→    <Dialog open={open} onOpenChange={onOpenChange}>
+   943→      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
+   944→        <DialogHeader className="px-4 pt-4 pb-2">
+   945→          <DialogTitle>Add member</DialogTitle>
+   946→          <DialogDescription>
+   947→            Search for a Wasl user by name, username, or phone number. They
+   948→            will be added to this group as a regular member.
+   949→          </DialogDescription>
+   950→        </DialogHeader>
+   951→        <div className="px-4 pb-2">
+   952→          <div className="relative">
+   953→            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+   954→            <Input
+   955→              autoFocus
+   956→              value={query}
+   957→              onChange={(e) => setQuery(e.target.value)}
+   958→              placeholder="Search name, username, or phone…"
+   959→              className="pl-9"
+   960→            />
+   961→            {loading && (
+   962→              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+   963→            )}
+   964→          </div>
+   965→        </div>
+   966→        <div className="flex-1 overflow-y-auto wasl-scroll px-2 pb-2">
+   967→          {!loading && query.trim() === '' ? (
+   968→            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+   969→              Start typing to search for someone to add.
+   970→            </div>
+   971→          ) : !loading && results.length === 0 ? (
+   972→            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+   973→              No users found for &ldquo;{query}&rdquo;.
+   974→            </div>
+   975→          ) : (
+   976→            <div className="space-y-0.5">
+   977→              {results.map((u) => {
+   978→                const alreadyMember = memberSet.current.has(u.id)
+   979→                return (
+   980→                  <button
+   981→                    key={u.id}
+   982→                    type="button"
+   983→                    disabled={alreadyMember || addingId === u.id}
+   984→                    onClick={() => handleAdd(u)}
+   985→                    className={cn(
+   986→                      'w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors',
+   987→                      alreadyMember
+   988→                        ? 'opacity-50 cursor-not-allowed'
+   989→                        : 'hover:bg-muted/60 cursor-pointer'
+   990→                    )}
+   991→                  >
+   992→                    <WaslAvatar
+   993→                      name={u.name}
+   994→                      src={u.avatar}
+   995→                      color={u.avatarColor}
+   996→                      size={36}
+   997→                      online={u.online}
+   998→                      showStatus
+   999→                    />
+  1000→                    <div className="flex-1 min-w-0">
+  1001→                      <div className="text-sm font-medium truncate">{u.name}</div>
+  1002→                      <div className="text-xs text-muted-foreground truncate">
+  1003→                        @{u.username}
+  1004→                        {u.phone ? ` · ${u.phone}` : ''}
+  1005→                      </div>
+  1006→                    </div>
+  1007→                    {alreadyMember ? (
+  1008→                      <span className="text-[10px] text-muted-foreground shrink-0">
+  1009→                        Already in group
+  1010→                      </span>
+  1011→                    ) : addingId === u.id ? (
+  1012→                      <Loader2 className="w-4 h-4 animate-spin text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+  1013→                    ) : (
+  1014→                      <UserPlus className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+  1015→                    )}
+  1016→                  </button>
+  1017→                )
+  1018→              })}
+  1019→            </div>
+  1020→          )}
+  1021→        </div>
+  1022→      </DialogContent>
+  1023→    </Dialog>
+  1024→  )
+  1025→}
+  1026→
+  1027→// ---------------------------------------------------------------------------
+  1028→// RenameGroupDialog — inline form to rename the group (admin only).
+  1029→// Calls PATCH /api/conversations/:id with { name }.
+  1030→// ---------------------------------------------------------------------------
+  1031→
+  1032→function RenameGroupDialog({
+  1033→  open,
+  1034→  onOpenChange,
+  1035→  conversationId,
+  1036→  currentName,
+  1037→  onRenamed,
+  1038→}: {
+  1039→  open: boolean
+  1040→  onOpenChange: (v: boolean) => void
+  1041→  conversationId: string
+  1042→  currentName: string
+  1043→  onRenamed: (newName: string) => void
+  1044→}) {
+  1045→  const [name, setName] = useState(currentName)
+  1046→  const [saving, setSaving] = useState(false)
+  1047→
+  1048→  // Re-seed the input whenever the dialog opens.
+  1049→  useEffect(() => {
+  1050→    if (open) setName(currentName)
+  1051→  }, [open, currentName])
+  1052→
+  1053→  const trimmed = name.trim()
+  1054→  const valid = trimmed.length >= 1 && trimmed.length <= 100
+  1055→
+  1056→  async function handleSave() {
+  1057→    if (!valid) return
+  1058→    setSaving(true)
+  1059→    try {
+  1060→      const res = await fetch(`/api/conversations/${conversationId}`, {
+  1061→        method: 'PATCH',
+  1062→        headers: { 'Content-Type': 'application/json' },
+  1063→        body: JSON.stringify({ name: trimmed }),
+  1064→      })
+  1065→      if (!res.ok) {
+  1066→        const data = await res.json().catch(() => null)
+  1067→        toast.error(data?.error || 'Failed to rename group')
+  1068→        return
+  1069→      }
+  1070→      toast.success('Group name updated')
+  1071→      onRenamed(trimmed)
+  1072→      onOpenChange(false)
+  1073→    } catch {
+  1074→      toast.error('Network error')
+  1075→    } finally {
+  1076→      setSaving(false)
+  1077→    }
+  1078→  }
+  1079→
+  1080→  return (
+  1081→    <Dialog open={open} onOpenChange={onOpenChange}>
+  1082→      <DialogContent className="max-w-md">
+  1083→        <DialogHeader>
+  1084→          <DialogTitle>Edit group name</DialogTitle>
+  1085→          <DialogDescription>
+  1086→            Choose a new name for this group. Members will see a system
+  1087→            message noting the change.
+  1088→          </DialogDescription>
+  1089→        </DialogHeader>
+  1090→        <div className="space-y-2">
+  1091→          <Label htmlFor="wasl-group-name-input">Group name</Label>
+  1092→          <Input
+  1093→            id="wasl-group-name-input"
+  1094→            autoFocus
+  1095→            value={name}
+  1096→            onChange={(e) => setName(e.target.value)}
+  1097→            onKeyDown={(e) => {
+  1098→              if (e.key === 'Enter' && valid && !saving) handleSave()
+  1099→            }}
+  1100→            maxLength={100}
+  1101→            placeholder="Group name"
+  1102→          />
+  1103→          <p className="text-[11px] text-muted-foreground">
+  1104→            {trimmed.length}/100 characters
+  1105→          </p>
+  1106→        </div>
+  1107→        <DialogFooter>
+  1108→          <Button
+  1109→            variant="ghost"
+  1110→            onClick={() => onOpenChange(false)}
+  1111→            disabled={saving}
+  1112→          >
+  1113→            Cancel
+  1114→          </Button>
+  1115→          <Button onClick={handleSave} disabled={!valid || saving}>
+  1116→            {saving ? (
+  1117→              <>
+  1118→                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…
+  1119→              </>
+  1120→            ) : (
+  1121→              'Save'
+  1122→            )}
+  1123→          </Button>
+  1124→        </DialogFooter>
+  1125→      </DialogContent>
+  1126→    </Dialog>
+  1127→  )
+  1128→}
+  1129→

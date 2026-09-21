@@ -1,0 +1,736 @@
+     1→// This is your Prisma schema file,
+     2→// learn more about it in the docs: https://pris.ly/d/prisma-schema
+     3→
+     4→generator client {
+     5→  provider = "prisma-client-js"
+     6→}
+     7→
+     8→datasource db {
+     9→  provider = "sqlite"
+    10→  url      = env("DATABASE_URL")
+    11→}
+    12→
+    13→model User {
+    14→  id        String   @id @default(cuid())
+    15→  // Cirkle username — unique, chosen by the user with live availability check.
+    16→  username  String   @unique
+    17→  password  String
+    18→  name      String
+    19→  // Email (Cirkle email) — used as an alternate login identifier.
+    20→  email     String?  @unique
+    21→  // The "active" phone number — used as the display number for this account.
+    22→  // A user can have multiple phone numbers and switch between them.
+    23→  phone     String?
+    24→  about     String   @default("Hey there! I am using Wasl.")
+    25→  avatar    String?
+    26→  avatarColor String?
+    27→  online    Boolean  @default(false)
+    28→  // Person verification — a user must be verified before they can register a
+    29→  // business. Stores the path to the uploaded ID document.
+    30→  verified       Boolean  @default(false)
+    31→  idDocPath      String?
+    32→  verifiedAt     DateTime?
+    33→  lastSeen  DateTime @default(now())
+    34→  createdAt DateTime @default(now())
+    35→  updatedAt DateTime @updatedAt
+    36→
+    37→  // ---- Privacy / message protection ------------------------------------------
+    38→  // When true, all outgoing messages from this user are protected from
+    39→  // screenshot and forwarding by default (per-message `protected` can override).
+    40→  defaultProtectMessages Boolean @default(false)
+    41→  // When true, this user can always screenshot/forward any message they
+    42→  // receive, regardless of whether the sender protected it. The user has
+    43→  // chosen "privacy always allow" — opting out of receiving protection.
+    44→  privacyAlwaysAllow     Boolean @default(false)
+    45→  // Ghost Mode — when true, hides the user's online status, last seen,
+    46→  // and typing indicator from all other users.
+    47→  ghostMode             Boolean @default(false)
+    48→  // When true, hides the user's "last seen" timestamp from others.
+    49→  hideLastSeen           Boolean @default(false)
+    50→
+    51→  sentMessages      Message[]      @relation("MessageSender")
+    52→  conversations     Participant[]
+    53→  createdConversations Conversation[] @relation("ConversationCreator")
+    54→  createdCommits    Commit[]      @relation("CommitCreator")
+    55→  countersignedCommits Commit[]   @relation("CommitCounterparty")
+    56→  stories          Story[]
+    57→  folders          ChatFolder[]
+    58→  phoneNumbers     PhoneNumber[]
+    59→  screenshotAttempts ScreenshotAttempt[] @relation("ScreenshotReporter")
+    60→  // Messages this user has "deleted for me" (locally hidden, still visible to
+    61→  // other participants). See the `DeletedForMe` model.
+    62→  deletedForMe     DeletedForMe[]
+    63→  // Business
+    64→  ownedBusinesses   Business[]     @relation("BusinessOwner")
+    65→  businessMemberships BusinessMember[]
+    66→  ownedServiceProviders ServiceProvider[] @relation("ServiceProviderOwner")
+    67→}
+    68→
+    69→/// A phone number attached to a user account. A user can have multiple numbers
+    70→/// and switch the "active" one at any time. Only the active number is visible
+    71→/// to other users and used for outgoing messages.
+    72→model PhoneNumber {
+    73→  id        String   @id @default(cuid())
+    74→  userId    String
+    75→  number    String
+    76→  label     String?  // e.g. "Personal", "Work", "Business"
+    77→  active    Boolean  @default(false)
+    78→  createdAt DateTime @default(now())
+    79→
+    80→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    81→
+    82→  @@unique([userId, number])
+    83→  @@index([userId])
+    84→}
+    85→
+    86→model Conversation {
+    87→  id        String   @id @default(cuid())
+    88→  name      String?
+    89→  isGroup   Boolean  @default(false)
+    90→  avatar    String?
+    91→  avatarColor String?
+    92→  createdBy String?
+    93→  creator   User?   @relation("ConversationCreator", fields: [createdBy], references: [id])
+    94→  createdAt DateTime @default(now())
+    95→  updatedAt DateTime @updatedAt
+    96→
+    97→  participants Participant[]
+    98→  messages     Message[]
+    99→  commits      Commit[]
+   100→  polls        Poll[]
+   101→}
+   102→
+   103→model Participant {
+   104→  id             String   @id @default(cuid())
+   105→  conversationId String
+   106→  userId         String
+   107→  joinedAt       DateTime @default(now())
+   108→  lastReadAt     DateTime @default(now())
+   109→  // When true, desktop notifications and unread badge increments are
+   110→  // suppressed for this conversation (per-user mute setting).
+   111→  muted          Boolean  @default(false)
+   112→  // When true, the conversation is archived (hidden from the main list).
+   113→  // Can be unarchived by searching or visiting the Archived tab.
+   114→  archived        Boolean  @default(false)
+   115→  // Role within the group: 'admin' can add/remove members, change group name,
+   116→  // and pin messages. 'member' is the default. Group creators are auto-admin.
+   117→  role            String   @default("member")
+   118→
+   119→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   120→  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+   121→
+   122→  @@unique([conversationId, userId])
+   123→}
+   124→
+   125→model Message {
+   126→  id             String   @id @default(cuid())
+   127→  conversationId String
+   128→  senderId       String
+   129→  content        String
+   130→  type           String   @default("text") // text, image, system, commit, voice, poll
+   131→  status         String   @default("sent") // sent, delivered, read
+   132→  replyToId      String?
+   133→  commitId       String?  // link to a Commit when type === 'commit'
+   134→  // When sending "as a business", this overrides the sender display name + avatar
+   135→  // color in the chat. The senderId stays the real user; this just controls how
+   136→  // the message appears to others.
+   137→  senderLabel    String?
+   138→  senderLabelColor String?
+   139→  senderAvatarPath String?
+   140→  // Which phone number was active when this message was sent (optional, for
+   141→  // display purposes).
+   142→  fromPhone      String?
+   143→  // ---- Privacy / message protection ------------------------------------------
+   144→  // `null`  → use the sender's `defaultProtectMessages` setting.
+   145→  // `true`  → this message IS protected (recipient cannot screenshot or forward).
+   146→  // `false` → this message is NOT protected (anyone can screenshot or forward).
+   147→  protected      Boolean?
+   148→  // When true, the message has been edited at least once. The previous
+   149→  // versions are stored in the MessageEdit table.
+   150→  edited         Boolean  @default(false)
+   151→  // When true, the message is pinned to the top of the conversation by the
+   152→  // sender. Only one message per conversation can be pinned at a time.
+   153→  pinned         Boolean  @default(false)
+   154→  createdAt      DateTime @default(now())
+   155→
+   156→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   157→  sender       User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+   158→  reactions    Reaction[]
+   159→  starredBy    StarredMessage[]
+   160→  screenshotAttempts ScreenshotAttempt[]
+   161→  edits        MessageEdit[]
+   162→  // Per-user "deleted for me" records — hides a message from a specific user's
+   163→  // view without affecting other participants.
+   164→  deletedForMe DeletedForMe[]
+   165→
+   166→  @@index([conversationId, createdAt])
+   167→}
+   168→
+   169→/// Tracks which messages a user has "deleted for me" — hides the message
+   170→/// only for that user while leaving it visible to other participants.
+   171→model DeletedForMe {
+   172→  id        String   @id @default(cuid())
+   173→  messageId String
+   174→  userId    String
+   175→  deletedAt DateTime @default(now())
+   176→
+   177→  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+   178→  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+   179→
+   180→  @@unique([messageId, userId])
+   181→  @@index([userId])
+   182→}
+   183→
+   184→/// Message edit history — stores each previous version of a message's
+   185→/// content when the sender edits it. This enables the "edited" indicator
+   186→/// and the "view edit history" feature.
+   187→model MessageEdit {
+   188→  id        String   @id @default(cuid())
+   189→  messageId String
+   190→  content   String   // the previous content before the edit
+   191→  editedAt  DateTime @default(now()) // when this edit was made (i.e. when the new version replaced this one)
+   192→
+   193→  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+   194→
+   195→  @@index([messageId, editedAt])
+   196→}
+   197→
+   198→/// Cirkle-inspired Commit (AI-verified agreement) anchored to a conversation.
+   199→/// Simplified subset for Wasl: type, parties (creator + counterparty),
+   200→/// amount + currency, deadline, conditions, fairness score, hash, and a
+   201→/// two-party signature state machine (pending -> active -> completed|disputed).
+   202→model Commit {
+   203→  id              String   @id @default(cuid())
+   204→  conversationId  String
+   205→  creatorId       String
+   206→  counterpartyId  String
+   207→  type            String   @default("price") // price|work|service|rental|group_buy
+   208→  title           String
+   209→  description     String   @default("")
+   210→  amount          Float   @default(0)
+   211→  currency        String   @default("SAR")
+   212→  deadline        String?
+   213→  conditions      String   @default("[]") // JSON-encoded string[]
+   214→  status          String   @default("pending") // pending|active|completed|disputed
+   215→  fairnessScore   Int      @default(0) // 0-100
+   216→  fairnessNote    String   @default("")
+   217→  hash            String
+   218→  creatorSigned   Boolean  @default(true)
+   219→  counterpartySigned Boolean @default(false)
+   220→  creatorSignedAt  DateTime?
+   221→  counterpartySignedAt DateTime?
+   222→  completedAt     DateTime?
+   223→  createdAt       DateTime @default(now())
+   224→  updatedAt       DateTime @updatedAt
+   225→
+   226→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   227→  creator      User         @relation("CommitCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+   228→  counterparty User         @relation("CommitCounterparty", fields: [counterpartyId], references: [id], onDelete: Cascade)
+   229→
+   230→  @@index([conversationId, createdAt])
+   231→  @@index([counterpartyId])
+   232→}
+   233→
+   234→/// Emoji reaction on a message. One per user per message (toggling).
+   235→model Reaction {
+   236→  id        String   @id @default(cuid())
+   237→  messageId String
+   238→  userId    String
+   239→  emoji     String
+   240→  createdAt DateTime @default(now())
+   241→
+   242→  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+   243→
+   244→  @@unique([messageId, userId])
+   245→  @@index([messageId])
+   246→}
+   247→
+   248→/// Personally starred (pinned) message for a user.
+   249→model StarredMessage {
+   250→  id        String   @id @default(cuid())
+   251→  messageId String
+   252→  userId    String
+   253→  createdAt DateTime @default(now())
+   254→
+   255→  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+   256→
+   257→  @@unique([messageId, userId])
+   258→  @@index([userId])
+   259→}
+   260→
+   261→/// Forwarding consent request — when a user tries to forward someone else's
+   262→/// message, the original sender must approve. The request contains the
+   263→/// message ID, requester ID, target conversation ID, and approval state.
+   264→/// Status: pending → approved | denied
+   265→model ForwardRequest {
+   266→  id              String   @id @default(cuid())
+   267→  messageId       String
+   268→  requesterId     String   // who wants to forward
+   269→  targetConversationId String // where they want to forward to
+   270→  status          String   @default("pending") // pending | approved | denied
+   271→  createdAt       DateTime @default(now())
+   272→  respondedAt     DateTime?
+   273→
+   274→  @@index([requesterId])
+   275→  @@index([messageId])
+   276→}
+   277→
+   278→/// Chat poll — Cirkle-inspired chat-poll feature. A poll is posted as a
+   279→/// special message (type='poll'); members vote on options.
+   280→model Poll {
+   281→  id             String   @id @default(cuid())
+   282→  conversationId String
+   283→  question       String
+   284→  options        String   @default("[]") // JSON-encoded [{id,text}]
+   285→  multiChoice    Boolean  @default(false)
+   286→  anonymous      Boolean  @default(false)
+   287→  createdBy      String
+   288→  createdAt       DateTime @default(now())
+   289→  updatedAt       DateTime @updatedAt
+   290→
+   291→  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   292→  votes        PollVote[]
+   293→
+   294→  @@index([conversationId, createdAt])
+   295→}
+   296→
+   297→model PollVote {
+   298→  id        String   @id @default(cuid())
+   299→  pollId    String
+   300→  optionId  String
+   301→  userId    String
+   302→  createdAt DateTime @default(now())
+   303→
+   304→  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+   305→
+   306→  @@unique([pollId, userId, optionId])
+   307→  @@index([pollId])
+   308→}
+   309→
+   310→/// Status / Story — ephemeral 24h image/text status shown in a story bar
+   311→/// above the chat list. Cirkle-inspired story-status feature.
+   312→model Story {
+   313→  id        String   @id @default(cuid())
+   314→  userId    String
+   315→  type      String   @default("text") // text | image
+   316→  content   String   // text content OR image data URL
+   317→  bgColor   String?  // background color for text stories
+   318→  createdAt DateTime @default(now())
+   319→  expiresAt DateTime
+   320→
+   321→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   322→
+   323→  @@index([userId, createdAt])
+   324→}
+   325→
+   326→/// Story view — tracks which user has seen which story.
+   327→model StoryView {
+   328→  id        String   @id @default(cuid())
+   329→  storyId   String
+   330→  userId    String
+   331→  viewedAt  DateTime @default(now())
+   332→
+   333→  @@unique([storyId, userId])
+   334→  @@index([storyId])
+   335→}
+   336→
+   337→/// Chat folder — user-defined folders to organize conversations.
+   338→/// Cirkle-inspired chat-folders feature.
+   339→model ChatFolder {
+   340→  id        String   @id @default(cuid())
+   341→  userId    String
+   342→  name      String
+   343→  color     String?
+   344→  icon      String?
+   345→  createdAt DateTime @default(now())
+   346→
+   347→  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+   348→  conversations FolderConversation[]
+   349→
+   350→  @@unique([userId, name])
+   351→}
+   352→
+   353→/// Folder-conversation membership.
+   354→model FolderConversation {
+   355→  id             String   @id @default(cuid())
+   356→  folderId       String
+   357→  conversationId String
+   358→  addedAt        DateTime @default(now())
+   359→
+   360→  folder       ChatFolder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+   361→
+   362→  @@unique([folderId, conversationId])
+   363→  @@index([folderId])
+   364→}
+   365→
+   366→// ==========================================================================
+   367→// Business accounts — Cirkle-inspired business feature.
+   368→// A verified person can register a business. The business must be verified
+   369→// (upload company registration + tax number + ID of someone on the
+   370→// registration). Once verified, the owner can create public/private groups
+   371→// and invite members. A business can have a hidden phone number that only
+   372→// surfaces via the business search.
+   373→// ==========================================================================
+   374→
+   375→model Business {
+   376→  id              String   @id @default(cuid())
+   377→  name            String
+   378→  ownerId         String
+   379→  // Public search handle (unique). Users find the business by this name.
+   380→  description     String   @default("")
+   381→  avatarPath      String?
+   382→  avatarColor     String?
+   383→  category        String?  // e.g. "Technology", "Food", "Customer Service"
+   384→  // Verification
+   385→  registrationDocPath String?  // company registration document
+   386→  taxDocPath          String?  // tax number document
+   387→  idDocPath           String?  // ID of someone on the registration
+   388→  status          String   @default("pending") // pending | approved | rejected
+   389→  rejectionReason String?
+   390→  verifiedAt      DateTime?
+   391→  // A hidden phone number that only surfaces via business search.
+   392→  hiddenPhone     String?
+   393→  hidePhone       Boolean  @default(false)
+   394→  verified        Boolean  @default(false)
+   395→  // ---- Privacy / message protection (business accounts) ---------------------
+   396→  // Same semantics as User.defaultProtectMessages: when true, every message
+   397→  // sent "as this business" is protected from screenshot/forwarding unless the
+   398→  // individual message overrides it with `protected: false`.
+   399→  defaultProtectMessages Boolean @default(false)
+   400→  createdAt       DateTime @default(now())
+   401→  updatedAt       DateTime @updatedAt
+   402→
+   403→  owner   User              @relation("BusinessOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+   404→  members BusinessMember[]
+   405→  groups  BusinessGroup[]
+   406→
+   407→  @@index([ownerId])
+   408→}
+   409→
+   410→/// Membership in a business. The owner is an admin by default; the owner can
+   411→/// promote other members to admin. Only admins/owner can invite people.
+   412→model BusinessMember {
+   413→  id          String   @id @default(cuid())
+   414→  businessId  String
+   415→  userId      String
+   416→  role        String   @default("member") // member | admin
+   417→  invitedBy   String?
+   418→  joinedAt    DateTime @default(now())
+   419→
+   420→  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+   421→  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+   422→
+   423→  @@unique([businessId, userId])
+   424→  @@index([businessId])
+   425→}
+   426→
+   427→/// A group owned by a business. Can be public (anyone can find + join via
+   428→/// business search) or private (invite-only, doesn't appear in search).
+   429→/// Maps to a Conversation with `isGroup=true`; we link via conversationId.
+   430→model BusinessGroup {
+   431→  id             String   @id @default(cuid())
+   432→  businessId     String
+   433→  conversationId String
+   434→  name           String
+   435→  description    String   @default("")
+   436→  visibility     String   @default("private") // public | private
+   437→  category       String?  // e.g. "Customer Service", "Orders", "Employees"
+   438→  createdBy      String
+   439→  createdAt      DateTime @default(now())
+   440→  updatedAt      DateTime @updatedAt
+   441→
+   442→  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+   443→
+   444→  @@index([businessId])
+   445→  @@index([visibility])
+   446→}
+   447→
+   448→// ==========================================================================
+   449→// Official Service Providers — banks, government ministries, utilities.
+   450→// These are manually authenticated and approved by Wasl admin staff.
+   451→// Once approved, they can broadcast official announcements to all users
+   452→// within a specific country.
+   453→//
+   454→// Registration flow:
+   455→//   1. User applies → uploads official registration documents + passes
+   456→//      liveness test (selfie video) + ID document
+   457→//   2. Wasl admin manually reviews → approves or rejects
+   458→//   3. Once approved, the provider gets a verified badge + broadcast rights
+   459→//
+   460→// Broadcast flow:
+   461→//   1. Provider creates an announcement (text/image)
+   462→//   2. System delivers to ALL users whose phone country code matches
+   463→//   3. Users see official announcements in a dedicated "Official" tab
+   464→// ==========================================================================
+   465→
+   466→model ServiceProvider {
+   467→  id                String   @id @default(cuid())
+   468→  name              String   // e.g. "Ministry of Health", "National Bank of Egypt"
+   469→  ownerId           String   // the user who registered the provider
+   470→  type              String   @default("government") // government | bank | utility | telecom | healthcare
+   471→  description       String   @default("")
+   472→  avatarPath        String?
+   473→  avatarColor       String?
+   474→  // Official registration details
+   475→  officialName      String?  // legal entity name
+   476→  registrationNumber String? // government registration number
+   477→  taxNumber         String?
+   478→  // Country code for broadcast targeting (e.g. "+20" for Egypt)
+   479→  // All users whose phone starts with this code receive broadcasts
+   480→  countryCode       String   @default("+20")
+   481→  // Verification documents
+   482→  registrationDocPath String?  // official registration document
+   483→  idDocPath           String?  // ID of the authorized representative
+   484→  livenessVideoPath  String?  // selfie video for liveness check
+   485→  livenessVerified   Boolean  @default(false)
+   486→  // Approval state — manually reviewed by Wasl admin
+   487→  status            String   @default("pending") // pending | approved | rejected
+   488→  rejectionReason   String?
+   489→  verified          Boolean  @default(false)
+   490→  verifiedAt        DateTime?
+   491→  verifiedBy        String?  // admin user ID who approved
+   492→  // Broadcast settings
+   493→  canBroadcast      Boolean  @default(false)  // can send announcements
+   494→  // Contact info
+   495→  contactPhone      String?
+   496→  contactEmail      String?
+   497→  website           String?
+   498→  createdAt         DateTime @default(now())
+   499→  updatedAt         DateTime @updatedAt
+   500→
+   501→  owner     User                  @relation("ServiceProviderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+   502→  broadcasts ServiceProviderMessage[]
+   503→
+   504→  @@index([ownerId])
+   505→  @@index([countryCode])
+   506→  @@index([status])
+   507→  @@index([type])
+   508→}
+   509→
+   510→/// Official announcement from a verified service provider.
+   511→/// Delivered to all users within the provider's country code.
+   512→model ServiceProviderMessage {
+   513→  id              String   @id @default(cuid())
+   514→  providerId      String
+   515→  // The announcement content
+   516→  title           String
+   517→  content         String
+   518→  type            String   @default("announcement") // announcement | alert | notice | update
+   519→  // Optional image attachment (data URL or path)
+   520→  imagePath       String?
+   521→  // Targeting
+   522→  countryCode     String   // which country code this was sent to
+   523→  // Delivery status
+   524→  status          String   @default("sent") // sent | delivered
+   525→  // Priority — higher priority shows at top
+   526→  priority        Int      @default(0)
+   527→  // Allows the provider to mark as "dismissed by users" (future feature)
+   528→  createdAt       DateTime @default(now())
+   529→
+   530→  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+   531→
+   532→  @@index([providerId, createdAt])
+   533→  @@index([countryCode])
+   534→}
+   535→
+   536→/// Tracks which users have seen which official announcement.
+   537→/// Used for read receipts on broadcasts.
+   538→model ServiceProviderMessageRead {
+   539→  id        String   @id @default(cuid())
+   540→  messageId String
+   541→  userId    String
+   542→  readAt    DateTime @default(now())
+   543→
+   544→  @@unique([messageId, userId])
+   545→  @@index([userId])
+   546→}
+   547→
+   548→/// Tracks which users have dismissed (closed) an official announcement.
+   549→model ServiceProviderMessageDismissed {
+   550→  id        String   @id @default(cuid())
+   551→  messageId String
+   552→  userId    String
+   553→  dismissedAt DateTime @default(now())
+   554→
+   555→  @@unique([messageId, userId])
+   556→  @@index([userId])
+   557→}
+   558→
+   559→/// Scheduled message — send at a future time (Cirkle-inspired scheduled-messages)
+   560→model ScheduledMessage {
+   561→  id             String   @id @default(cuid())
+   562→  conversationId String
+   563→  senderId       String
+   564→  content        String
+   565→  type           String   @default("text")
+   566→  scheduledFor   DateTime
+   567→  sent          Boolean  @default(false)
+   568→  sentAt         DateTime?
+   569→  createdAt      DateTime @default(now())
+   570→
+   571→  @@index([scheduledFor])
+   572→  @@index([conversationId])
+   573→}
+   574→
+   575→/// Broadcast channel — one-to-many messaging (Cirkle-inspired broadcast-channel)
+   576→model BroadcastChannel {
+   577→  id          String   @id @default(cuid())
+   578→  name        String
+   579→  description String   @default("")
+   580→  ownerId     String
+   581→  avatarColor String?
+   582→  subscriberCount Int @default(0)
+   583→  createdAt   DateTime @default(now())
+   584→  updatedAt   DateTime @updatedAt
+   585→
+   586→  subscribers BroadcastSubscriber[]
+   587→  messages    BroadcastMessage[]
+   588→
+   589→  @@index([ownerId])
+   590→}
+   591→
+   592→model BroadcastSubscriber {
+   593→  id          String   @id @default(cuid())
+   594→  channelId   String
+   595→  userId      String
+   596→  subscribedAt DateTime @default(now())
+   597→
+   598→  channel BroadcastChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+   599→
+   600→  @@unique([channelId, userId])
+   601→}
+   602→
+   603→model BroadcastMessage {
+   604→  id          String   @id @default(cuid())
+   605→  channelId   String
+   606→  senderId    String
+   607→  content     String
+   608→  type        String   @default("text")
+   609→  createdAt   DateTime @default(now())
+   610→
+   611→  channel BroadcastChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+   612→
+   613→  @@index([channelId, createdAt])
+   614→}
+   615→
+   616→/// Time capsule message — unlock at a future date (Cirkle-inspired time-capsule)
+   617→model TimeCapsule {
+   618→  id             String   @id @default(cuid())
+   619→  conversationId String
+   620→  senderId       String
+   621→  content        String
+   622→  unlockAt       DateTime
+   623→  opened         Boolean  @default(false)
+   624→  createdAt      DateTime @default(now())
+   625→
+   626→  @@index([unlockAt])
+   627→  @@index([conversationId])
+   628→}
+   629→
+   630→/// App lock PIN — per-user PIN for app access (Cirkle-inspired app-lock)
+   631→model AppLock {
+   632→  id        String   @id @default(cuid())
+   633→  userId    String   @unique
+   634→  pinHash   String
+   635→  enabled   Boolean  @default(false)
+   636→  createdAt DateTime @default(now())
+   637→  updatedAt DateTime @updatedAt
+   638→}
+   639→
+   640→/// Threaded reply — a reply thread within a chat (Cirkle-inspired reply-thread)
+   641→model Thread {
+   642→  id             String   @id @default(cuid())
+   643→  conversationId String
+   644→  parentMessageId String
+   645→  createdAt      DateTime @default(now())
+   646→
+   647→  messages       ThreadMessage[]
+   648→
+   649→  @@index([conversationId])
+   650→  @@index([parentMessageId])
+   651→}
+   652→
+   653→model ThreadMessage {
+   654→  id        String   @id @default(cuid())
+   655→  threadId  String
+   656→  senderId  String
+   657→  content   String
+   658→  createdAt DateTime @default(now())
+   659→
+   660→  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+   661→
+   662→  @@index([threadId, createdAt])
+   663→}
+   664→
+   665→/// Whisper message — ephemeral self-destructing message (Cirkle-inspired whisper-mode)
+   666→model WhisperMessage {
+   667→  id             String   @id @default(cuid())
+   668→  conversationId String
+   669→  senderId       String
+   670→  content        String
+   671→  expiresAt      DateTime
+   672→  read           Boolean  @default(false)
+   673→  createdAt      DateTime @default(now())
+   674→
+   675→  @@index([conversationId, createdAt])
+   676→  @@index([expiresAt])
+   677→}
+   678→
+   679→/// Receipt split — expense splitting in chat (Cirkle-inspired receipt-split)
+   680→model ReceiptSplit {
+   681→  id             String   @id @default(cuid())
+   682→  conversationId String
+   683→  creatorId      String
+   684→  title          String
+   685→  totalAmount    Float
+   686→  currency       String   @default("SAR")
+   687→  splitCount     Int      @default(2)
+   688→  createdAt      DateTime @default(now())
+   689→
+   690→  participants   ReceiptSplitParticipant[]
+   691→
+   692→  @@index([conversationId])
+   693→}
+   694→
+   695→model ReceiptSplitParticipant {
+   696→  id        String   @id @default(cuid())
+   697→  splitId   String
+   698→  userId    String
+   699→  amount    Float
+   700→  paid      Boolean  @default(false)
+   701→  createdAt DateTime @default(now())
+   702→
+   703→  split ReceiptSplit @relation(fields: [splitId], references: [id], onDelete: Cascade)
+   704→
+   705→  @@unique([splitId, userId])
+   706→}
+   707→
+   708→/// Disappearing message settings per conversation (Cirkle-inspired privacy)
+   709→model DisappearingSetting {
+   710→  id             String   @id @default(cuid())
+   711→  conversationId String   @unique
+   712→  enabled        Boolean  @default(false)
+   713→  duration       Int      @default(86400) // seconds (86400 = 24h, 604800 = 7d, 7776000 = 90d)
+   714→  updatedAt      DateTime @updatedAt
+   715→}
+   716→
+   717→/// Screenshot / capture attempt log — when a user attempts to screenshot or
+   718→/// save a protected message, the server records the attempt so the sender
+   719→/// can be notified. This is the audit trail for the screen-capture-protection
+   720→/// feature. `kind` is one of: `printscreen`, `copy`, `save`, `contextmenu`,
+   721→/// `drag`, `forward`.
+   722→model ScreenshotAttempt {
+   723→  id        String   @id @default(cuid())
+   724→  messageId String
+   725→  reporterId String? // the user who reported the attempt (the recipient, often null for server-detected)
+   726→  kind      String   @default("printscreen") // printscreen | copy | save | contextmenu | drag | forward
+   727→  note      String?
+   728→  createdAt DateTime @default(now())
+   729→
+   730→  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+   731→  reporter User?  @relation("ScreenshotReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+   732→
+   733→  @@index([messageId, createdAt])
+   734→  @@index([reporterId])
+   735→}
+   736→

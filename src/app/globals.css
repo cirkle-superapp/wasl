@@ -362,18 +362,54 @@
     100px 100px,
     50px 50px;
 }
-.dark .wasl-chat-pattern {
+/* Chat wallpaper variants — user-selectable from contact info panel */
+.wasl-chat-wallpaper-solid { background-color: var(--wasl-chat-bg); }
+.wasl-chat-wallpaper-dots {
   background-color: var(--wasl-chat-bg);
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.025) 1px, transparent 2px),
-    radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.025) 1px, transparent 2px),
-    radial-gradient(circle at 50% 90%, rgba(255, 255, 255, 0.02) 1px, transparent 2px),
-    radial-gradient(circle at 10% 60%, rgba(255, 255, 255, 0.02) 1px, transparent 2px);
-  background-size:
-    60px 60px,
-    80px 80px,
-    100px 100px,
-    50px 50px;
+    radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 2px);
+  background-size: 24px 24px;
+}
+.wasl-chat-wallpaper-grid {
+  background-color: var(--wasl-chat-bg);
+  background-image:
+    linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+.wasl-chat-wallpaper-diagonal {
+  background-color: var(--wasl-chat-bg);
+  background-image:
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.02) 0, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 12px),
+    repeating-linear-gradient(-45deg, rgba(0,0,0,0.02) 0, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 12px);
+}
+.wasl-chat-wallpaper-waves {
+  background-color: var(--wasl-chat-bg);
+  background-image:
+    radial-gradient(ellipse at 0% 50%, rgba(0,0,0,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 50%, rgba(0,0,0,0.03) 0%, transparent 50%);
+  background-size: 80px 80px;
+}
+.dark .wasl-chat-pattern, .dark .wasl-chat-wallpaper-solid,
+.dark .wasl-chat-wallpaper-dots, .dark .wasl-chat-wallpaper-grid,
+.dark .wasl-chat-wallpaper-diagonal, .dark .wasl-chat-wallpaper-waves {
+  background-color: var(--wasl-chat-bg);
+}
+.dark .wasl-chat-wallpaper-dots { background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 2px); }
+.dark .wasl-chat-wallpaper-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+}
+.dark .wasl-chat-wallpaper-diagonal {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 12px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 12px);
+}
+.dark .wasl-chat-wallpaper-waves {
+  background-image:
+    radial-gradient(ellipse at 0% 50%, rgba(255,255,255,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 50%, rgba(255,255,255,0.03) 0%, transparent 50%);
 }
 
 /* Message bubble tail */
