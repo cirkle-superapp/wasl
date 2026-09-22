@@ -6490,3 +6490,224 @@ Contents:
 - Local `.env` still only has DATABASE_URL (the cron job keeps resetting it). Production credentials live on Vercel's encrypted env vars (verified working — Vercel signup wrote to Turso). Direct Turso CLI access from this server is not possible without credentials.
 - Inngest + Neon integrations are configured on Vercel but not actively used by app code yet (reserved for future background jobs / fallback DB).
 - The `/api/admin/sync-schema` endpoint is gated only by login (not admin role) — acceptable for the demo workflow, would need role gating in a multi-tenant production deployment.
+
+---
+Task ID: 66 — School Connect: Verified-school identity system
+Agent: main (Product Architect / Backend / Frontend)
+
+### Task
+Implement the full "My School" + "School Connect" identity system per the user's design brief — three-tier identity model (Institution ID + Student ID + Join/Connect Code), parent connections, QR codes, smart parsing, school admin dashboard, My School home screen.
+
+### Design (per the brief)
+- **3 distinct concepts** (NOT one number doing everything):
+  1. **Institution ID** — permanent internal school ID (e.g. NIS-2048)
+  2. **Student ID** — permanent identity assigned by the school (e.g. NIS-25-08421)
+  3. **Join/Connect Code** — temporary + revocable credential (e.g. 7K4P-92XM)
+
+- **Family-school graph**: parent connects to 1+ students; school has many students; each student has 0..1 user account + many parent connections
+
+- **Smart parsing** of user-entered numbers:
+  - `NIS-25-08421-7K4P-92XM` (full School Connect Number)
+  - `NIS-25-08421` (Student ID alone — student self-joining)
+  - `7K4P-92XM` (Join Code alone — parent path)
+  - `NIS-P-XXXX-YY` (Parent Code — reserved for future)
+
+### Phase 1: Schema (prisma/schema.prisma)
+Added 4 new models + User relations:
+
+```prisma
+model School {
+  id, name, code (unique), description, logoPath, logoColor,
+  address, city, country, phone, email, website,
+  ownerId, status (pending|verified|rejected), verifiedAt, verifiedBy,
+  type (international|public|private|religious|university),
+  studentCount, staffCount, createdAt, updatedAt
+  owner User, students SchoolStudent[], members SchoolMembership[]
+}
+
+model SchoolStudent {
+  id, schoolId, studentId (unique within school), userId (nullable),
+  fullName, grade, className, enrollmentYear,
+  joinCode (unique), joinCodeGeneratedAt, joinCodeExpiresAt, joinCodeRevoked,
+  status (active|graduated|transferred|inactive)
+  @@unique([schoolId, studentId])
+}
+
+model SchoolParentConnection {
+  id, schoolStudentId, parentId, relationship (parent|mother|father|guardian|grandparent|sibling|other),
+  status (pending|confirmed|revoked), invitedBy, confirmedAt, revokedAt, joinedViaCode
+  @@unique([schoolStudentId, parentId])
+}
+
+model SchoolMembership {
+  id, schoolId, userId, role (admin|teacher|staff|student|parent),
+  studentId, joinedAt, invitedBy, status
+  @@unique([schoolId, userId])
+}
+```
+
+Added 4 new relations to User model: `ownedSchools`, `studentRecords`, `schoolMemberships`, `parentConnections`.
+
+### Phase 2: Helpers (src/lib/school.ts)
+- `generateSchoolCode(prefix)` → e.g. "NIS-2048" (4-digit suffix from CODE_ALPHABET — no I/O/0/1 ambiguity)
+- `generateStudentId(schoolCode, year)` → e.g. "NIS-25-08421" (prefix + YY + 5-digit serial)
+- `generateJoinCode()` → e.g. "7K4P-92XM" (4-4 chars from CODE_ALPHABET)
+- `generateParentCode(schoolCode)` → e.g. "NIS-P-XXXX-YY"
+- `parseConnectNumber(input)` → returns `{schoolCode?, studentId?, joinCode?, parentCode?, raw}` — handles all 4 input formats
+- `formatSchoolConnectNumber(schoolCode, studentId, joinCode)` → "NIS • 25 • 08421 • 7K4P-92XM" for display
+
+### Phase 3: API Routes (8 new)
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/schools` | GET | List schools (supports `?mine=true`, `?q=search`) |
+| `/api/schools` | POST | Register a new school (auto-verified for demo) |
+| `/api/schools/[id]` | GET | School detail + calling user's role + children/studentRecord |
+| `/api/schools/[id]/students` | GET | Admin-only: list students with join codes |
+| `/api/schools/[id]/students` | POST | Admin-only: add a student (auto-generates Student ID + Join Code) |
+| `/api/schools/[id]/students/[studentId]/join-code` | POST | Admin: regenerate Join Code (revokes old one implicitly) |
+| `/api/schools/[id]/students/[studentId]/join-code` | DELETE | Admin: revoke Join Code explicitly |
+| `/api/school-connect/lookup` | POST | Preview a Connect Number → returns school + student info |
+| `/api/school-connect/join` | POST | Establish connection: `mode=self` (student) or `mode=parent` |
+| `/api/my-school` | GET | Calling user's full school picture (all roles + children) |
+
+All routes:
+- Auth-gated (require logged-in session)
+- Rate-limited (5 registrations / 30 lookups / 10 joins per IP per time window)
+- Idempotent where applicable (re-joining as parent of an already-connected student returns success)
+- Admin-gated routes verify `SchoolMembership.role === 'admin'` before allowing mutations
+
+### Phase 4: Frontend Components (4 new)
+
+**MySchoolDialog** (`src/components/wasl/my-school-dialog.tsx`)
+- Header with Wasl green GraduationCap icon + "My School" + "School Connect · Verified institution identity" subtitle
+- Empty state: large icon + "Connect a school" / "Register a school" CTA
+- Populated state: one SchoolCard per school showing:
+  - School logo color + name + verified badge
+  - School code + type + city
+  - RoleBadge (Admin/Teacher/Staff/Student/Parent/Connected)
+  - **Student view**: StudentIdCard component
+  - **Parent view**: list of children (student name + ID + relationship)
+  - **Admin view**: stats (students/staff) + "Manage students & join codes" button
+  - Quick actions row (Events / Classes / Family — placeholders for v2)
+- Inline SchoolRegisterDialog: name + description + city/country + type select
+
+**SchoolConnectDialog** (`src/components/wasl/school-connect-dialog.tsx`)
+- Input phase: School Connect Number text input + "Look up school" button
+- Confirmation phase: school preview card + student info + mode selector
+  - "The student" (mode=self) — disabled if student record already has a user
+  - "Parent / Guardian" (mode=parent) — always available
+- Relationship selector (parent/mother/father/guardian/grandparent/sibling/other) for parent mode
+- Join code status warnings (revoked / expired / not_yet_generated)
+- "Confirm connection" button triggers the join API
+
+**StudentIdCard** (`src/components/wasl/student-id-card.tsx`)
+- Branded header strip (school logo color) with school name + code + verified shield
+- Body: student avatar + full name + grade/class
+- Grid: Student ID (permanent) + Join Code (temporary)
+- Action buttons: "Show QR" (opens QR dialog with the full School Connect Number) + "Copy number"
+- Status indicators: revoked (amber) / expired (amber) / expiry date (muted)
+- QR dialog: large QR code (200x200) encoding the full Connect Number + student ID + join code + scan-to-connect subtitle
+
+**SchoolAdminDialog** (`src/components/wasl/school-admin-dialog.tsx`)
+- Header: school logo + name + "Admin Dashboard"
+- Search bar (filter by name, ID, grade, class)
+- "Add student" button → opens AddStudentDialog (fullName + grade + class + enrollmentYear)
+- Student list: avatar + name + verified badge + Student ID + grade/class + Join Code + expiry + connected parents
+- Per-student actions: Copy Connect Number, Show QR, Regenerate Join Code, Revoke Join Code
+- QR dialog: large QR for the student's Connect Number
+
+### Phase 5: Sidebar integration
+Added "My School" menu item to the sidebar dropdown menu (between "Starred messages" and "Settings"):
+- GraduationCap icon in Wasl green
+- Opens `MySchoolDialog`
+- Only shown when `onOpenMySchool` callback is provided (defensive — won't break existing Sidebar consumers)
+
+### Phase 6: Demo data (seed-demo)
+Added `buildSchoolConnect()` function to `/api/seed-demo`:
+- Creates Nile International School (NIS-2048, verified, Cairo/Egypt, IB curriculum description)
+- Demo user is the school admin (membership role=admin)
+- 3 students pre-registered:
+  - Ahmed Mohamed — NIS-25-08421, Grade 8 Class B, Join Code 7K4P-92XM
+  - Omar Mohamed — NIS-25-08422, Grade 9 Class A, Join Code B3F8-21K9
+  - Sara Adel — NIS-25-08423, Grade 7 Class C, Join Code M9X2-4P7R
+- Demo user auto-connected as Ahmed's parent (relationship='parent')
+- All join codes valid for 30 days, all students status='active'
+
+### Phase 7: Schema sync endpoint updated
+Updated `/api/admin/sync-schema` with 18 new SQL statements for the 4 new tables + their indexes:
+- School (3 indexes: code, status, ownerId)
+- SchoolStudent (5 indexes: joinCode unique, schoolId+studentId unique, joinCode, schoolId, userId)
+- SchoolParentConnection (3 indexes: schoolStudentId+parentId unique, parentId, schoolStudentId)
+- SchoolMembership (3 indexes: schoolId+userId unique, schoolId, userId)
+
+### Phase 8: End-to-end verification via agent-browser (local)
+1. Cleared cookies → loaded http://localhost:3000/
+2. Clicked "Try the rich demo" → login + seed ran
+3. Verified seed-demo returned `schools:1` in stats
+4. Verified `/api/my-school` returned Nile International School with role=admin + 1 child (Ahmed Mohamed)
+5. Opened sidebar menu → clicked "My School" → MySchoolDialog rendered with school card
+6. Clicked "Manage students & join codes" → admin dashboard showed all 3 students with join codes
+7. Closed admin dialog → clicked "Connect a school" → SchoolConnectDialog opened
+8. Filled input with Sara's join code "M9X2-4P7R" via `agent-browser fill` (proper React state update)
+9. Clicked "Look up school" → lookup succeeded, showed Sara Adel + Nile International preview + role selector
+10. Clicked "Confirm connection" → ✓ connected as parent at Nile International (toast)
+11. Re-fetched `/api/my-school` → confirmed connection stored in DB
+
+### Phase 9: Push to GitHub + Vercel + Turso
+- Committed all changes as `c1a4d0d` (1 commit, 17 files: 5 modified, 12 new)
+- Tagged release `v6.0-school-connect-20260922-090634`
+- Pushed to GitHub main + pushed tag (pre-commit + pre-push hooks passed, 50 protected files verified)
+- Vercel auto-deployed from main in ~60s
+- Triggered `/api/admin/sync-schema` on Vercel → 106 CREATE statements (was 88 + 18 new for school tables) all succeeded, 0 failures, 126 ALTER applied
+- Triggered `/api/seed-demo { reset: true }` on Vercel → 200 with schools:1 in stats
+- Verified `/api/my-school` on Vercel → returned Nile International School with role=admin + 1 child
+- Verified `/api/school-connect/lookup` on Vercel with Sara's join code → returned school + student info
+
+### Phase 10: Code quality
+- Lint: 0 errors ✓
+- TypeScript: 0 errors ✓
+- No protected files deleted (hooks verified)
+- All existing API routes still respond 200
+- Backward compatible: all previous Task 63 (calls) + Task 64 (rich demo) + Task 65 (hydration fix) features still work
+
+### Honest Assessment
+
+**What's working:**
+- Full 3-tier identity model (Institution ID + Student ID + Join/Connect Code)
+- Self-join flow (student connects their own Wasl account)
+- Parent/guardian flow (with relationship type selection)
+- QR code invitations (Student ID card with scannable Connect Number)
+- Smart parsing of all 3 input formats (full / student ID alone / join code alone)
+- School admin dashboard (manage students, regenerate/revoke join codes, see connected parents)
+- Idempotent operations (re-seeding, re-joining, re-syncing all safe)
+- Rate-limited endpoints (anti-enumeration + anti-spam)
+- "My School" home screen with role-aware rendering (admin sees stats, parent sees children, student sees ID card)
+- Demo data auto-seeded on Vercel production
+
+**What's NOT included (intentional — for v2 expansion):**
+- Teacher / staff roles (schema supports them, no admin UI to assign)
+- Classes / events / buses (placeholders in MySchoolDialog but not functional)
+- School announcements / group chats (would need to spawn a Conversation per school + wire broadcasts)
+- Multi-school per student (a student record is tied to exactly one school)
+- Parent Code (NIS-P-XXXX-YY format — parser supports it but no UI generates it yet)
+- Admin verification flow (for demo we auto-verify; production needs Wasl admin review)
+- Email/Push notifications when a parent connects to a student
+- Audit log of join code usage (we store `joinedViaCode` on each parent connection but no UI to view it)
+
+**Risk assessment: LOW**
+- All changes are additive (no existing code paths broken)
+- 0 lint errors, 0 TS errors
+- Pre-commit + pre-push hooks verified all 50 protected files present
+- Schema sync endpoint handles Turso schema drift gracefully (idempotent CREATE IF NOT EXISTS + ALTER)
+- Demo data wipe is careful — only deletes demo-owned schools + the calling user's memberships/parent connections, never touches other users' data
+- The school admin check (`SchoolMembership.role === 'admin'`) prevents non-admins from mutating school data
+- Rate limits prevent enumeration of join codes (30 lookups / 10 joins per IP per minute)
+- Join codes are 8 chars from a 32-char alphabet = ~10^12 combinations, plus rate limiting → brute-force infeasible
+
+**Naming convention:**
+The user suggested "My School" + "School Connect" branding. We adopted exactly that:
+- "My School" = the user's school experience (the home dialog)
+- "School Connect" = the mechanism (the connect dialog + lookup/join API)
+
+This leaves room to grow into teachers, staff, classes, buses, school announcements, school-verified communities, etc. without redesigning the identity system.
