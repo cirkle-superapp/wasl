@@ -23,6 +23,7 @@ import {
   Pin,
   PinOff,
   MailOpen,
+  GraduationCap,
 } from 'lucide-react'
 import { useWaslStore, type Conversation } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -54,9 +55,11 @@ import { toast } from 'sonner'
 export function Sidebar({
   onNewChat,
   onOpenSettings,
+  onOpenMySchool,
 }: {
   onNewChat: () => void
   onOpenSettings: () => void
+  onOpenMySchool?: () => void
 }) {
   const {
     user,
@@ -285,6 +288,12 @@ export function Sidebar({
                 <Star className="w-4 h-4 mr-2 fill-amber-400 text-amber-400" />
                 Starred messages
               </DropdownMenuItem>
+              {onOpenMySchool && (
+                <DropdownMenuItem onClick={onOpenMySchool}>
+                  <GraduationCap className="w-4 h-4 mr-2 text-[var(--wasl-green)]" />
+                  My School
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={onOpenSettings}>
                 <Settings className="w-4 h-4 mr-2" /> Settings
               </DropdownMenuItem>

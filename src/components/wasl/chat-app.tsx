@@ -14,6 +14,7 @@ import { SettingsDialog } from './settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 import { QuickReplyToast } from './quick-reply-toast'
 import { CallOverlay } from './call-overlay'
+import { MySchoolDialog } from './my-school-dialog'
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ export function ChatApp({ user }: { user: any }) {
   } = useWaslStore()
   const [newChatOpen, setNewChatOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mySchoolOpen, setMySchoolOpen] = useState(false)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const beforeUnloadHandler = useRef<(() => void) | null>(null)
 
@@ -485,6 +487,7 @@ export function ChatApp({ user }: { user: any }) {
         <Sidebar
           onNewChat={() => setNewChatOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenMySchool={() => setMySchoolOpen(true)}
         />
       </aside>
 
@@ -514,6 +517,7 @@ export function ChatApp({ user }: { user: any }) {
       <NewChatDialog open={newChatOpen} onOpenChange={setNewChatOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <KeyboardShortcutsDialog />
+      <MySchoolDialog open={mySchoolOpen} onOpenChange={setMySchoolOpen} />
 
       {/* Voice / video call overlay (Cirkle-inspired WebRTC). Mounted once
           globally so incoming-call events arriving on the socket can flip the

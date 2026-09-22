@@ -620,6 +620,100 @@ const SCHEMA_STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS "ScreenshotAttempt_messageId_createdAt_idx" ON "ScreenshotAttempt"("messageId", "createdAt")`,
   `CREATE INDEX IF NOT EXISTS "ScreenshotAttempt_reporterId_idx" ON "ScreenshotAttempt"("reporterId")`,
+
+  // ── School (Task 66 — School Connect) ─────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS "School" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "name" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "description" TEXT NOT NULL DEFAULT '',
+    "logoPath" TEXT,
+    "logoColor" TEXT,
+    "address" TEXT,
+    "city" TEXT,
+    "country" TEXT,
+    "phone" TEXT,
+    "email" TEXT,
+    "website" TEXT,
+    "ownerId" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "rejectionReason" TEXT,
+    "verifiedAt" DATETIME,
+    "verifiedBy" TEXT,
+    "type" TEXT NOT NULL DEFAULT 'international',
+    "studentCount" INTEGER NOT NULL DEFAULT 0,
+    "staffCount" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "School_code_key" ON "School"("code")`,
+  `CREATE INDEX IF NOT EXISTS "School_status_idx" ON "School"("status")`,
+  `CREATE INDEX IF NOT EXISTS "School_ownerId_idx" ON "School"("ownerId")`,
+
+  // ── SchoolStudent ──────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS "SchoolStudent" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "schoolId" TEXT NOT NULL,
+    "studentId" TEXT NOT NULL,
+    "userId" TEXT,
+    "fullName" TEXT NOT NULL,
+    "grade" TEXT,
+    "className" TEXT,
+    "enrollmentYear" INTEGER,
+    "joinCode" TEXT NOT NULL,
+    "joinCodeGeneratedAt" DATETIME,
+    "joinCodeExpiresAt" DATETIME,
+    "joinCodeRevoked" BOOLEAN NOT NULL DEFAULT false,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("schoolId") REFERENCES "School"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "SchoolStudent_joinCode_key" ON "SchoolStudent"("joinCode")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "SchoolStudent_schoolId_studentId_key" ON "SchoolStudent"("schoolId", "studentId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolStudent_joinCode_idx" ON "SchoolStudent"("joinCode")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolStudent_schoolId_idx" ON "SchoolStudent"("schoolId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolStudent_userId_idx" ON "SchoolStudent"("userId")`,
+
+  // ── SchoolParentConnection ─────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS "SchoolParentConnection" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "schoolStudentId" TEXT NOT NULL,
+    "parentId" TEXT NOT NULL,
+    "relationship" TEXT NOT NULL DEFAULT 'parent',
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "invitedBy" TEXT,
+    "confirmedAt" DATETIME,
+    "revokedAt" DATETIME,
+    "joinedViaCode" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("schoolStudentId") REFERENCES "SchoolStudent"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("parentId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "SchoolParentConnection_schoolStudentId_parentId_key" ON "SchoolParentConnection"("schoolStudentId", "parentId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolParentConnection_parentId_idx" ON "SchoolParentConnection"("parentId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolParentConnection_schoolStudentId_idx" ON "SchoolParentConnection"("schoolStudentId")`,
+
+  // ── SchoolMembership ───────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS "SchoolMembership" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "schoolId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'member',
+    "studentId" TEXT,
+    "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "invitedBy" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("schoolId") REFERENCES "School"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "SchoolMembership_schoolId_userId_key" ON "SchoolMembership"("schoolId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolMembership_schoolId_idx" ON "SchoolMembership"("schoolId")`,
+  `CREATE INDEX IF NOT EXISTS "SchoolMembership_userId_idx" ON "SchoolMembership"("userId")`,
 ]
 
 // Columns that may need ALTER TABLE ADD COLUMN on older Turso databases.
