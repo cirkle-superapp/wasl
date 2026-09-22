@@ -127,7 +127,7 @@ const SCHEMA_STATEMENTS: string[] = [
     "protected" BOOLEAN,
     "edited" BOOLEAN NOT NULL DEFAULT false,
     "pinned" BOOLEAN NOT NULL DEFAULT false,
-    "transcript" TEXT,
+    "transcription" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE,
     FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE CASCADE
@@ -634,6 +634,7 @@ const ALTER_COLUMNS: Array<[string, string, string]> = [
   ['Message', 'edited', 'BOOLEAN NOT NULL DEFAULT false'],
   ['Message', 'pinned', 'BOOLEAN NOT NULL DEFAULT false'],
   ['Message', 'transcript', 'TEXT'],
+  ['Message', 'transcription', 'TEXT'],
   ['Message', 'commitId', 'TEXT'],
   ['Message', 'senderLabel', 'TEXT'],
   ['Message', 'senderLabelColor', 'TEXT'],
