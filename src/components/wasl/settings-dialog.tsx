@@ -22,7 +22,7 @@ import {
 import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
-  UserCircle, Shield, Users, Landmark, Ghost, Clock, Camera,
+  UserCircle, Shield, Users, Landmark, Ghost, Clock, Camera, Ban,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -32,6 +32,7 @@ import { BusinessRegisterDialog } from './business-register-dialog'
 import { BusinessDashboardDialog } from './business-dashboard-dialog'
 import { BusinessSearchDialog } from './business-search-dialog'
 import { ServiceProviderDialog } from './service-provider-dialog'
+import { BlockListDialog } from './block-list-dialog'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -54,6 +55,7 @@ export function SettingsDialog({
   const [bizRegisterOpen, setBizRegisterOpen] = useState(false)
   const [bizSearchOpen, setBizSearchOpen] = useState(false)
   const [spOpen, setSpOpen] = useState(false)
+  const [blockListOpen, setBlockListOpen] = useState(false)
   const [myBusinesses, setMyBusinesses] = useState<any[]>([])
   const [activeBizId, setActiveBizId] = useState<string | null>(null)
   const [bizDashOpen, setBizDashOpen] = useState(false)
@@ -594,6 +596,26 @@ export function SettingsDialog({
                 </div>
               </div>
             </div>
+
+            {/* Blocked users (Task 67) */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Ban className="w-4 h-4" /> Blocked users
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full justify-start"
+                onClick={() => setBlockListOpen(true)}
+              >
+                <Ban className="w-4 h-4 mr-2" />
+                Manage blocked users
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Blocked users can&apos;t send you messages or see your online status.
+              </p>
+            </div>
           </TabsContent>
 
           {/* ---- Business Tab ---- */}
@@ -750,6 +772,9 @@ export function SettingsDialog({
 
       {/* Service Provider registration dialog */}
       <ServiceProviderDialog open={spOpen} onOpenChange={setSpOpen} />
+
+      {/* Blocked users management dialog (Task 67) */}
+      <BlockListDialog open={blockListOpen} onOpenChange={setBlockListOpen} />
     </Dialog>
   )
 }

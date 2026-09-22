@@ -216,12 +216,70 @@ export async function POST(
   //   - otherwise use the sender's `defaultProtectMessages` setting
   const sender = await db.user.findUnique({
     where: { id: session.id },
-    select: { defaultProtectMessages: true },
+    select: { defaultProtectMessages: true, username: true, name: true, phone: true },
   })
   const effectiveProtected =
     typeof protectedOverride === 'boolean'
       ? protectedOverride
       : sender?.defaultProtectMessages ?? false
+
+  // ---- Block check (Task 67) ---------------------------------------------
+  // For 1-on-1 conversations, if EITHER party has blocked the other, the
+  // message is silently dropped. We return 200 OK to the sender (so they
+  // don't know they've been blocked) but the message is never persisted.
+  // For group conversations, we skip the block check (group context can
+  // override individual blocks) — but we DO exclude blocked recipients from
+  // the delivered/read count.
+  const conversation = await db.conversation.findUnique({
+    where: { id },
+    select: { isGroup: true, participants: { select: { userId: true } } },
+  })
+  if (!conversation) {
+    return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+  }
+  if (!conversation.isGroup) {
+    const otherParticipant = conversation.participants.find(
+      (p) => p.userId !== session.id
+    )
+    if (otherParticipant) {
+      const [iBlockedThem, theyBlockedMe] = await Promise.all([
+        db.block.findUnique({
+          where: { blockerId_blockedId: { blockerId: session.id, blockedId: otherParticipant.userId } },
+        }),
+        db.block.findUnique({
+          where: { blockerId_blockedId: { blockerId: otherParticipant.userId, blockedId: session.id } },
+        }),
+      ])
+      if (iBlockedThem) {
+        return NextResponse.json({ error: 'You blocked this user. Unblock to send.' }, { status: 403 })
+      }
+      if (theyBlockedMe) {
+        // Don't tell the sender they're blocked — silently pretend the message
+        // was delivered (so they don't try to circumvent the block by signing up
+        // a new account etc.). The message is NOT persisted.
+        return NextResponse.json({
+          id: 'blocked-' + Date.now(),
+          conversationId: id,
+          senderId: session.id,
+          content: String(content),
+          type: String(type),
+          status: 'sent',
+          createdAt: new Date().toISOString(),
+          __silentlyDropped: true,
+        })
+      }
+    }
+  }
+
+  // ---- Portal stamping (Task 67) -----------------------------------------
+  // Find the sender's currently-active phone number so we can stamp the
+  // `fromPhone`, `portalName`, and `hideNumber` on the message. This lets
+  // the recipient UI show "@username · Real Name (Portal)" beside the
+  // message bubble.
+  const activePhone = await db.phoneNumber.findFirst({
+    where: { userId: session.id, active: true },
+    select: { number: true, portalName: true, hideNumber: true },
+  })
 
   const message = await db.message.create({
     data: {
@@ -235,6 +293,7 @@ export async function POST(
       senderLabel,
       senderLabelColor,
       senderAvatarPath,
+      fromPhone: activePhone?.number || null,
     },
   })
   // Bump conversation updatedAt for sorting

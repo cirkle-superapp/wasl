@@ -714,6 +714,20 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "SchoolMembership_schoolId_userId_key" ON "SchoolMembership"("schoolId", "userId")`,
   `CREATE INDEX IF NOT EXISTS "SchoolMembership_schoolId_idx" ON "SchoolMembership"("schoolId")`,
   `CREATE INDEX IF NOT EXISTS "SchoolMembership_userId_idx" ON "SchoolMembership"("userId")`,
+
+  // ── Block (Task 67 — user-to-user blocking) ──────────────────────────
+  `CREATE TABLE IF NOT EXISTS "Block" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "blockerId" TEXT NOT NULL,
+    "blockedId" TEXT NOT NULL,
+    "reason" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("blockerId") REFERENCES "User"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("blockedId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Block_blockerId_blockedId_key" ON "Block"("blockerId", "blockedId")`,
+  `CREATE INDEX IF NOT EXISTS "Block_blockerId_idx" ON "Block"("blockerId")`,
+  `CREATE INDEX IF NOT EXISTS "Block_blockedId_idx" ON "Block"("blockedId")`,
 ]
 
 // Columns that may need ALTER TABLE ADD COLUMN on older Turso databases.
@@ -881,6 +895,44 @@ const ALTER_COLUMNS: Array<[string, string, string]> = [
   // Draft
   ['Draft', 'replyToId', 'TEXT'],
   ['Draft', 'content', 'TEXT'],
+
+  // PhoneNumber — portal + hide flags (Task 67)
+  ['PhoneNumber', 'portalName', 'TEXT'],
+  ['PhoneNumber', 'hideNumber', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['PhoneNumber', 'updatedAt', 'DATETIME'],
+  ['PhoneNumber', 'label', 'TEXT'],
+  ['PhoneNumber', 'active', 'BOOLEAN NOT NULL DEFAULT false'],
+
+  // School — hidePhone (Task 67 — mirrors Business model)
+  ['School', 'hidePhone', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['School', 'logoColor', 'TEXT'],
+  ['School', 'logoPath', 'TEXT'],
+  ['School', 'description', "TEXT NOT NULL DEFAULT ''"],
+  ['School', 'address', 'TEXT'],
+  ['School', 'city', 'TEXT'],
+  ['School', 'country', 'TEXT'],
+  ['School', 'phone', 'TEXT'],
+  ['School', 'email', 'TEXT'],
+  ['School', 'website', 'TEXT'],
+  ['School', 'type', "TEXT NOT NULL DEFAULT 'international'"],
+  ['School', 'status', "TEXT NOT NULL DEFAULT 'pending'"],
+  ['School', 'rejectionReason', 'TEXT'],
+  ['School', 'verifiedAt', 'DATETIME'],
+  ['School', 'verifiedBy', 'TEXT'],
+  ['School', 'studentCount', 'INTEGER NOT NULL DEFAULT 0'],
+  ['School', 'staffCount', 'INTEGER NOT NULL DEFAULT 0'],
+
+  // SchoolStudent
+  ['SchoolStudent', 'fullName', 'TEXT'],
+  ['SchoolStudent', 'grade', 'TEXT'],
+  ['SchoolStudent', 'className', 'TEXT'],
+  ['SchoolStudent', 'enrollmentYear', 'INTEGER'],
+  ['SchoolStudent', 'joinCode', 'TEXT'],
+  ['SchoolStudent', 'joinCodeGeneratedAt', 'DATETIME'],
+  ['SchoolStudent', 'joinCodeExpiresAt', 'DATETIME'],
+  ['SchoolStudent', 'joinCodeRevoked', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['SchoolStudent', 'status', "TEXT NOT NULL DEFAULT 'active'"],
+  ['SchoolStudent', 'userId', 'TEXT'],
 ]
 
 export async function POST() {

@@ -82,6 +82,15 @@ model User {
   schoolMemberships   SchoolMembership[]     @relation("SchoolMember")
   // Connections this user has as a PARENT to one or more students.
   parentConnections   SchoolParentConnection[] @relation("SchoolParent")
+
+  // ---- Block / mute other users ---------------------------------------------
+  // Users this user has blocked. Blocked users can't send messages to this
+  // user, can't see their online/last-seen/stories, and can't add them to
+  // new group conversations.
+  blocking            Block[]               @relation("Blocker")
+  // Users who have blocked THIS user (reverse direction for fast lookups
+  // when deciding whether to show "You are blocked" indicators).
+  blockedBy           Block[]               @relation("Blocked")
 }
 
 /// Contact (address book entry) — a saved contact. `ownerId` is the user who
@@ -116,8 +125,19 @@ model PhoneNumber {
   userId    String
   number    String
   label     String?  // e.g. "Personal", "Work", "Business"
+  // Portal display name shown beside the user's username when this number is
+  // the active portal. E.g. portalName="Work" → messages show
+  // "@username · Real Name (Work)". Null = no portal label, just the
+  // authenticated name.
+  portalName String?
+  // When true, this number is hidden from other users — they see the
+  // username + portal name but not the actual phone digits. The user can
+  // still receive calls/messages on this number; only the visibility is
+  // affected.
+  hideNumber Boolean @default(false)
   active    Boolean  @default(false)
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -877,6 +897,10 @@ model School {
   city            String?
   country         String?
   phone           String?
+  // When true, the school's phone number is hidden from public search — only
+  // connected members (students/parents/staff) see it. Mirrors the Business
+  // model's hidePhone field.
+  hidePhone       Boolean  @default(false)
   email           String?
   website         String?
   // Verification status
@@ -989,4 +1013,37 @@ model SchoolMembership {
   @@unique([schoolId, userId])
   @@index([schoolId])
   @@index([userId])
+}
+
+// ==========================================================================
+// Block — user-to-user blocking
+//
+// A blocks B → B can't send messages to A, can't see A's online/last-seen,
+// can't add A to new groups. A can unblock at any time.
+//
+// Symmetric privacy: when A blocks B, B's messages to A are silently dropped
+// (B sees their own message as "sent" but it never reaches A — we don't reveal
+// to B that they've been blocked, to prevent retaliation).
+//
+// Blocking does NOT delete the existing conversation history — it just stops
+// new messages from flowing.
+// ==========================================================================
+
+model Block {
+  id          String   @id @default(cuid())
+  // The user who initiated the block (the blocker)
+  blockerId   String
+  // The user who is blocked
+  blockedId   String
+  // Optional reason for the block (for the blocker's own record; never shown
+  // to the blocked user)
+  reason       String?
+  createdAt   DateTime @default(now())
+
+  blocker     User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked     User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }

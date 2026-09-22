@@ -6,6 +6,12 @@ export type UserPhoneNumber = {
   id: string
   number: string
   label: string | null
+  // Portal display name shown beside the username when this number is active.
+  // E.g. portalName="Work" → recipients see "@username · Real Name (Work)".
+  portalName: string | null
+  // When true, this number is hidden from other users — they see the username
+  // + portal name but not the actual phone digits.
+  hideNumber: boolean
   active: boolean
 }
 

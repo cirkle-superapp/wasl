@@ -4,8 +4,15 @@ import { getSession } from '@/lib/auth'
 
 export const runtime = 'nodejs'
 
-// PATCH /api/phone-numbers/[id] — set a phone number as active (switch).
-// Deactivates all others + updates the User.phone field.
+// PATCH /api/phone-numbers/[id] — update phone number settings OR switch active.
+//
+// Body (any subset):
+//   { active?: true, portalName?: string|null, hideNumber?: boolean, label?: string|null }
+//
+// - When `active: true`, deactivates all others + updates User.phone (portal switch)
+// - When `portalName` is provided, updates the portal display name (use null to clear)
+// - When `hideNumber` is provided, updates the hide flag
+// - When `label` is provided, updates the friendly label
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,28 +26,65 @@ export async function PATCH(
   if (!phone || phone.userId !== session.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
-  // Deactivate all others
-  await db.phoneNumber.updateMany({
-    where: { userId: session.id, active: true },
-    data: { active: false },
-  })
-  // Activate this one
-  await db.phoneNumber.update({
+
+  const body = await req.json().catch(() => ({}))
+  const patch: any = {}
+
+  if (body?.active === true) {
+    // Switch active portal — deactivate all others + update User.phone
+    await db.phoneNumber.updateMany({
+      where: { userId: session.id, active: true },
+      data: { active: false },
+    })
+    patch.active = true
+    // Update the denormalized User.phone field
+    await db.user.update({
+      where: { id: session.id },
+      data: { phone: phone.number },
+    })
+  }
+
+  if ('portalName' in body) {
+    const v = body.portalName
+    if (v === null) {
+      patch.portalName = null
+    } else if (typeof v === 'string') {
+      patch.portalName = v.trim().slice(0, 40) || null
+    }
+  }
+
+  if (typeof body?.hideNumber === 'boolean') {
+    patch.hideNumber = body.hideNumber
+  }
+
+  if ('label' in body) {
+    const v = body.label
+    if (v === null) {
+      patch.label = null
+    } else if (typeof v === 'string') {
+      patch.label = v.trim().slice(0, 30) || null
+    }
+  }
+
+  const updated = await db.phoneNumber.update({
     where: { id },
-    data: { active: true },
+    data: patch,
   })
-  // Update the User.phone field
-  await db.user.update({
-    where: { id: session.id },
-    data: { phone: phone.number },
+
+  return NextResponse.json({
+    id: updated.id,
+    number: updated.number,
+    label: updated.label,
+    portalName: updated.portalName,
+    hideNumber: updated.hideNumber,
+    active: updated.active,
   })
-  return NextResponse.json({ ok: true, activeNumber: phone.number })
 }
 
-// DELETE /api/phone-numbers/[id] — remove a phone number.
+// DELETE /api/phone-numbers/[id] — remove a phone number / portal.
 // If it was active, pick another one to be active (or null if none left).
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession()
@@ -54,7 +98,6 @@ export async function DELETE(
   }
   await db.phoneNumber.delete({ where: { id } })
 
-  // If this was the active number, pick the first remaining (or null)
   if (phone.active) {
     const next = await db.phoneNumber.findFirst({
       where: { userId: session.id },

@@ -12,6 +12,7 @@ import {
   Star,
   Shield,
   ShieldCheck,
+  Ban,
   Lock,
   Camera,
   Copy,
@@ -120,6 +121,14 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [muted, setMuted] = useState(false)
   const [encryptionOpen, setEncryptionOpen] = useState(false)
   const [reactionsOpen, setReactionsOpen] = useState(false)
+  // Block-user state (Task 67). For 1-on-1 conversations only — we fetch
+  // the block status once on conversation change and refresh after a
+  // block/unblock action.
+  const [blockStatus, setBlockStatus] = useState<{
+    iBlockedThem: boolean
+    theyBlockedMe: boolean
+  } | null>(null)
+  const [blockBusy, setBlockBusy] = useState(false)
 
   // --- Group admin controls ------------------------------------------------
   const [addMemberOpen, setAddMemberOpen] = useState(false)
@@ -214,6 +223,69 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     }
   }, [activeConversationId])
 
+  // ---- Block status (Task 67) ---------------------------------------------
+  // For 1-on-1 conversations only — we check if EITHER party has blocked
+  // the other so we can show a banner + a "Block" / "Unblock" button.
+  const loadBlockStatus = useCallback(async () => {
+    if (!activeConversationId || !conversation || conversation.isGroup) {
+      setBlockStatus(null)
+      return
+    }
+    const other = conversation.participants.find((p) => p.userId !== user?.id)
+    if (!other) {
+      setBlockStatus(null)
+      return
+    }
+    try {
+      const res = await fetch(`/api/blocks/check?userId=${other.userId}`, { cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+      setBlockStatus({
+        iBlockedThem: !!data.iBlockedThem,
+        theyBlockedMe: !!data.theyBlockedMe,
+      })
+    } catch {
+      // ignore
+    }
+  }, [activeConversationId, conversation, user?.id])
+
+  async function toggleBlock() {
+    if (!conversation || conversation.isGroup || !user) return
+    const other = conversation.participants.find((p) => p.userId !== user.id)
+    if (!other) return
+    const currentlyBlocked = blockStatus?.iBlockedThem
+    if (!confirm(currentlyBlocked ? 'Unblock this user?' : 'Block this user? They will not be able to send you messages or see your online status.')) return
+    setBlockBusy(true)
+    try {
+      if (currentlyBlocked) {
+        // Unblock
+        const res = await fetch(`/api/blocks/${other.userId}`, { method: 'DELETE' })
+        if (!res.ok) {
+          toast.error('Failed to unblock')
+          return
+        }
+        toast.success('User unblocked')
+      } else {
+        // Block
+        const res = await fetch('/api/blocks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: other.userId }),
+        })
+        if (!res.ok) {
+          toast.error('Failed to block user')
+          return
+        }
+        toast.success('User blocked')
+      }
+      await loadBlockStatus()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setBlockBusy(false)
+    }
+  }
+
   // Load the current invite link for this conversation (any member can view
   // it; admins additionally get generate / revoke controls in the UI).
   const loadInvite = useCallback(async () => {
@@ -260,7 +332,8 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
     loadCapture()
     loadMuted()
     loadInvite()
-  }, [activeConversationId, loadCapture, loadMuted, loadInvite])
+    loadBlockStatus()
+  }, [activeConversationId, loadCapture, loadMuted, loadInvite, loadBlockStatus])
 
   async function toggleMute() {
     const next = !muted
@@ -1478,6 +1551,25 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           >
             <Trash2 className="w-4 h-4 mr-3" /> Delete chat
           </Button>
+          {/* Block / Unblock user — 1-on-1 conversations only (Task 67) */}
+          {conversation && !conversation.isGroup && otherUser && blockStatus && (
+            <>
+              {blockStatus.theyBlockedMe && !blockStatus.iBlockedThem && (
+                <div className="mt-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  This user has blocked you. You can&apos;t send them messages.
+                </div>
+              )}
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={blockBusy}
+                onClick={toggleBlock}
+              >
+                <Ban className="w-4 h-4 mr-3" />
+                {blockStatus.iBlockedThem ? 'Unblock user' : 'Block user'}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

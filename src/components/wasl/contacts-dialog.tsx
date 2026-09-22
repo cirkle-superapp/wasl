@@ -26,9 +26,11 @@ import {
   FileText,
   ClipboardPaste,
   ArrowLeft,
+  AtSign,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { WaslAvatar } from './wasl-avatar'
+import { AddByUsernameDialog } from './add-by-username-dialog'
 import { useWaslStore } from '@/lib/store'
 
 type Contact = {
@@ -67,6 +69,8 @@ export function ContactsDialog({
   const [search, setSearch] = useState('')
   // Three views in the same dialog: list / add / import
   const [view, setView] = useState<'list' | 'add' | 'import'>('list')
+  // Add-by-username dialog (Task 67)
+  const [byUsernameOpen, setByUsernameOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   const loadContacts = useCallback(async () => {
@@ -177,6 +181,17 @@ export function ContactsDialog({
               </Button>
             </div>
 
+            {/* Add by username (Task 67) — quick-action button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setByUsernameOpen(true)}
+              className="w-full border-dashed border-[var(--wasl-green)]/30 text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/5 hover:text-[var(--wasl-green)]"
+            >
+              <AtSign className="w-4 h-4 mr-1.5" />
+              Add by @username
+            </Button>
+
             {/* Export — secondary action, shown only when there are contacts */}
             {contacts.length > 0 && (
               <Button
@@ -243,6 +258,13 @@ export function ContactsDialog({
           />
         )}
       </DialogContent>
+      {/* Add-by-username dialog (Task 67) — closes the parent on success and
+          triggers a contact reload. */}
+      <AddByUsernameDialog
+        open={byUsernameOpen}
+        onOpenChange={setByUsernameOpen}
+        onAdded={() => loadContacts()}
+      />
     </Dialog>
   )
 }
