@@ -66,8 +66,11 @@ export async function POST(req: NextRequest) {
     // 10. Receipt splits (one unpaid).
     const splits = await buildReceiptSplits(session, [...oneOnOnes, ...groups], personas)
 
-    // 11. School Connect demo data — a verified school + 3 students + parent connections.
-    const schools = await buildSchoolConnect(session, personas)
+    // School Connect demo data is seeded by a SEPARATE endpoint
+    // (/api/seed-schools) because Vercel's 10s serverless timeout can't fit
+    // the entire seed-demo + school seeding in a single call on Turso.
+    // The auth-screen "Try the rich demo" button calls both endpoints in
+    // sequence after login.
 
     return NextResponse.json({
       ok: true,
@@ -83,7 +86,6 @@ export async function POST(req: NextRequest) {
         scheduledMessages: scheduled.length,
         timeCapsules: capsules.length,
         receiptSplits: splits.length,
-        schools: schools.length,
       },
     })
   } catch (err) {

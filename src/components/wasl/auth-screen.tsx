@@ -180,12 +180,21 @@ export function AuthScreen() {
         // option wipes any previous demo data first so the demo always
         // starts from a known state (great for presentations / sales
         // demos that need predictable, curated content).
+        //
+        // We split the seeding into TWO calls because Vercel's 10s
+        // serverless timeout can't fit all the writes in a single call:
+        //   1. /api/seed-demo  — personas, conversations, groups, stories, etc.
+        //   2. /api/seed-schools — Nile International School + 3 students
+        // Both are idempotent so a partial-failure retry is safe.
         try {
           await fetch('/api/seed-demo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reset: true }),
           })
+          // Fire-and-forget the school seeding — if it fails, the user can
+          // still use the rest of the app.
+          fetch('/api/seed-schools', { method: 'POST' }).catch(() => {})
         } catch {}
         toast.success(`Welcome to Wasl, ${data.name}!`)
         router.refresh()
