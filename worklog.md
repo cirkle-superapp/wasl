@@ -6837,3 +6837,137 @@ Agent: main (Product / Privacy / Backend / Frontend)
 - The Contact table DROP+RECREATE only affects demo data (the user's address book is repopulated on re-seed)
 - Phone-number portal changes are backward-compatible (old numbers without portalName still work — they just show as "Default number")
 - The seed-demo split is idempotent (both endpoints check for existing records before creating)
+
+---
+Task ID: 68 — Portal-aware messaging + Sidebar portal switcher + Notification center
+Agent: main (Frontend / UX Polish / Feature Architect)
+
+### Task
+Proceed implementing and upgrading. Finish the Task 67 follow-ups (portal-aware messaging display, sidebar portal switcher, creative UI badges) and add a substantial new feature (notification center).
+
+### Phase 1: Portal-aware messaging display (finishes Task 67)
+Per the user's design brief: "only username appears and beside it the real authenticated name".
+
+- **MessageBubble** now accepts a `senderUsername` prop
+- New **SenderHeader** component renders the bubble header as:
+  ```
+  @username · Real Name
+  ```
+  - `@username` in monospace, 10px, 70% opacity
+  - `·` separator at 40% opacity
+  - Real Name in the existing color (wasl-teal/green or business color)
+  - For business-as messages, the @username is hidden (the business name + 🏢 emoji is shown instead)
+- All 4 sender-header spots in MessageBubble (commit bubble, poll bubble, voice bubble, main text bubble) now use the SenderHeader component
+- **chat-window.tsx** resolves the sender's username from `conversation.participants` and passes it as `senderUsername` to MessageBubble
+
+**Verified via agent-browser**: In the Project Falcon group chat, messages from Sara Adel show `@demo_sara_adel · Sara Adel` and messages from Omar Khalil show `@demo_omar_khalil · Omar Khalil` beside the bubble. ✓
+
+### Phase 2: Sidebar portal quick-switcher (finishes Task 67)
+The old "Switch phone number" button (just a Phone icon that opened the full dialog) is replaced with a proper dropdown portal switcher.
+
+- **Dropdown trigger**: Phone icon in the sidebar profile footer
+- **Dropdown content**: shows ALL the user's portals in one click
+  - Each portal row shows:
+    - Portal avatar (initial letter if portalName set, otherwise Phone icon)
+    - Portal name (or "Default" if no portalName)
+    - **Active** badge (green pill) on the currently-active portal
+    - 🔒 **Hidden** badge (amber) on portals with hideNumber=true
+    - Phone number (or "Number hidden" if hideNumber is true)
+  - Clicking a portal row switches the active number via `PATCH /api/phone-numbers/[id]` with optimistic UI update
+  - "Manage portals" link at the bottom opens the full PhoneNumbersDialog
+- **Profile footer updated** to show:
+  - Real Name + 🔒 (if the active portal's number is hidden)
+  - `@username · Portal Name` (green) when a portal is active
+  - `@username` (or `@phone` as fallback) when no portal is set
+
+### Phase 3: Notification center (new feature — Task 68)
+A central place for the user to see all recent activity across the app.
+
+**New API: `GET /api/notifications`**
+Aggregates the user's recent activity from 4 sources into a single time-sorted feed:
+
+1. **Unread conversations** — for each conversation with unreadCount > 0:
+   - Avatar color + conversation name (or sender name for 1-on-1)
+   - Latest unread message preview (with type-aware emoji: 📷 photo, 🎙️ voice, 📝 commit, 📊 poll)
+   - Unread count badge
+   - Click → opens the conversation
+
+2. **Unread service-provider announcements** — for each ServiceProviderMessage targeting the user's country code that hasn't been marked as read:
+   - Provider name + announcement title
+   - Provider-colored icon (amber for high-priority alerts, green for normal)
+   - Priority indicator
+
+3. **Scheduled messages due in the next 24h** — for each ScheduledMessage owned by the user with `sent=false` and `scheduledFor` within 24h:
+   - "Scheduled message due" title
+   - Message preview
+   - Amber badge with relative time label ("in 3 hr", "in 1 day")
+
+4. **Pending School Connect parent connections** — for school admins, any SchoolParentConnection created in the last 24h:
+   - "X connected to Y" title
+   - School name + student ID + relationship subtitle
+   - Green GraduationCap icon
+
+Returns: `{ items, unreadCount, totalCount }`
+
+**New component: `NotificationCenterDialog`**
+- Header: "Notifications" + unread count badge
+- List of notification items, each with:
+  - Icon/avatar (type-specific: Users for groups, Megaphone for announcements, Clock for scheduled, GraduationCap for school)
+  - Title + subtitle + relative time ("now", "5m", "3h", "yesterday", "Sep 22")
+  - Type-specific badges (unread count for messages, "in X hr" for scheduled)
+  - Click → opens the relevant conversation (closes the dialog)
+- Empty state: green checkmark + "All caught up" message
+- "Mark all as read by visiting each conversation" hint at the bottom
+
+**Sidebar integration**:
+- Bell icon added to the sidebar header (between WaslLogo and theme toggle)
+- Unread-count badge (amber pill, capped at 99+) on the bell icon
+- Polls `/api/notifications` every 60s for the unread count (cheap polling, just reads the count summary)
+- Click bell → opens NotificationCenterDialog
+
+**Verified via agent-browser**: 
+- Bell icon appears in sidebar header ✓
+- Click bell → notification center dialog opens ✓
+- Shows: 2 scheduled messages due, 1 school connect notification, 1 service provider announcement ✓
+- Empty state ("All caught up") shows when no notifications ✓
+
+### Phase 4: Code quality
+- Lint: 0 errors ✓
+- TypeScript: 0 errors ✓
+- Pre-commit hook: verified (0 protected files deleted)
+- Pre-push hook: verified all 50 protected files present
+- Backward compatible: all previous features still work
+
+### Phase 5: Pushed to all services
+- GitHub: committed as `b057b58` (1 commit, 5 files changed, 674 insertions)
+- Vercel: auto-deployed from main in ~60s
+- Turso: no schema changes (notification center uses existing tables)
+- Verified on Vercel production:
+  - Login: 200 ✓
+  - `/api/notifications`: 200 with 4 items (2 scheduled, 1 school connect, 1 service provider) ✓
+  - Hydration fix still live (cirkle-mark-grad) ✓
+
+### Phase 6: Honest Assessment
+
+**What's working:**
+- Portal-aware messaging: `@username · Real Name` shown beside group message bubbles
+- Sidebar portal switcher: 1-click switch between portals with visual badges (Active, Hidden)
+- Notification center: aggregates 4 data sources (unread msgs, SP announcements, scheduled msgs, school connections) into a single time-sorted feed
+- Bell icon with unread badge in sidebar header, polls every 60s
+- All features work on both local SQLite and Turso (Vercel production)
+
+**What's NOT included (intentional — for v2 expansion):**
+- Portal name stamping on outgoing messages (recipient sees `@username · Real Name (Portal)` — currently only the username + real name are shown, the portal name requires exposing the sender's portal name to recipients via a new API field)
+- Block-list filtering in the conversations sidebar (blocked users still appear — they just can't send)
+- Push notifications via VAPID (the schema + .env.example are ready but the push-subscription flow isn't built)
+- Mention notifications (@user in messages — no parser exists yet)
+- Call-log notifications (missed call entries in the notification center — requires storing call metadata)
+- Notification preferences (per-type mute settings — currently all notification types are shown)
+
+**Risk assessment: LOW**
+- All changes are additive (no existing code paths broken)
+- 0 lint errors, 0 TS errors
+- Notification polling is wrapped in try/catch + cancelled on unmount
+- Portal switcher uses optimistic UI with rollback on failure
+- SenderHeader is a pure presentational component (no state, no side effects)
+- The @username display only adds info — never removes or changes existing behavior
