@@ -1487,6 +1487,13 @@ export function ChatWindow({
               const senderName = m.senderLabel || conversation.participants.find(
                 (p) => p.userId === m.senderId
               )?.name
+              // Sender's @username (for the portal-aware "@username · Real Name"
+              // bubble header). Resolved from the conversation's participants.
+              // For business-as messages (senderLabel set), the username is
+              // hidden by the SenderHeader component.
+              const senderUsername = conversation.participants.find(
+                (p) => p.userId === m.senderId
+              )?.username
               const replyToMsg = m.replyToId
                 ? messages.find((mm) => mm.id === m.replyToId)
                 : null
@@ -1534,6 +1541,7 @@ export function ChatWindow({
                     <MessageBubble
                       message={m}
                       senderName={senderName}
+                      senderUsername={senderUsername}
                       isGroup={conversation.isGroup}
                       replyTo={replyToMsg}
                       replyToSenderName={replyToSenderName}

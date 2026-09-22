@@ -24,12 +24,15 @@ import {
   PinOff,
   MailOpen,
   GraduationCap,
+  Lock,
+  Bell,
 } from 'lucide-react'
-import { useWaslStore, type Conversation } from '@/lib/store'
+import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
 import { StoryBar } from './story-bar'
 import { PhoneNumbersDialog } from './phone-numbers-dialog'
+import { NotificationCenterDialog } from './notification-center-dialog'
 import { useColorTheme } from './color-theme-provider'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -63,6 +66,7 @@ export function Sidebar({
 }) {
   const {
     user,
+    setUser,
     conversations,
     activeConversationId,
     setActiveConversation,
@@ -75,6 +79,8 @@ export function Sidebar({
   const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
   const [loading, setLoading] = useState(true)
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0)
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
   const [contactsOpen, setContactsOpen] = useState(false)
   const [bookmarksOpen, setBookmarksOpen] = useState(false)
@@ -92,6 +98,80 @@ export function Sidebar({
   const { theme, setTheme } = useTheme()
   const { colorTheme } = useColorTheme()
   const isCirkle = colorTheme === 'cirkle'
+
+  // ---- Portals (Task 67 follow-up: sidebar quick-switcher) ---------------
+  // The user's phone numbers, each acting as a "portal" (sub-identity).
+  // Loaded once on mount and refreshed after a switch.
+  const [portals, setPortals] = useState<UserPhoneNumber[]>([])
+  const activePortal = portals.find((p) => p.active) || null
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadPortals() {
+      try {
+        const res = await fetch('/api/phone-numbers', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        setPortals(data.phoneNumbers || [])
+      } catch {}
+    }
+    loadPortals()
+    return () => { cancelled = true }
+  }, [])
+
+  // ---- Notification unread count (Task 68) -------------------------------
+  // Poll /api/notifications every 60s for the unread-count badge on the
+  // bell icon. We only fetch the count summary, not the full list, to keep
+  // the polling cheap.
+  useEffect(() => {
+    let cancelled = false
+    async function loadCount() {
+      try {
+        const res = await fetch('/api/notifications', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        setNotifUnreadCount(data.unreadCount || 0)
+      } catch {}
+    }
+    loadCount()
+    const interval = setInterval(loadCount, 60_000) // every 60s
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
+
+  async function switchPortal(id: string) {
+    setPortals((cur) => cur.map((p) => ({ ...p, active: p.id === id })))
+    try {
+      const res = await fetch(`/api/phone-numbers/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: true }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        toast.error(d?.error || 'Failed to switch portal')
+        // Reload to restore the server's truth
+        const fresh = await fetch('/api/phone-numbers', { cache: 'no-store' })
+        if (fresh.ok) {
+          const data = await fresh.json()
+          setPortals(data.phoneNumbers || [])
+        }
+        return
+      }
+      const data = await res.json()
+      // Sync the user.phone field so the sidebar shows the new active number
+      if (user) {
+        setUser({ ...user, phone: data.number, phoneNumbers: portals.map((p) => ({ ...p, active: p.id === id })) })
+      }
+      toast.success(`Switched to ${data.portalName || 'default'} portal`)
+    } catch {
+      toast.error('Network error')
+    }
+  }
 
   async function loadConversations() {
     setLoading(true)
@@ -243,6 +323,21 @@ export function Sidebar({
           <div className="font-bold text-lg leading-none truncate">Wasl</div>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 hover:text-white relative"
+            onClick={() => setNotificationsOpen(true)}
+            title="Notifications"
+            aria-label="Notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {notifUnreadCount > 0 && (
+              <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                {notifUnreadCount > 99 ? '99+' : notifUnreadCount}
+              </span>
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -482,23 +577,86 @@ export function Sidebar({
             size={36}
           />
           <div className="min-w-0">
-            <div className="text-sm font-medium truncate">{user?.name}</div>
-            <div className="text-xs text-muted-foreground truncate">
-              {user?.phone || user?.username || 'No number'}
+            <div className="text-sm font-medium truncate flex items-center gap-1.5">
+              {user?.name}
+              {activePortal?.hideNumber && (
+                <span title="Your number is hidden from others" aria-label="Number hidden">
+                  <Lock className="w-3 h-3 text-amber-500" />
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+              {activePortal?.portalName ? (
+                <>
+                  <span className="font-mono text-[10px] opacity-70">@{user?.username}</span>
+                  <span className="opacity-40 text-[10px]">·</span>
+                  <span className="text-[var(--wasl-green)]">{activePortal.portalName}</span>
+                </>
+              ) : (
+                <span className="font-mono text-[10px] opacity-70">@{user?.username || user?.phone || 'No number'}</span>
+              )}
             </div>
           </div>
         </button>
-        {/* Phone-number switcher button */}
-        <button
-          onClick={() => setPhoneNumbersOpen(true)}
-          className="p-2 rounded-lg text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted transition-colors shrink-0"
-          title="Switch phone number"
-        >
-          <Phone className="w-4 h-4" />
-        </button>
+        {/* Portal quick-switcher — opens a dropdown to switch between the
+            user's portals without opening the full phone-numbers dialog. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="p-2 rounded-lg text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted transition-colors shrink-0"
+              title="Switch portal / number"
+              aria-label="Switch portal or phone number"
+            >
+              <Phone className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Your portals
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {portals.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">No portals yet</div>
+            ) : (
+              portals.map((p) => (
+                <DropdownMenuItem
+                  key={p.id}
+                  onClick={() => switchPortal(p.id)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <div className={cn(
+                    'h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0',
+                  )} style={{ background: p.portalName ? 'var(--wasl-green)' : '#94a3b8' }}>
+                    {p.portalName ? p.portalName.charAt(0).toUpperCase() : <Phone className="w-3 h-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate flex items-center gap-1">
+                      {p.portalName || 'Default'}
+                      {p.active && (
+                        <span className="text-[9px] uppercase tracking-wide bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] px-1 py-0.5 rounded-full">
+                          Active
+                        </span>
+                      )}
+                      {p.hideNumber && <Lock className="w-3 h-3 text-amber-500" />}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono truncate">
+                      {p.hideNumber ? 'Number hidden' : p.number}
+                    </div>
+                  </div>
+                </DropdownMenuItem>
+              ))
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setPhoneNumbersOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Manage portals
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
+      <NotificationCenterDialog open={notificationsOpen} onOpenChange={setNotificationsOpen} />
       <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
       <GlobalStarredDialog open={starredOpen} onOpenChange={setStarredOpen} />
       <GlobalSearchDialog

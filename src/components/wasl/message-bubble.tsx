@@ -242,9 +242,57 @@ function useEditWindow(createdAt: string, enabled: boolean) {
   return { canEdit, msLeft, minsLeft }
 }
 
+// SenderHeader — renders the bubble-header sender row with the user's
+// @username beside their authenticated real name (per the Task 67 design
+// brief: "only username appears and beside it the real authenticated name").
+//
+//   @username · Real Name
+//
+// For business-as messages (senderLabel set), the business 🏢 emoji + the
+// business name are shown instead (no @username — the recipient doesn't
+// need the user's personal username in that case).
+function SenderHeader({
+  senderName,
+  senderUsername,
+  isBusinessMessage,
+  senderNameColor,
+  variant = 'default',
+}: {
+  senderName?: string
+  senderUsername?: string
+  isBusinessMessage: boolean
+  senderNameColor?: string
+  variant?: 'default' | 'compact'
+}) {
+  if (!senderName) return null
+  const showUsername = !isBusinessMessage && senderUsername
+  return (
+    <div
+      className={cn(
+        'font-semibold flex items-center gap-1 ml-1',
+        variant === 'compact'
+          ? 'text-xs mb-0.5'
+          : 'text-xs mb-1',
+        'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+      )}
+      style={{ color: senderNameColor || undefined }}
+    >
+      {isBusinessMessage && <span className="text-[10px]">🏢</span>}
+      {showUsername && (
+        <span className="font-mono opacity-70 font-normal text-[10px]">
+          @{senderUsername}
+        </span>
+      )}
+      {showUsername && <span className="opacity-40 text-[10px]">·</span>}
+      <span>{senderName}</span>
+    </div>
+  )
+}
+
 export function MessageBubble({
   message,
   senderName,
+  senderUsername,
   isGroup,
   replyTo,
   replyToSenderName,
@@ -273,6 +321,12 @@ export function MessageBubble({
 }: {
   message: ChatMessage
   senderName?: string
+  // Sender's @username (resolved from participants by the chat-window). When
+  // present, the bubble header shows "@username · Real Name" — per the
+  // user's design brief: "only username appears and beside it the real
+  // authenticated name". For business-as messages, senderName already
+  // holds the business name; we skip the @username in that case.
+  senderUsername?: string
   isGroup: boolean
   replyTo?: ChatMessage | null
   // Display name of the user who sent the `replyTo` message (resolved by the
@@ -489,10 +543,12 @@ export function MessageBubble({
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-1 ml-1 flex items-center gap-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" style={{ color: senderNameColor || undefined }}>
-              {isBusinessMessage && <span className="text-[10px]">🏢</span>}
-              {senderName}
-            </div>
+            <SenderHeader
+              senderName={senderName}
+              senderUsername={senderUsername}
+              isBusinessMessage={isBusinessMessage}
+              senderNameColor={senderNameColor}
+            />
           )}
           <CommitMessageWrapper message={message} mine={mine} />
         </div>
@@ -505,10 +561,12 @@ export function MessageBubble({
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className="max-w-[88%] sm:max-w-[75%] md:max-w-[70%]">
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-1 ml-1 flex items-center gap-1 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" style={{ color: senderNameColor || undefined }}>
-              {isBusinessMessage && <span className="text-[10px]">🏢</span>}
-              {senderName}
-            </div>
+            <SenderHeader
+              senderName={senderName}
+              senderUsername={senderUsername}
+              isBusinessMessage={isBusinessMessage}
+              senderNameColor={senderNameColor}
+            />
           )}
           <PollMessageWrapper
             pollId={message.commitId}
@@ -525,9 +583,13 @@ export function MessageBubble({
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
         <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out' : 'wasl-bubble-in')}>
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
-              {senderName}
-            </div>
+            <SenderHeader
+              senderName={senderName}
+              senderUsername={senderUsername}
+              isBusinessMessage={isBusinessMessage}
+              senderNameColor={senderNameColor}
+              variant="compact"
+            />
           )}
           <VoicePlayer
             src={message.content}
@@ -798,9 +860,13 @@ export function MessageBubble({
             </div>
           )}
           {isGroup && !mine && senderName && (
-            <div className="text-xs font-semibold mb-0.5 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]">
-              {senderName}
-            </div>
+            <SenderHeader
+              senderName={senderName}
+              senderUsername={senderUsername}
+              isBusinessMessage={isBusinessMessage}
+              senderNameColor={senderNameColor}
+              variant="compact"
+            />
           )}
           {replyTo && (
             <button
