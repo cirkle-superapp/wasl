@@ -50,22 +50,30 @@ const SCHEMA_STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
 
-  // ── Contact ───────────────────────────────────────────────────────────
+  // ── Contact (address book) ───────────────────────────────────────────
+  // NOTE: The Contact table schema was corrected in Task 67 to match the
+  // actual Prisma schema (the old sync-schema had wrong column names:
+  // contactUserId, name, email, avatar — none of which exist in the model).
+  // For existing Turso deployments where the OLD wrong-schema Contact table
+  // exists, we DROP it first so the correct schema can be created. This is
+  // safe because Contact data is purely a user's address book — losing it
+  // only means the user re-imports/re-adds contacts.
+  `DROP TABLE IF EXISTS "Contact"`,
   `CREATE TABLE IF NOT EXISTS "Contact" (
     "id" TEXT PRIMARY KEY NOT NULL,
-    "userId" TEXT NOT NULL,
-    "contactUserId" TEXT,
-    "name" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL,
+    "userId" TEXT,
+    "nickname" TEXT,
     "phone" TEXT,
-    "email" TEXT,
-    "avatar" TEXT,
-    "avatarColor" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE,
-    FOREIGN KEY ("contactUserId") REFERENCES "User"("id") ON DELETE SET NULL
+    "notes" TEXT,
+    "addedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL
   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS "Contact_userId_phone_key" ON "Contact"("userId", "phone")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Contact_ownerId_userId_key" ON "Contact"("ownerId", "userId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Contact_ownerId_phone_key" ON "Contact"("ownerId", "phone")`,
+  `CREATE INDEX IF NOT EXISTS "Contact_ownerId_idx" ON "Contact"("ownerId")`,
+  `CREATE INDEX IF NOT EXISTS "Contact_userId_idx" ON "Contact"("userId")`,
 
   // ── PhoneNumber ────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS "PhoneNumber" (
