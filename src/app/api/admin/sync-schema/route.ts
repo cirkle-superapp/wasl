@@ -626,10 +626,22 @@ const SCHEMA_STATEMENTS: string[] = [
 // Each entry is [table, column, type+default]. We try each one and ignore
 // the "duplicate column" error so it's idempotent.
 const ALTER_COLUMNS: Array<[string, string, string]> = [
+  // User privacy fields (added in Task 23)
   ['User', 'defaultProtectMessages', 'BOOLEAN NOT NULL DEFAULT false'],
   ['User', 'privacyAlwaysAllow', 'BOOLEAN NOT NULL DEFAULT false'],
   ['User', 'ghostMode', 'BOOLEAN NOT NULL DEFAULT false'],
   ['User', 'hideLastSeen', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['User', 'idDocPath', 'TEXT'],
+  ['User', 'verifiedAt', 'DATETIME'],
+  ['User', 'avatarColor', 'TEXT'],
+  ['User', 'avatar', 'TEXT'],
+  ['User', 'about', "TEXT NOT NULL DEFAULT 'Hey there! I am using Wasl.'"],
+  ['User', 'online', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['User', 'verified', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['User', 'phone', 'TEXT'],
+  ['User', 'email', 'TEXT'],
+
+  // Message — many optional columns added over time
   ['Message', 'protected', 'BOOLEAN'],
   ['Message', 'edited', 'BOOLEAN NOT NULL DEFAULT false'],
   ['Message', 'pinned', 'BOOLEAN NOT NULL DEFAULT false'],
@@ -640,13 +652,141 @@ const ALTER_COLUMNS: Array<[string, string, string]> = [
   ['Message', 'senderLabelColor', 'TEXT'],
   ['Message', 'senderAvatarPath', 'TEXT'],
   ['Message', 'fromPhone', 'TEXT'],
+  ['Message', 'replyToId', 'TEXT'],
+
+  // Participant — muted/archived/role added later
   ['Participant', 'muted', 'BOOLEAN NOT NULL DEFAULT false'],
   ['Participant', 'archived', 'BOOLEAN NOT NULL DEFAULT false'],
   ['Participant', 'role', "TEXT NOT NULL DEFAULT 'member'"],
+
+  // Conversation — description + invite token added later
   ['Conversation', 'description', 'TEXT'],
   ['Conversation', 'inviteToken', 'TEXT'],
   ['Conversation', 'inviteTokenSetAt', 'DATETIME'],
+  ['Conversation', 'avatarColor', 'TEXT'],
+  ['Conversation', 'avatar', 'TEXT'],
+  ['Conversation', 'createdBy', 'TEXT'],
+
+  // Business — privacy field
   ['Business', 'defaultProtectMessages', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Business', 'category', 'TEXT'],
+  ['Business', 'registrationDocPath', 'TEXT'],
+  ['Business', 'taxDocPath', 'TEXT'],
+  ['Business', 'idDocPath', 'TEXT'],
+  ['Business', 'rejectionReason', 'TEXT'],
+  ['Business', 'verifiedAt', 'DATETIME'],
+  ['Business', 'hiddenPhone', 'TEXT'],
+  ['Business', 'hidePhone', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Business', 'verified', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Business', 'avatarPath', 'TEXT'],
+  ['Business', 'avatarColor', 'TEXT'],
+  ['Business', 'description', "TEXT NOT NULL DEFAULT ''"],
+
+  // ScheduledMessage — repeat/repeatUntil added in Task 27
+  ['ScheduledMessage', 'repeat', "TEXT NOT NULL DEFAULT 'none'"],
+  ['ScheduledMessage', 'repeatUntil', 'DATETIME'],
+  ['ScheduledMessage', 'sent', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['ScheduledMessage', 'sentAt', 'DATETIME'],
+  ['ScheduledMessage', 'type', "TEXT NOT NULL DEFAULT 'text'"],
+  ['ScheduledMessage', 'senderId', 'TEXT'],
+  ['ScheduledMessage', 'content', 'TEXT'],
+
+  // Commit — completedAt added later
+  ['Commit', 'completedAt', 'DATETIME'],
+  ['Commit', 'creatorSignedAt', 'DATETIME'],
+  ['Commit', 'counterpartySignedAt', 'DATETIME'],
+  ['Commit', 'fairnessScore', 'INTEGER NOT NULL DEFAULT 0'],
+  ['Commit', 'fairnessNote', "TEXT NOT NULL DEFAULT ''"],
+  ['Commit', 'hash', 'TEXT'],
+  ['Commit', 'creatorSigned', 'BOOLEAN NOT NULL DEFAULT true'],
+  ['Commit', 'counterpartySigned', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Commit', 'conditions', "TEXT NOT NULL DEFAULT '[]'"],
+  ['Commit', 'currency', "TEXT NOT NULL DEFAULT 'SAR'"],
+  ['Commit', 'amount', 'REAL NOT NULL DEFAULT 0'],
+  ['Commit', 'deadline', 'TEXT'],
+  ['Commit', 'description', "TEXT NOT NULL DEFAULT ''"],
+  ['Commit', 'type', "TEXT NOT NULL DEFAULT 'price'"],
+  ['Commit', 'title', 'TEXT'],
+  ['Commit', 'status', "TEXT NOT NULL DEFAULT 'pending'"],
+
+  // ServiceProvider — many columns added in Task 30
+  ['ServiceProvider', 'type', "TEXT NOT NULL DEFAULT 'government'"],
+  ['ServiceProvider', 'description', "TEXT NOT NULL DEFAULT ''"],
+  ['ServiceProvider', 'avatarPath', 'TEXT'],
+  ['ServiceProvider', 'avatarColor', 'TEXT'],
+  ['ServiceProvider', 'officialName', 'TEXT'],
+  ['ServiceProvider', 'registrationNumber', 'TEXT'],
+  ['ServiceProvider', 'taxNumber', 'TEXT'],
+  ['ServiceProvider', 'countryCode', "TEXT NOT NULL DEFAULT '+20'"],
+  ['ServiceProvider', 'registrationDocPath', 'TEXT'],
+  ['ServiceProvider', 'idDocPath', 'TEXT'],
+  ['ServiceProvider', 'livenessVideoPath', 'TEXT'],
+  ['ServiceProvider', 'livenessVerified', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['ServiceProvider', 'status', "TEXT NOT NULL DEFAULT 'pending'"],
+  ['ServiceProvider', 'rejectionReason', 'TEXT'],
+  ['ServiceProvider', 'verified', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['ServiceProvider', 'verifiedAt', 'DATETIME'],
+  ['ServiceProvider', 'verifiedBy', 'TEXT'],
+  ['ServiceProvider', 'canBroadcast', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['ServiceProvider', 'contactPhone', 'TEXT'],
+  ['ServiceProvider', 'contactEmail', 'TEXT'],
+
+  // ServiceProviderMessage
+  ['ServiceProviderMessage', 'type', "TEXT NOT NULL DEFAULT 'announcement'"],
+  ['ServiceProviderMessage', 'imagePath', 'TEXT'],
+  ['ServiceProviderMessage', 'countryCode', "TEXT NOT NULL DEFAULT '+20'"],
+  ['ServiceProviderMessage', 'status', "TEXT NOT NULL DEFAULT 'sent'"],
+  ['ServiceProviderMessage', 'priority', 'INTEGER NOT NULL DEFAULT 0'],
+  ['ServiceProviderMessage', 'title', 'TEXT'],
+  ['ServiceProviderMessage', 'content', 'TEXT'],
+
+  // BroadcastChannel
+  ['BroadcastChannel', 'description', "TEXT NOT NULL DEFAULT ''"],
+  ['BroadcastChannel', 'avatarColor', 'TEXT'],
+  ['BroadcastChannel', 'subscriberCount', 'INTEGER NOT NULL DEFAULT 0'],
+
+  // Poll
+  ['Poll', 'multiChoice', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Poll', 'anonymous', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['Poll', 'options', "TEXT NOT NULL DEFAULT '[]'"],
+  ['Poll', 'question', 'TEXT'],
+  ['Poll', 'createdBy', 'TEXT'],
+
+  // Story
+  ['Story', 'bgColor', 'TEXT'],
+  ['Story', 'type', "TEXT NOT NULL DEFAULT 'text'"],
+
+  // ChatFolder
+  ['ChatFolder', 'color', 'TEXT'],
+  ['ChatFolder', 'icon', 'TEXT'],
+  ['ChatFolder', 'name', 'TEXT'],
+
+  // TimeCapsule
+  ['TimeCapsule', 'opened', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['TimeCapsule', 'unlockAt', 'DATETIME'],
+  ['TimeCapsule', 'content', 'TEXT'],
+  ['TimeCapsule', 'senderId', 'TEXT'],
+  ['TimeCapsule', 'conversationId', 'TEXT'],
+
+  // ReceiptSplit
+  ['ReceiptSplit', 'currency', "TEXT NOT NULL DEFAULT 'SAR'"],
+  ['ReceiptSplit', 'splitCount', 'INTEGER NOT NULL DEFAULT 2'],
+  ['ReceiptSplit', 'totalAmount', 'REAL NOT NULL'],
+  ['ReceiptSplit', 'title', 'TEXT'],
+  ['ReceiptSplit', 'creatorId', 'TEXT'],
+  ['ReceiptSplit', 'conversationId', 'TEXT'],
+
+  // ReceiptSplitParticipant
+  ['ReceiptSplitParticipant', 'paid', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['ReceiptSplitParticipant', 'amount', 'REAL NOT NULL'],
+
+  // DisappearingSetting
+  ['DisappearingSetting', 'enabled', 'BOOLEAN NOT NULL DEFAULT false'],
+  ['DisappearingSetting', 'duration', 'INTEGER NOT NULL DEFAULT 86400'],
+
+  // Draft
+  ['Draft', 'replyToId', 'TEXT'],
+  ['Draft', 'content', 'TEXT'],
 ]
 
 export async function POST() {
