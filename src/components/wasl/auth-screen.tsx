@@ -176,6 +176,17 @@ export function AuthScreen() {
       if (loginRes.ok) {
         const data = await loginRes.json()
         setUser(data)
+        // Seed the rich demo dataset for this user. The `{ reset: true }`
+        // option wipes any previous demo data first so the demo always
+        // starts from a known state (great for presentations / sales
+        // demos that need predictable, curated content).
+        try {
+          await fetch('/api/seed-demo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true }),
+          })
+        } catch {}
         toast.success(`Welcome to Wasl, ${data.name}!`)
         router.refresh()
         return
@@ -188,6 +199,15 @@ export function AuthScreen() {
       const data = await signupRes.json()
       if (!signupRes.ok) { toast.error(data?.error || 'Failed to start demo'); return }
       setUser(data)
+      // After a fresh signup, the user has no data — seed the rich demo
+      // dataset so the chat experience is immediately impressive.
+      try {
+        await fetch('/api/seed-demo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true }),
+        })
+      } catch {}
       toast.success(`Welcome to Wasl, ${data.name}!`)
       router.refresh()
     } catch (err) {
@@ -627,7 +647,7 @@ export function AuthScreen() {
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = `${C.gold}55` }}
                 >
                   {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /> : <Sparkles style={{ width: 16, height: 16 }} />}
-                  Try the live demo
+                  Try the rich demo
                 </button>
               </Cinematic>
             </div>
