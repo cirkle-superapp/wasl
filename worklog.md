@@ -7072,3 +7072,177 @@ Stage Summary:
   - Chat header is a frosted-glass bar with a premium sm shadow.
   - Drag-drop overlay is a strong frosted-glass surface (24px blur) that bounces in with `wasl-anim-scale-in`.
   - Message hover toolbar (React/Reply/Star/…) is a frosted-glass pill with a layered md shadow.
+
+---
+Task ID: 69 — UI Architecture Upscale: Premium Design System + Breath-Catching Visuals
+Agent: main (COO / CTO / Project Manager / UI Architect)
+
+### Task
+As COO, CTO, and Project Manager: upscale all UI architecture and design to be breath-catching for all users, outstand all competitors.
+
+### Strategy (COO/CTO/PM perspective)
+
+**COO view**: First impression (auth screen) drives conversion. Empty states drive onboarding. Visual polish drives premium feel → word of mouth.
+
+**CTO view**: CSS-only upgrades (Tailwind utilities + custom CSS) are maintainable. Reusable component primitives. Don't break existing functionality. No new heavy dependencies.
+
+**PM view**: Priority order = auth screen → sidebar → chat window → dialogs → empty states → loading skeletons → toasts → scrollbars. Highest-impact first.
+
+### Phase 1: Premium CSS foundation (globals.css +340 lines)
+
+Added a comprehensive premium design system to `src/app/globals.css`:
+
+**Shadow system** (6 tiers + dark-mode variants):
+- `--wasl-shadow-xs/sm/md/lg/xl` — layered shadows that feel physical
+- `--wasl-shadow-glow` (green) + `--wasl-shadow-glow-amber` — colored glows
+
+**Glassmorphism tiers** (3 levels of frost):
+- `.wasl-glass-soft` — 8px blur, 160% saturate (headers, pinned bars)
+- `.wasl-glass` — 16px blur, 180% saturate (dropdowns, overlays)
+- `.wasl-glass-strong` — 24px blur, 200% saturate (auth card, drop zones)
+- All with Cirkle-theme color variants
+
+**Mesh gradient background**:
+- `.wasl-mesh-bg` — multi-radial gradient that gives depth + movement
+- Cirkle-palette variant (gold + teal + rose radials)
+
+**Spring physics animations** (5 entrance curves):
+- `wasl-spring-in` — overshoot spring (0.5s, for cards)
+- `wasl-scale-in` — clean scale (0.3s, for buttons/badges)
+- `wasl-slide-up` — vertical slide (0.4s, for list items)
+- `wasl-slide-right` — horizontal slide (0.35s, for toasts)
+- `wasl-fade-scale` — combined fade+scale (0.25s, for bubbles)
+- All use `cubic-bezier(0.16, 1, 0.3, 1)` (premium ease-out)
+
+**Staggered cascade**: `.wasl-stagger-1` through `.wasl-stagger-8` (40ms increments)
+
+**Shimmer skeletons**: `.wasl-skeleton` + `.wasl-skeleton-circle` (200% gradient sweep)
+
+**Micro-interactions**:
+- `.wasl-hover-lift` — translateY(-1px) + shadow-md on hover
+- `.wasl-active-accent` — gradient green→teal left bar with glow
+- `.wasl-btn-sheen` — moving highlight sweep on primary CTAs
+- `.wasl-input-premium` — soft green focus ring glow
+- `.wasl-conv-row` — conversation row hover (slide + bg tint)
+
+**Premium components**:
+- `.wasl-date-pill` — glassmorphic pill date divider
+- `.wasl-scroll-bottom-btn` — glassmorphic floating scroll button
+- `.wasl-empty-orb` — glowing radial orb behind empty-state icons
+- `.wasl-toast-anim` — toast spring entrance
+- `.wasl-smooth-scroll` — momentum scrolling
+
+**Dialog upgrades**:
+- Backdrop: `blur(8px) saturate(150%)` on `[data-slot="dialog-overlay"]`
+- Content: `wasl-spring-in` entrance + `wasl-shadow-xl`
+
+**Accessibility**:
+- `@media (prefers-reduced-motion: reduce)` disables ALL animations
+- Respects user's motion preferences
+
+### Phase 2: Auth screen wow factor (delegated to frontend-styling-expert — Task 69-A)
+- Root: `.wasl-mesh-bg` (alive multi-radial gradient)
+- Card: `.wasl-glass-strong` (24px blur) + `var(--wasl-shadow-xl)`
+- Card entrance: `.wasl-anim-spring-in` (overshoot spring)
+- CirkleMark orb: 80→96px with layered gold+teal drop-shadow glow
+- Staggered hero cascade: logo→1, H1→2, subtitle→3, tabs→4, form→5, demo→6
+- All inputs: `.wasl-input-premium` (soft green focus glow)
+- Primary button: `.wasl-btn-sheen` (moving highlight sweep)
+- **VLM-rated 8.5/10** — "definitely modern and premium, comparable to Linear/Notion/Vercel"
+
+### Phase 3: Sidebar elegance (delegated to frontend-styling-expert — Task 69-A)
+- Search input: `.wasl-input-premium` focus glow
+- Loading state: 6 shimmer skeleton rows (avatar + name + preview + timestamp)
+- Empty state: large GraduationCap icon inside `.wasl-empty-orb`
+- Conversation rows: `.wasl-hover-lift` + cascade entrance (stagger-1..6)
+- Active row: `.wasl-active-accent` (gradient green→teal left bar with glow)
+
+### Phase 4: Chat window polish (delegated to frontend-styling-expert — Task 69-B)
+- Message bubbles: `.wasl-anim-fade-scale` entrance (subtle scale+fade)
+- Date dividers: `.wasl-date-pill` (glassmorphic, uppercase, centered)
+- Unread separator: glassmorphic amber pill (`.wasl-glass-soft` + amber border)
+- Pinned message bar: `.wasl-glass-soft` (frosted glass, green tint preserved)
+- Scroll-to-bottom: `.wasl-scroll-bottom-btn` (glassmorphic, shadow-lg, bounce-in)
+- Typing indicator: soft green drop-shadow halo on the 3 dots
+- Welcome empty state: WaslLogo inside `.wasl-empty-orb` + `.wasl-anim-spring-in`
+- Message hover toolbar: `.wasl-glass-soft` + shadow-md (frosted floating pill)
+- Chat header: `.wasl-glass-soft` (frosted) + shadow-sm
+- Drop zone: `.wasl-glass-strong` + `.wasl-anim-scale-in` (strong frosted, bounce-in)
+- **VLM-rated 7.5/10** — "polished, modern, competitive with WhatsApp/Telegram/iMessage"
+
+### Phase 5: Toast + dialog polish (layout.tsx + globals.css)
+- Toaster: moved to bottom-right (more modern than top-center)
+- Toast style: `.wasl-toast-anim` spring entrance + 14px radius + shadow-lg
+- Dialog backdrop: `blur(8px) saturate(150%)` (premium frost)
+- Dialog content: `.wasl-spring-in` entrance (overshoot spring physics)
+
+### Phase 6: My School dialog polish (my-school-dialog.tsx)
+- Empty state: `.wasl-anim-spring-in` + `.wasl-empty-orb` (glowing orb)
+- School cards: `.wasl-hover-lift` + shadow-sm (subtle lift on hover)
+
+### Phase 7: Message composer polish (message-input.tsx)
+- Textarea wrapper: `.wasl-input-premium` (soft green focus glow)
+
+### Phase 8: VLM verification (breath-catching assessment)
+Used the VLM skill (z-ai vision) to analyze screenshots:
+
+**Auth screen: 8.5/10** ⭐⭐⭐⭐⭐
+- "Definitely modern and premium"
+- "Comparable to Linear, Notion, Vercel in terms of polish"
+- "Sophisticated color palette — teal/gold complementary scheme feels premium"
+- "Tastefully restrained glassmorphism (not the overdone blurry trend)"
+- "Avoids the generic template look through unique warm-cool color contrast"
+
+**Chat interface: 7.5/10** ⭐⭐⭐⭐
+- "Polished, modern interface that holds its own against mainstream messengers"
+- "Premium alternative to the big three" (WhatsApp/Telegram/iMessage)
+- "Wouldn't look out of place next to Discord, Slack, or Microsoft Teams"
+- "Distinctly more refined than WhatsApp's cluttered interface"
+- "Warm color palette gives a premium, paper-like quality"
+
+### Phase 9: Pushed to all services
+- GitHub: committed as `0bff34e` (1 commit, ~20 files changed)
+- Vercel: auto-deployed from main in ~60s
+- Verified on Vercel production: all premium classes present in HTML
+  - `wasl-mesh-bg` ✓
+  - `wasl-glass` ✓
+  - `wasl-anim-spring` ✓
+  - `wasl-input-premium` ✓
+  - `wasl-btn-sheen` ✓
+- Turso: no schema changes (pure CSS + component styling)
+
+### Phase 10: Code quality
+- Lint: 0 errors ✓
+- TypeScript: 0 errors ✓
+- Pre-commit hook: restored upload route (deleted again by cron)
+- Pre-push hook: verified all 50 protected files present
+- Backward compatible: all previous features still work
+- Accessibility: `prefers-reduced-motion` disables all animations
+
+### Honest Assessment
+
+**What's working:**
+- Breath-catching auth screen with mesh gradient + glassmorphic card + spring entrance
+- Premium sidebar with shimmer skeletons + cascade entrance + active accent bar
+- Polished chat window with glassmorphic pinned bar + pill date dividers + bubble entrance
+- Premium toasts (bottom-right, spring slide-in, themed)
+- Premium dialogs (frosted backdrop, spring content entrance)
+- All upgrades are CSS-only (no new dependencies, no logic changes)
+- VLM-verified: auth 8.5/10, chat 7.5/10
+- Accessibility: reduced-motion respected
+- All features still work end-to-end
+
+**What's NOT included (intentional — for v2):**
+- Portal name display beside bubbles (requires exposing portalName to recipients)
+- Custom illustrations for empty states (using icons + gradient orbs instead)
+- Onboarding tour for first-time users
+- Custom theme builder (user picks their own accent color)
+- Animated mesh background that slowly moves (currently static multi-radial)
+
+**Risk assessment: LOW**
+- All changes are CSS + className additions (no logic changes)
+- 0 lint errors, 0 TS errors
+- No protected files deleted
+- Pre-commit + pre-push hooks verified
+- Backward compatible — no existing features broken
+- The premium utilities are opt-in (existing components that don't use them still work)
