@@ -1138,8 +1138,10 @@ export function ChatWindow({
     const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
     return (
       <div className={cn('flex-1 flex flex-col items-center justify-center text-center px-6 overflow-y-auto wasl-scroll', wallpaperClass)}>
-        <div className="bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
-          <WaslLogo size={72} animated />
+        <div className="wasl-anim-spring-in bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
+          <div className="wasl-empty-orb" style={{ isolation: 'isolate' }}>
+            <WaslLogo size={72} animated />
+          </div>
           <h2 className="text-xl font-semibold text-foreground">
             Welcome to Wasl
           </h2>
@@ -1219,7 +1221,7 @@ export function ChatWindow({
     >
       {/* Drop zone overlay — shown only while a file is being dragged over */}
       {isDragging && (
-        <div className="absolute inset-0 z-40 bg-[var(--wasl-green)]/10 backdrop-blur-sm border-2 border-dashed border-[var(--wasl-green)] rounded-lg flex items-center justify-center pointer-events-none">
+        <div className="wasl-glass-strong wasl-anim-scale-in absolute inset-0 z-40 border-2 border-dashed border-[var(--wasl-green)] rounded-lg flex items-center justify-center pointer-events-none">
           <div className="bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-xl px-6 py-4 shadow-lg flex items-center gap-3">
             <Paperclip className="w-6 h-6 text-[var(--wasl-green)] rotate-45" />
             <div>
@@ -1264,7 +1266,8 @@ export function ChatWindow({
                 window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: pinned.id }))
               }
             }}
-            className="wasl-pinned-bar w-full flex items-center gap-2.5 px-4 py-2 bg-[var(--wasl-green)]/5 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin cursor-pointer"
+            className="wasl-pinned-bar wasl-glass-soft w-full flex items-center gap-2.5 px-4 py-2 border-b border-[var(--wasl-green)]/20 hover:bg-[var(--wasl-green)]/10 transition-colors text-left group/pin cursor-pointer"
+            style={{ backgroundColor: 'color-mix(in oklab, var(--wasl-green) 8%, color-mix(in oklab, var(--background) 60%, transparent))' }}
           >
             <Pin className="w-4 h-4 text-[var(--wasl-green)] shrink-0 rotate-45" />
             <div className="flex-1 min-w-0">
@@ -1293,7 +1296,7 @@ export function ChatWindow({
         )
       })()}
       {/* Chat header */}
-      <div className="bg-[var(--wasl-sidebar-bg)] px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border shadow-sm">
+      <div className="wasl-glass-soft px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border" style={{ boxShadow: 'var(--wasl-shadow-sm)' }}>
         <button
           onClick={onBack}
           className="md:hidden p-2 -ml-1 rounded-full hover:bg-muted text-foreground"
@@ -1337,9 +1340,11 @@ export function ChatWindow({
                 </span>
               ) : typingUsers.length > 0 ? (
                 <span className="text-[var(--wasl-green)] font-medium inline-flex items-center gap-1">
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="inline-flex items-center gap-1" style={{ filter: 'drop-shadow(0 0 4px color-mix(in oklab, var(--wasl-green) 40%, transparent))' }}>
+                    <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                    <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                    <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  </span>
                   <span className="ml-0.5">{conversation.isGroup ? `${typingUsers[0]} is typing…` : 'typing…'}</span>
                 </span>
               ) : !conversation.isGroup && isOnline ? (
@@ -1518,23 +1523,21 @@ export function ChatWindow({
                 <div
                   key={m.id}
                   data-message-id={m.id}
-                  className="wasl-message-wrapper"
+                  className="wasl-message-wrapper wasl-anim-fade-scale"
                   title={new Date(m.createdAt).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 >
                   {showDate && (
-                    <div className="flex justify-center my-3 sticky top-2 z-10" style={{ position: 'sticky', top: '8px', zIndex: 10 }}>
-                      <div className="wasl-date-pill text-xs px-3 py-1 rounded-full font-medium shadow-sm" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+                    <div className="flex justify-center my-3 sticky top-2 z-10">
+                      <div className="wasl-date-pill">
                         {date}
                       </div>
                     </div>
                   )}
                   {showUnreadSeparator && (
-                    <div className="wasl-unread-separator flex items-center gap-3 my-3 select-none">
-                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--wasl-green)] px-2">
+                    <div className="wasl-unread-separator flex justify-center my-3 select-none">
+                      <span className="wasl-glass-soft border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-semibold uppercase tracking-wide px-3 py-1 rounded-full">
                         Unread messages
                       </span>
-                      <div className="flex-1 h-px bg-[var(--wasl-green)]/40" />
                     </div>
                   )}
                   <div className="group mb-1.5">
@@ -1609,7 +1612,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="wasl-scroll-btn sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border border-border flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-all hover:scale-110 z-10 relative"
+            className="wasl-scroll-bottom-btn wasl-anim-scale-in sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-colors z-10 relative"
             title="Scroll to latest"
             aria-label={`Scroll to latest${unreadSinceScrollUp > 0 ? ` (${unreadSinceScrollUp} new)` : ''}`}
           >

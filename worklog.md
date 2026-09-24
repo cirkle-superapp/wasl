@@ -6971,3 +6971,104 @@ Returns: `{ items, unreadCount, totalCount }`
 - Portal switcher uses optimistic UI with rollback on failure
 - SenderHeader is a pure presentational component (no state, no side effects)
 - The @username display only adds info — never removes or changes existing behavior
+
+---
+Task ID: 69-A
+Agent: frontend-styling-expert
+Task: Upscale auth screen + sidebar conversation rows to be breath-catching
+
+Work Log:
+- src/components/wasl/auth-screen.tsx
+  - Root container now carries `wasl-mesh-bg` + `data-theme="cirkle"` so the
+    multi-radial Cirkle-palette mesh renders as the alive background.
+  - Auth card upgraded to `wasl-glass-strong` (24px blur / 200% saturate) and
+    uses `boxShadow: var(--wasl-shadow-xl)` layered on a soft gold halo.
+  - Card entrance switched from `cinenav-card` to the premium
+    `wasl-anim-spring-in` (spring physics with overshoot).
+  - CirkleMark orb enlarged from 80 → 96px and given a layered gold+teal
+    `drop-shadow` glow while keeping its `wasl-float` bob.
+  - Hero entrance restaged as a true cascade:
+      • logo      → wasl-anim-slide-up wasl-stagger-1
+      • H1 "Wasl" → wasl-anim-slide-up wasl-stagger-2
+      • subtitle  → wasl-anim-slide-up wasl-stagger-3
+      • tab switcher → wasl-anim-slide-up wasl-stagger-4
+      • form      → wasl-anim-slide-up wasl-stagger-5
+      • demo CTA  → wasl-anim-slide-up wasl-stagger-6
+    (Removed the legacy Cinematic wrappers around these hero elements so the
+    new class-based animations take effect cleanly. The features row and the
+    footer retain their Cinematic wrappers since they weren't in the cascade.)
+  - Every text input (name, username, signup email/phone, login identifier,
+    password) now carries `wasl-input-premium` for the soft green focus ring
+    glow. Removed the inline onFocus/onBlur handlers that were doing the same
+    job manually — the class handles it more elegantly.
+  - Primary submit button (Sign up / Log in) carries `wasl-btn-sheen` for the
+    moving highlight sweep on hover, plus `position: relative; overflow:
+    hidden` so the sheen pseudo-element stays clipped.
+  - No logic was touched: login, signup, demo button, username availability
+    check, password show/hide all behave identically.
+
+- src/components/wasl/sidebar.tsx
+  - Search Input gets `wasl-input-premium` for the same focus glow.
+  - Conversation loading state now renders 6 inline shimmer rows using the
+    `wasl-skeleton` / `wasl-skeleton-circle` utilities with the exact
+    dimensions called out in the task spec (48×48 circle avatar, 120×12 name,
+    180×10 preview). Replaced the shared `ConversationRowSkeleton` import —
+    also removed the now-unused import from `@/components/ui/skeleton`.
+  - Empty state no longer uses the Wasl logo; it now shows a large
+    `GraduationCap` (size 48) inside a `wasl-empty-orb` orb so a soft green
+    glow breathes behind it.
+  - ConversationRow accepts a new optional `index` prop:
+      • adds `wasl-hover-lift` (subtle translateY + shadow on hover)
+      • first 6 rows (index 0..5) get `wasl-anim-slide-up wasl-stagger-1..6`
+        for a cascade entrance on first load
+      • the active row gets `wasl-active-accent` (gradient green→teal bar via
+        ::before with a soft glow), replacing the old solid-color
+        `wasl-conv-accent` span which was removed.
+
+Stage Summary:
+- Auth screen: alive mesh background, frosted glass card with xl shadow +
+  spring entrance, hero cascade staggered 1→6, 96px logo orb with gold glow,
+  premium focus rings on every input, sheen sweep on primary CTA.
+- Sidebar: premium shimmer skeletons during load, conversation rows lift on
+  hover and cascade in, active row shows a glowing gradient accent bar,
+  search input has the soft green focus ring, empty state features a
+  breathing orb behind a GraduationCap.
+- `bun run lint` passes with 0 errors / 0 warnings (exit code 0).
+- No business logic, API calls, state, or features were changed — pure
+  styling upgrade layered on the Task 69 premium utility classes.
+
+---
+
+Task ID: 69-B
+Agent: frontend-styling-expert
+Task: Upscale chat window visuals — bubble entrance, glassmorphic pinned bar, pill date dividers, premium scroll button, empty state
+
+Work Log:
+- `src/components/wasl/chat-window.tsx` — surgical visual upgrades layered on the Task 69 premium utility classes:
+  1. Message bubble wrapper (`<div key={m.id}>`) → added `wasl-anim-fade-scale` so every bubble does a subtle scale+fade entrance when it first mounts. Composes cleanly with the existing inner `.wasl-msg-in` slide-up (different elements, no transform conflict).
+  2. Date divider → cleaned up to use the `.wasl-date-pill` class exclusively. Removed redundant `text-xs px-3 py-1 rounded-full font-medium shadow-sm` classes + the `backdrop-filter` inline style (all provided by `.wasl-date-pill` in globals.css line 1587+). Kept the sticky-top behavior (preserves the existing feature). Pill is centered via `flex justify-center my-3`.
+  3. Unread separator → converted from a horizontal-line-with-text layout into a centered glassmorphic pill: `.wasl-glass-soft` + `border-amber-500/30` + amber text (`text-amber-600 dark:text-amber-400`). The pill is centered via `flex justify-center my-3 select-none`. Kept the `wasl-unread-separator` entrance animation.
+  4. Pinned message bar → added `.wasl-glass-soft` alongside the existing `wasl-pinned-bar` (entrance animation preserved). Kept the green brand tint by overriding the background-color via inline style with a green-tinted glass mix (`color-mix(in oklab, var(--wasl-green) 8%, color-mix(in oklab, var(--background) 60%, transparent))`). Green border, Pin icon, and "Pinned by …" label remain green.
+  5. Scroll-to-bottom button → swapped the legacy `wasl-scroll-btn` class for the new `.wasl-scroll-bottom-btn` (glassmorphic floating pill, lg→xl shadow on hover, translateY(-2px) lift). Added `.wasl-anim-scale-in` so it bounces in when it appears. Removed the redundant `bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-lg border-border` (now provided by the premium class) and the conflicting `hover:scale-110` (replaced by the class's translateY lift).
+  6. Typing indicator in header → wrapped the three `.wasl-typing-dot` spans in a wrapper span with `style={{ filter: 'drop-shadow(0 0 4px color-mix(in oklab, var(--wasl-green) 40%, transparent))' }}` so the bouncing dots get a soft green glow halo.
+  7. Welcome empty state → wrapped the `<WaslLogo size={72} animated />` in a `<div className="wasl-empty-orb" style={{ isolation: 'isolate' }}>` so the breathing radial-gradient orb renders behind the logo (the `isolation:isolate` creates a stacking context so the orb's `z-index:-1` isn't hidden by the card's `bg-white/90` background). Added `wasl-anim-spring-in` to the empty-state card container so the whole welcome panel springs in on mount.
+  8. Chat header → swapped `bg-[var(--wasl-sidebar-bg)] … shadow-sm` for `.wasl-glass-soft` + `style={{ boxShadow: 'var(--wasl-shadow-sm)' }}`. Frosted-glass header now floats over the chat doodle background with a premium layered shadow.
+  9. Drop zone overlay → swapped `bg-[var(--wasl-green)]/10 backdrop-blur-sm` for `.wasl-glass-strong wasl-anim-scale-in` so the drag-target overlay is a strong frosted glass (24px blur, 200% saturate) that bounces in when the user drags a file over the chat. Green dashed border preserved.
+- `src/components/wasl/message-bubble.tsx` — hover toolbar upgrade (Task 8, the toolbar lives here, not in chat-window.tsx):
+  10. Message action toolbar (React/Reply/Star/Bookmark/Copy/Edit/Forward/Pin/Delete) → added `.wasl-glass-soft` alongside `wasl-toolbar` and `style={{ boxShadow: 'var(--wasl-shadow-md)' }}`. Removed the redundant `bg-white dark:bg-[var(--wasl-sidebar-bg)] shadow-md` (now provided by the premium glass + shadow classes). The toolbar now appears as a frosted floating pill with a layered md shadow when it slides in on hover.
+- No business logic, API calls, state management, event handlers, or features were touched. Pure surgical CSS-class + inline-style additions.
+- `bun run lint` passes with 0 errors / 0 warnings (exit code 0).
+
+Stage Summary:
+- Chat window now matches the premium visual system introduced in Task 69 (globals.css lines 1366–1706): glassmorphic tiers, spring physics, layered shadows, glow halos, breathing orbs.
+- Key visual upgrades:
+  - Every message bubble does a subtle 0.25s fade+scale entrance when it first mounts.
+  - Date dividers are clean centered glassmorphic pills (no more redundant inline styles / Tailwind utilities conflicting with the CSS class).
+  - Unread separator is now a centered amber-tinted glassmorphic pill (was a horizontal line + text + line).
+  - Pinned message bar is a frosted-glass banner with the existing green brand tint preserved via inline color-mix.
+  - Scroll-to-bottom button is a glassmorphic floating pill with a spring scale-in entrance, lg→xl shadow on hover, and a translateY lift (replaced the legacy `wasl-scroll-btn` + conflicting `hover:scale-110`).
+  - Typing dots in the chat header have a soft green drop-shadow glow.
+  - Welcome empty state features the breathing radial-gradient orb behind the animated Wasl logo, and the whole welcome card springs in on mount.
+  - Chat header is a frosted-glass bar with a premium sm shadow.
+  - Drag-drop overlay is a strong frosted-glass surface (24px blur) that bounces in with `wasl-anim-scale-in`.
+  - Message hover toolbar (React/Reply/Star/…) is a frosted-glass pill with a layered md shadow.

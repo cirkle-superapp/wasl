@@ -205,9 +205,8 @@ function EmptyState({
   onRegister: () => void
 }) {
   return (
-    <div className="flex flex-col items-center text-center py-8 px-4">
-      <div className="relative mb-4">
-        <div className="absolute inset-0 rounded-full bg-[var(--wasl-green)]/20 blur-2xl" />
+    <div className="flex flex-col items-center text-center py-8 px-4 wasl-anim-spring-in">
+      <div className="relative mb-4 wasl-empty-orb" style={{ isolation: 'isolate' }}>
         <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--wasl-green)]/10 to-[var(--wasl-green)]/5 border border-[var(--wasl-green)]/20">
           <GraduationCap className="h-8 w-8 text-[var(--wasl-green)]" />
         </div>
@@ -244,7 +243,7 @@ function SchoolCard({
   const verified = school.status === 'verified' && !!school.verifiedAt
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden wasl-hover-lift" style={{ boxShadow: 'var(--wasl-shadow-sm)' }}>
       {/* Header strip */}
       <div
         className="px-4 py-3 flex items-center gap-3"

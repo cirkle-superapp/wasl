@@ -669,11 +669,12 @@ export function MessageBubble({
         <div
           ref={toolbarRef}
           className={cn(
-            'wasl-toolbar absolute top-0 z-20 flex items-center gap-0.5 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-full shadow-md border border-border px-0.5 py-0.5',
+            'wasl-toolbar wasl-glass-soft absolute top-0 z-20 flex items-center gap-0.5 rounded-full border border-border px-0.5 py-0.5',
             mine
               ? 'left-0 -ml-1 -translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:-translate-x-full group-hover/msg:opacity-100 focus-within:-translate-x-full focus-within:opacity-100'
               : 'right-0 -mr-1 translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:translate-x-full group-hover/msg:opacity-100 focus-within:translate-x-full focus-within:opacity-100'
           )}
+          style={{ boxShadow: 'var(--wasl-shadow-md)' }}
         >
           <ToolbarButton title="React" onClick={() => setShowReactions((v) => !v)}>
             <SmilePlus className="w-4 h-4" />

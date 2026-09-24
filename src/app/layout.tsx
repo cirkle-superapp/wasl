@@ -284,7 +284,18 @@ export default function RootLayout({
           <ColorThemeProvider>
             <LanguageProvider>
               {children}
-              <Toaster position="top-center" richColors />
+              <Toaster
+                position="bottom-right"
+                richColors
+                toastOptions={{
+                  className: 'wasl-toast-anim',
+                  style: {
+                    borderRadius: '14px',
+                    boxShadow: 'var(--wasl-shadow-lg)',
+                    border: '1px solid color-mix(in oklab, var(--foreground) 8%, transparent)',
+                  },
+                }}
+              />
             </LanguageProvider>
           </ColorThemeProvider>
         </ThemeProvider>

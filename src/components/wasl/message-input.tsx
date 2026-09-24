@@ -794,7 +794,7 @@ export function MessageInput({
         )}
 
         {/* Textarea */}
-        <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative">
+        <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative wasl-input-premium">
 
           {/* Slash-command palette (from Cirkle blueprint) */}
           {showSlash && (

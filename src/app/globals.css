@@ -1363,3 +1363,344 @@ kbd {
   }
 }
 
+
+/* ============================================================================
+   TASK 69 — PREMIUM UI ARCHITECTURE
+   Breath-catching visual system that outstands competitors.
+   Built on: refined shadows, glassmorphism tiers, spring physics,
+   shimmer skeletons, mesh gradients, and micro-interactions.
+   ============================================================================ */
+
+/* ---- Premium shadow system ----
+   Layered shadows that feel physical, not flat. Each tier adds depth. */
+:root {
+  --wasl-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px -1px rgb(0 0 0 / 0.04);
+  --wasl-shadow-sm: 0 2px 4px -1px rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --wasl-shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --wasl-shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.10), 0 4px 8px -2px rgb(0 0 0 / 0.06);
+  --wasl-shadow-xl: 0 24px 48px -8px rgb(0 0 0 / 0.14), 0 8px 16px -4px rgb(0 0 0 / 0.08);
+  --wasl-shadow-glow: 0 0 0 1px rgb(37 211 102 / 0.12), 0 4px 16px -2px rgb(37 211 102 / 0.20);
+  --wasl-shadow-glow-amber: 0 0 0 1px rgb(245 158 11 / 0.15), 0 4px 16px -2px rgb(245 158 11 / 0.25);
+}
+.dark {
+  --wasl-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.20), 0 1px 1px -1px rgb(0 0 0 / 0.20);
+  --wasl-shadow-sm: 0 2px 4px -1px rgb(0 0 0 / 0.30), 0 1px 2px -1px rgb(0 0 0 / 0.20);
+  --wasl-shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.40), 0 2px 4px -2px rgb(0 0 0 / 0.30);
+  --wasl-shadow-lg: 0 12px 24px -4px rgb(0 0 0 / 0.50), 0 4px 8px -2px rgb(0 0 0 / 0.35);
+  --wasl-shadow-xl: 0 24px 48px -8px rgb(0 0 0 / 0.60), 0 8px 16px -4px rgb(0 0 0 / 0.40);
+  --wasl-shadow-glow: 0 0 0 1px rgb(37 211 102 / 0.18), 0 4px 20px -2px rgb(37 211 102 / 0.28);
+  --wasl-shadow-glow-amber: 0 0 0 1px rgb(245 158 11 / 0.22), 0 4px 20px -2px rgb(245 158 11 / 0.32);
+}
+
+/* ---- Glassmorphism tiers ----
+   Three tiers of frost for different depth contexts. */
+.wasl-glass-soft {
+  backdrop-filter: blur(8px) saturate(160%);
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  background-color: color-mix(in oklab, var(--background) 65%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.wasl-glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 72%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.wasl-glass-strong {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background-color: color-mix(in oklab, var(--background) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+[data-theme="cirkle"] .wasl-glass-soft {
+  background-color: rgba(253, 252, 249, 0.65);
+  border-color: rgba(194, 160, 96, 0.18);
+}
+[data-theme="cirkle"] .wasl-glass {
+  background-color: rgba(253, 252, 249, 0.72);
+  border-color: rgba(194, 160, 96, 0.22);
+}
+[data-theme="cirkle"] .wasl-glass-strong {
+  background-color: rgba(253, 252, 249, 0.80);
+  border-color: rgba(194, 160, 96, 0.28);
+}
+.dark[data-theme="cirkle"] .wasl-glass-soft {
+  background-color: rgba(26, 26, 20, 0.65);
+}
+.dark[data-theme="cirkle"] .wasl-glass {
+  background-color: rgba(26, 26, 20, 0.72);
+}
+.dark[data-theme="cirkle"] .wasl-glass-strong {
+  background-color: rgba(26, 26, 20, 0.80);
+}
+
+/* ---- Mesh gradient background (alive, premium) ----
+   Subtle multi-radial gradient that gives the auth screen + empty states
+   a sense of depth and movement. */
+.wasl-mesh-bg {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(at 20% 20%, color-mix(in oklab, var(--wasl-green) 18%, transparent) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, color-mix(in oklab, var(--wasl-teal) 22%, transparent) 0px, transparent 50%),
+    radial-gradient(at 0% 80%, color-mix(in oklab, var(--wasl-green) 12%, transparent) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, color-mix(in oklab, var(--wasl-teal) 16%, transparent) 0px, transparent 50%);
+  background-size: 100% 100%;
+  background-attachment: fixed;
+}
+[data-theme="cirkle"] .wasl-mesh-bg {
+  background-image:
+    radial-gradient(at 20% 20%, rgba(194, 160, 96, 0.18) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(26, 74, 90, 0.22) 0px, transparent 50%),
+    radial-gradient(at 0% 80%, rgba(229, 201, 138, 0.14) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(194, 90, 110, 0.16) 0px, transparent 50%);
+}
+
+/* ---- Spring physics animations ----
+   Cubic-bezier curves that feel natural + alive (not robotic linear). */
+@keyframes wasl-spring-in {
+  0%   { opacity: 0; transform: scale(0.92) translateY(8px); }
+  60%  { opacity: 1; transform: scale(1.02) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes wasl-scale-in {
+  0%   { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes wasl-slide-up {
+  0%   { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes wasl-slide-in-right {
+  0%   { opacity: 0; transform: translateX(16px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes wasl-fade-scale {
+  0%   { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.wasl-anim-spring-in { animation: wasl-spring-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.wasl-anim-scale-in  { animation: wasl-scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.wasl-anim-slide-up  { animation: wasl-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.wasl-anim-slide-right { animation: wasl-slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.wasl-anim-fade-scale { animation: wasl-fade-scale 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Staggered entrance — used for lists (conversations, notifications, etc.)
+   Apply .wasl-stagger-1 through .wasl-stagger-8 to children for a cascade. */
+.wasl-stagger-1 { animation-delay: 0.04s; }
+.wasl-stagger-2 { animation-delay: 0.08s; }
+.wasl-stagger-3 { animation-delay: 0.12s; }
+.wasl-stagger-4 { animation-delay: 0.16s; }
+.wasl-stagger-5 { animation-delay: 0.20s; }
+.wasl-stagger-6 { animation-delay: 0.24s; }
+.wasl-stagger-7 { animation-delay: 0.28s; }
+.wasl-stagger-8 { animation-delay: 0.32s; }
+
+/* ---- Shimmer skeleton (perceived performance) ----
+   Loading placeholders that shimmer instead of just spinning. */
+@keyframes wasl-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.wasl-skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--foreground) 6%, transparent) 0%,
+    color-mix(in oklab, var(--foreground) 12%, transparent) 50%,
+    color-mix(in oklab, var(--foreground) 6%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: wasl-shimmer 1.6s ease-in-out infinite;
+  border-radius: 8px;
+}
+.wasl-skeleton-circle {
+  border-radius: 999px;
+}
+
+/* ---- Hover lift micro-interaction ----
+   Subtle translate + shadow on hover for cards. */
+.wasl-hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease-out;
+}
+.wasl-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--wasl-shadow-md);
+}
+
+/* ---- Active accent bar (sidebar conversation) ----
+   A thin gradient bar on the left of the active conversation row. */
+.wasl-active-accent {
+  position: relative;
+}
+.wasl-active-accent::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--wasl-green), var(--wasl-teal));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--wasl-green) 50%, transparent);
+}
+
+/* ---- Premium button sheen ----
+   A subtle moving highlight on primary buttons (auth screen CTAs). */
+.wasl-btn-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.wasl-btn-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  background-position: -100% 0;
+  transition: background-position 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.wasl-btn-sheen:hover::after {
+  background-position: 100% 0;
+}
+
+/* ---- Refined input focus ring ----
+   A soft green glow that grows on focus (not a hard border). */
+.wasl-input-premium {
+  transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.2s ease-out;
+}
+.wasl-input-premium:focus,
+.wasl-input-premium:focus-visible {
+  outline: none;
+  border-color: color-mix(in oklab, var(--wasl-green) 50%, var(--border));
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--wasl-green) 18%, transparent),
+    0 1px 2px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+/* ---- Pill-style date divider ----
+   Refined date dividers in the chat (replaces the wide rule). */
+.wasl-date-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--muted-foreground);
+  box-shadow: var(--wasl-shadow-xs);
+  border: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* ---- Conversation row hover micro-interaction ----
+   Subtle slide-right + bg tint on hover. Active row gets accent + tint. */
+.wasl-conv-row {
+  transition: background-color 0.15s ease-out, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wasl-conv-row:hover {
+  background-color: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.wasl-conv-row:active {
+  transform: scale(0.995);
+}
+
+/* ---- Smooth scroll behavior ----
+   Debounced momentum scrolling on the chat message list. */
+.wasl-smooth-scroll {
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* ---- Scroll-to-bottom button (chat) ----
+   Floating pill button with badge, glassmorphic. */
+.wasl-scroll-bottom-btn {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: var(--wasl-shadow-lg);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out;
+}
+.wasl-scroll-bottom-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--wasl-shadow-xl);
+}
+
+/* ---- Typing indicator (refined 3-dot bounce) ---- */
+.wasl-typing-dot {
+  animation: wasl-typing-bounce 1.4s ease-in-out infinite;
+}
+.wasl-typing-dot:nth-child(2) { animation-delay: 0.16s; }
+.wasl-typing-dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* ---- Toast entrance (slide from bottom-right with spring) ---- */
+@keyframes wasl-toast-in {
+  0%   { opacity: 0; transform: translateY(20px) scale(0.95); }
+  60%  { opacity: 1; transform: translateY(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wasl-toast-anim {
+  animation: wasl-toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---- Dialog backdrop (premium blur) ---- */
+[data-radix-dialog-overlay],
+[data-slot="dialog-overlay"] {
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  background-color: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+[data-slot="dialog-content"] {
+  box-shadow: var(--wasl-shadow-xl);
+  animation: wasl-spring-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---- Empty state gradient orb ----
+   A soft glowing orb behind empty-state icons for visual delight. */
+.wasl-empty-orb {
+  position: relative;
+}
+.wasl-empty-orb::before {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--wasl-green) 22%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(8px);
+  z-index: -1;
+  animation: wasl-logo-breathe 3s ease-in-out infinite;
+}
+
+/* ---- Reduced motion: disable all the premium animations ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-anim-spring-in,
+  .wasl-anim-scale-in,
+  .wasl-anim-slide-up,
+  .wasl-anim-slide-right,
+  .wasl-anim-fade-scale,
+  .wasl-toast-anim,
+  .wasl-skeleton,
+  .wasl-empty-orb::before,
+  [data-slot="dialog-content"] {
+    animation: none !important;
+  }
+  .wasl-hover-lift:hover {
+    transform: none !important;
+  }
+  .wasl-smooth-scroll {
+    scroll-behavior: auto;
+  }
+}

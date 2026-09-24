@@ -42,7 +42,6 @@ import { ContactsDialog } from './contacts-dialog'
 import { BookmarksDialog } from './bookmarks-dialog'
 import { GlobalStarredDialog } from './global-starred-dialog'
 import { GlobalSearchDialog } from './global-search-dialog'
-import { ConversationRowSkeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -421,7 +420,7 @@ export function Sidebar({
               }
             }}
             placeholder="Search or start a new chat"
-            className="pl-9 pr-12 bg-muted/50 border-0 h-9 rounded-full"
+            className="wasl-input-premium pl-9 pr-12 bg-muted/50 border-0 h-9 rounded-full"
           />
           {!search && (
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-medium text-muted-foreground/60 bg-muted-foreground/10 px-1.5 py-0.5 rounded border border-muted-foreground/15 pointer-events-none">
@@ -531,15 +530,36 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto overflow-x-hidden wasl-scroll bg-[var(--wasl-sidebar-bg)]">
         <StoryBar />
         {loading && conversations.length === 0 ? (
-          // Skeleton placeholders while the conversation list loads.
+          // Shimmer skeleton placeholders while the conversation list loads.
+          // Uses the premium wasl-skeleton utility (Task 69) — inline rows
+          // of avatar circle + name + preview text. Six rows is enough to
+          // fill the visible sidebar area on first paint.
           <div className="py-2">
-            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
-              <ConversationRowSkeleton key={i} />
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-3 px-3 py-3 wasl-anim-slide-up wasl-stagger-${i + 1}`}
+              >
+                <div
+                  className="wasl-skeleton wasl-skeleton-circle shrink-0"
+                  style={{ width: 48, height: 48 }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="wasl-skeleton" style={{ width: 120, height: 12 }} />
+                    <div className="wasl-skeleton" style={{ width: 32, height: 8 }} />
+                  </div>
+                  <div className="wasl-skeleton" style={{ width: 180, height: 10, marginTop: 4 }} />
+                </div>
+              </div>
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground">
-            <WaslLogo size={56} animated className="mb-3 opacity-80" />
+            {/* Empty-state glowing orb behind a large GraduationCap icon. */}
+            <div className="wasl-empty-orb mb-4 flex items-center justify-center" style={{ width: 96, height: 96 }}>
+              <GraduationCap className="w-12 h-12 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" strokeWidth={1.5} />
+            </div>
             <p className="text-sm">
               {search
                 ? 'No conversations match your search.'
@@ -547,7 +567,7 @@ export function Sidebar({
             </p>
           </div>
         ) : (
-          sorted.map((c) => (
+          sorted.map((c, i) => (
             <ConversationRow
               key={c.id}
               conversation={c}
@@ -559,6 +579,7 @@ export function Sidebar({
               onDelete={() => handleDeleteConversation(c.id)}
               onArchive={() => handleArchive(c.id)}
               onMarkUnread={() => handleMarkUnread(c.id)}
+              index={i}
             />
           ))
         )}
@@ -702,6 +723,7 @@ function ConversationRow({
   onDelete,
   onArchive,
   onMarkUnread,
+  index = 0,
 }: {
   conversation: Conversation
   active: boolean
@@ -712,6 +734,7 @@ function ConversationRow({
   onDelete: () => void
   onArchive: () => void
   onMarkUnread?: () => void
+  index?: number
 }) {
   const last = conversation.lastMessage
   const otherUser = !conversation.isGroup
@@ -778,19 +801,20 @@ function ConversationRow({
       onClick={onClick}
       className={cn(
         'group relative flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border/60',
-        'wasl-conv-row',
+        'wasl-conv-row wasl-hover-lift',
+        // Staggered cascade entrance — applies only to the first 6 rows
+        // so the sidebar feels alive on first load without making every
+        // subsequent re-render re-animate.
+        index < 6 && `wasl-anim-slide-up wasl-stagger-${index + 1}`,
         active
-          ? 'wasl-conv-row-active bg-muted/70'
+          ? 'wasl-conv-row-active wasl-active-accent bg-muted/70'
           : 'hover:bg-muted/40 bg-[var(--wasl-sidebar-bg)]'
       )}
     >
-      {/* Selected conversation: left accent bar (3px wide, slides in) */}
-      {active && (
-        <span
-          aria-hidden
-          className="wasl-conv-accent absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--wasl-green)]"
-        />
-      )}
+      {/* Selected conversation: gradient accent bar — rendered by the
+          .wasl-active-accent class via ::before (green→teal gradient with
+          a soft glow). The previous solid-color span is removed in favor
+          of this premium treatment. */}
       {conversation.isGroup ? (
         <WaslGroupAvatar
           name={conversation.name}

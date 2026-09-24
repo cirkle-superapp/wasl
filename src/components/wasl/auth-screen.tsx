@@ -232,7 +232,8 @@ export function AuthScreen() {
   const signupIdType = signupIdentifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
   const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
 
-  // Shared inline style objects
+  // Shared inline style objects — wasl-input-premium class adds the soft
+  // green focus glow on top of these base styles.
   const inputStyle: React.CSSProperties = {
     width: '100%',
     height: '44px',
@@ -244,7 +245,7 @@ export function AuthScreen() {
     background: C.cream,
     color: C.charcoal,
     outline: 'none',
-    transition: 'border-color 0.2s, box-shadow 0.2s',
+    transition: 'border-color 0.2s, box-shadow 0.2s, background-color 0.2s',
     boxSizing: 'border-box',
   }
   const labelStyle: React.CSSProperties = {
@@ -269,16 +270,19 @@ export function AuthScreen() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: ANIM_CSS }} />
-      <div style={{
-        minHeight: '100vh',
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        background: `linear-gradient(135deg, ${C.teal} 0%, ${C.tealLight} 40%, ${C.teal} 70%, ${C.gold} 100%)`,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
+      <div
+        className="wasl-mesh-bg"
+        data-theme="cirkle"
+        style={{
+          minHeight: '100vh',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          background: `linear-gradient(135deg, ${C.teal} 0%, ${C.tealLight} 40%, ${C.teal} 70%, ${C.gold} 100%)`,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
         {/* Futuristic background glow orbs */}
         <div style={{
           position: 'absolute',
@@ -311,13 +315,22 @@ export function AuthScreen() {
           position: 'relative',
           zIndex: 1,
         }}>
-          <Cinematic delay="0.2s" anim="cinenav-logo">
-            <div className="wasl-float" style={{ display: 'inline-block', marginBottom: '16px' }}>
-              <CirkleMark size={80} animated />
+          {/* Logo orb — staggered slide-up entrance + persistent float +
+              soft gold glow drop-shadow for a premium feel. Enlarged to 96px. */}
+          <div className="wasl-anim-slide-up wasl-stagger-1">
+            <div
+              className="wasl-float"
+              style={{
+                display: 'inline-block',
+                marginBottom: '16px',
+                filter: 'drop-shadow(0 0 24px rgba(194, 160, 96, 0.45)) drop-shadow(0 0 48px rgba(26, 74, 90, 0.25))',
+              }}
+            >
+              <CirkleMark size={96} animated />
             </div>
-          </Cinematic>
+          </div>
 
-          <Cinematic delay="0.5s">
+          <div className="wasl-anim-slide-up wasl-stagger-2">
             <h1 className="wasl-shimmer-text" style={{
               fontSize: '2.5rem',
               fontWeight: 800,
@@ -325,16 +338,16 @@ export function AuthScreen() {
               margin: '0 0 4px',
               lineHeight: 1,
             }}>Wasl</h1>
-          </Cinematic>
+          </div>
 
-          <Cinematic delay="0.7s">
+          <div className="wasl-anim-slide-up wasl-stagger-3">
             <p style={{
               color: 'rgba(255,255,255,0.85)',
               fontSize: '0.875rem',
               margin: '0 0 16px',
               letterSpacing: '0.05em',
             }}>Simple. Secure. Connected.</p>
-          </Cinematic>
+          </div>
 
           <Cinematic delay="0.9s">
             <div style={{
@@ -375,28 +388,33 @@ export function AuthScreen() {
           position: 'relative',
           zIndex: 1,
         }}>
-          <Cinematic delay="1.1s" anim="cinenav-card">
-            <div className="wasl-glow-card" style={{
-              width: '100%',
-              maxWidth: '420px',
-              background: 'rgba(253, 252, 249, 0.95)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              borderRadius: '24px',
-              border: `1px solid ${C.gold}44`,
-              boxShadow: `0 20px 60px rgba(26, 74, 90, 0.3), 0 0 40px rgba(194, 160, 96, 0.1)`,
-              padding: '32px 28px 28px',
-              boxSizing: 'border-box' as const,
-            }}>
-              {/* Tab switcher */}
-              <div style={{
-                display: 'flex',
-                padding: '4px',
-                background: `rgba(26, 74, 90, 0.06)`,
-                borderRadius: '14px',
-                border: `1px solid ${C.teal}22`,
-                marginBottom: '24px',
+          <div className="wasl-anim-spring-in">
+            <div
+              className="wasl-glow-card wasl-glass-strong"
+              style={{
+                width: '100%',
+                maxWidth: '420px',
+                background: 'rgba(253, 252, 249, 0.95)',
+                backdropFilter: 'blur(24px) saturate(200%)',
+                WebkitBackdropFilter: 'blur(24px) saturate(200%)',
+                borderRadius: '24px',
+                border: `1px solid ${C.gold}44`,
+                boxShadow: 'var(--wasl-shadow-xl), 0 0 40px rgba(194, 160, 96, 0.18)',
+                padding: '32px 28px 28px',
+                boxSizing: 'border-box' as const,
               }}>
+              {/* Tab switcher — staggered slide-up entrance. */}
+              <div
+                className="wasl-anim-slide-up wasl-stagger-4"
+                style={{
+                  display: 'flex',
+                  padding: '4px',
+                  background: `rgba(26, 74, 90, 0.06)`,
+                  borderRadius: '14px',
+                  border: `1px solid ${C.teal}22`,
+                  marginBottom: '24px',
+                }}
+              >
                 {(['signup', 'login'] as const).map((tab) => (
                   <button
                     key={tab}
@@ -445,122 +463,108 @@ export function AuthScreen() {
                 </p>
               </Cinematic>
 
-              {/* Form */}
-              <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Form — staggered entrance via the form element itself. */}
+              <form onSubmit={submit} className="wasl-anim-slide-up wasl-stagger-5" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {mode === 'signup' ? (
                   <>
                     {/* Name + Username */}
-                    <Cinematic delay="1.4s">
-                      <div>
-                        <label style={labelStyle} htmlFor="name">Your name</label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
-                          <input
-                            id="name"
-                            type="text"
-                            placeholder="e.g. Ahmad Ali"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            autoComplete="name"
-                            disabled={loading}
-                            style={inputStyle}
-                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
-                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
-                          />
-                        </div>
-                      </div>
-                    </Cinematic>
-
-                    <Cinematic delay="1.5s">
-                      <div>
-                        <label style={labelStyle} htmlFor="username">Cirkle username</label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
-                          <input
-                            id="username"
-                            type="text"
-                            placeholder="ahmad_ali"
-                            value={username}
-                            onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
-                            autoComplete="username"
-                            disabled={loading}
-                            style={inputStyle}
-                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
-                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
-                          />
-                          {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /></span>}
-                          {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
-                          {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
-                        </div>
-                      </div>
-                    </Cinematic>
-
-                    {/* Email/Phone (optional) */}
-                    <Cinematic delay="1.6s">
-                      <div>
-                        <label style={labelStyle} htmlFor="signup-id">Cirkle email or phone <span style={{ fontWeight: 400, color: C.teal + '66' }}>(optional)</span></label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={iconWrapStyle}><SignupIdIcon style={{ width: 16, height: 16 }} /></span>
-                          <input
-                            id="signup-id"
-                            type="text"
-                            placeholder="you@cirkle.app or +20 100 123 4567"
-                            value={signupIdentifier}
-                            onChange={(e) => setSignupIdentifier(e.target.value)}
-                            autoComplete="off"
-                            disabled={loading}
-                            style={inputStyle}
-                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
-                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
-                          />
-                        </div>
-                        <p style={{ fontSize: '11px', color: C.teal + '77', margin: '4px 0 0' }}>
-                          Add an email or phone so you can log in later.
-                        </p>
-                      </div>
-                    </Cinematic>
-                  </>
-                ) : (
-                  <Cinematic delay="1.4s">
                     <div>
-                      <label style={labelStyle} htmlFor="identifier">Email, phone, or username</label>
+                      <label style={labelStyle} htmlFor="name">Your name</label>
                       <div style={{ position: 'relative' }}>
-                        <span style={iconWrapStyle}><LoginIcon style={{ width: 16, height: 16 }} /></span>
+                        <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
                         <input
-                          id="identifier"
+                          id="name"
                           type="text"
-                          placeholder="you@cirkle.app, +20..., or @username"
-                          value={identifier}
-                          onChange={(e) => setIdentifier(e.target.value)}
-                          autoComplete="username"
+                          className="wasl-input-premium"
+                          placeholder="e.g. Ahmad Ali"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          autoComplete="name"
                           disabled={loading}
                           style={inputStyle}
-                          onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
-                          onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
                         />
                       </div>
                     </div>
-                  </Cinematic>
+
+                    <div>
+                      <label style={labelStyle} htmlFor="username">Cirkle username</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
+                        <input
+                          id="username"
+                          type="text"
+                          className="wasl-input-premium"
+                          placeholder="ahmad_ali"
+                          value={username}
+                          onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
+                          autoComplete="username"
+                          disabled={loading}
+                          style={inputStyle}
+                        />
+                        {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /></span>}
+                        {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
+                        {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
+                      </div>
+                    </div>
+
+                    {/* Email/Phone (optional) */}
+                    <div>
+                      <label style={labelStyle} htmlFor="signup-id">Cirkle email or phone <span style={{ fontWeight: 400, color: C.teal + '66' }}>(optional)</span></label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={iconWrapStyle}><SignupIdIcon style={{ width: 16, height: 16 }} /></span>
+                        <input
+                          id="signup-id"
+                          type="text"
+                          className="wasl-input-premium"
+                          placeholder="you@cirkle.app or +20 100 123 4567"
+                          value={signupIdentifier}
+                          onChange={(e) => setSignupIdentifier(e.target.value)}
+                          autoComplete="off"
+                          disabled={loading}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <p style={{ fontSize: '11px', color: C.teal + '77', margin: '4px 0 0' }}>
+                        Add an email or phone so you can log in later.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label style={labelStyle} htmlFor="identifier">Email, phone, or username</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={iconWrapStyle}><LoginIcon style={{ width: 16, height: 16 }} /></span>
+                      <input
+                        id="identifier"
+                        type="text"
+                        className="wasl-input-premium"
+                        placeholder="you@cirkle.app, +20..., or @username"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        autoComplete="username"
+                        disabled={loading}
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
                 )}
 
                 {/* Password */}
-                <Cinematic delay={mode === 'signup' ? '1.7s' : '1.5s'}>
-                  <div>
-                    <label style={labelStyle} htmlFor="password">Password</label>
-                    <div style={{ position: 'relative' }}>
-                      <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
-                      <input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                        disabled={loading}
-                        style={{ ...inputStyle, paddingRight: '40px' }}
-                        onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
-                        onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
-                      />
+                <div>
+                  <label style={labelStyle} htmlFor="password">Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      className="wasl-input-premium"
+                      placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                      disabled={loading}
+                      style={{ ...inputStyle, paddingRight: '40px' }}
+                    />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -582,12 +586,13 @@ export function AuthScreen() {
                       </button>
                     </div>
                   </div>
-                </Cinematic>
 
-                {/* Submit button */}
-                <Cinematic delay={mode === 'signup' ? '1.8s' : '1.6s'}>
+                {/* Submit button — wasl-btn-sheen adds a moving highlight sweep
+                    on hover. Combined with the gold gradient for premium CTA. */}
+                <div className="wasl-anim-slide-up wasl-stagger-6">
                   <button
                     type="submit"
+                    className="wasl-btn-sheen"
                     disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
                     style={{
                       width: '100%',
@@ -607,6 +612,8 @@ export function AuthScreen() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
+                      position: 'relative' as const,
+                      overflow: 'hidden' as const,
                     }}
                     onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${C.gold}66` } }}
                     onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 16px ${C.gold}44` }}
@@ -614,7 +621,7 @@ export function AuthScreen() {
                     {loading && <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} />}
                     {mode === 'signup' ? 'Sign up' : 'Log in'}
                   </button>
-                </Cinematic>
+                </div>
               </form>
 
               {/* Divider */}
@@ -630,7 +637,7 @@ export function AuthScreen() {
               </div>
 
               {/* Demo button */}
-              <Cinematic delay={mode === 'signup' ? '1.9s' : '1.7s'}>
+              <div className="wasl-anim-slide-up wasl-stagger-6">
                 <button
                   type="button"
                   onClick={handleDemoLogin}
@@ -658,9 +665,9 @@ export function AuthScreen() {
                   {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /> : <Sparkles style={{ width: 16, height: 16 }} />}
                   Try the rich demo
                 </button>
-              </Cinematic>
+              </div>
             </div>
-          </Cinematic>
+          </div>
         </div>
 
         {/* Footer */}
