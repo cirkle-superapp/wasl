@@ -313,13 +313,17 @@ export function Sidebar({
       {/* Header */}
       <div
         className={cn(
-          'text-white px-4 py-3 flex items-center justify-between gap-2',
+          'text-white px-4 py-3 flex items-center justify-between gap-2 wasl-header-animated',
           isCirkle ? 'wasl-gradient-hero-cirkle' : 'bg-[var(--wasl-teal)]'
         )}
+        style={!isCirkle ? {
+          background: 'linear-gradient(135deg, var(--wasl-teal) 0%, var(--wasl-teal-dark) 50%, var(--wasl-teal) 100%)',
+          backgroundSize: '200% 200%',
+        } : undefined}
       >
         <div className="flex items-center gap-2 min-w-0 text-white">
           <WaslLogo size={36} animated monochrome={!isCirkle} />
-          <div className="font-bold text-lg leading-none truncate">Wasl</div>
+          <div className="font-bold text-lg leading-none truncate wasl-text-gradient">Wasl</div>
         </div>
         <div className="flex items-center gap-1">
           <Button

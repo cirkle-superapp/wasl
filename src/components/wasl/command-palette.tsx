@@ -56,19 +56,20 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 gap-0">
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+      <DialogContent className="max-w-md p-0 gap-0 wasl-command-palette">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Search className="w-4 h-4 text-muted-foreground" />
           <input autoFocus value={query} onChange={e => { setQuery(e.target.value); setSelectedIndex(0) }}
             onKeyDown={onKeyDown} placeholder="Type a command or search..."
-            className="flex-1 bg-transparent outline-none text-sm" />
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">⌘K</kbd>
+            className="flex-1 bg-transparent outline-none text-sm wasl-input-premium" />
+          <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground font-mono">⌘K</kbd>
         </div>
-        <div className="max-h-72 overflow-y-auto wasl-scroll py-1">
+        <div className="max-h-72 overflow-y-auto wasl-scroll py-1 px-1">
           {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">No results</p>}
           {filtered.map((cmd, i) => (
             <button key={cmd.id} type="button" onClick={cmd.action}
-              className={cn('w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors',
+              data-selected={i === selectedIndex ? 'true' : undefined}
+              className={cn('wasl-command-item w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm',
                 i === selectedIndex ? 'bg-[var(--wasl-green)]/10' : 'hover:bg-muted/50')}>
               <cmd.icon className="w-4 h-4 text-muted-foreground shrink-0" />
               <span className="truncate">{cmd.label}</span>

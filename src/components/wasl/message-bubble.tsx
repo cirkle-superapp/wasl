@@ -581,7 +581,7 @@ export function MessageBubble({
   if (message.type === 'voice' && message.content.startsWith('data:audio')) {
     return (
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
-        <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out' : 'wasl-bubble-in')}>
+        <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out wasl-bubble-tail-out' : 'wasl-bubble-in wasl-bubble-tail-in')}>
           {isGroup && !mine && senderName && (
             <SenderHeader
               senderName={senderName}
@@ -812,10 +812,12 @@ export function MessageBubble({
           onDragStart={onDragStart}
           className={cn(
             'px-2.5 py-1.5 shadow-sm relative',
-            mine ? 'wasl-bubble-out' : 'wasl-bubble-in',
+            mine ? 'wasl-bubble-out wasl-bubble-tail-out' : 'wasl-bubble-in wasl-bubble-tail-in',
             // WhatsApp-style "tail" — when grouped with the previous message
-            // from the same sender, tighten the connecting corner's radius.
-            prevSameSender && (mine ? 'wasl-bubble-grouped-out' : 'wasl-bubble-grouped-in'),
+            // from the same sender, tighten the connecting corner's radius
+            // AND hide the pointy tail (only the last message in a group
+            // gets the tail).
+            prevSameSender && (mine ? 'wasl-bubble-grouped-out wasl-bubble-grouped' : 'wasl-bubble-grouped-in wasl-bubble-grouped'),
             blocked && 'wasl-protected-bubble'
           )}
           style={blocked ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}
@@ -1022,7 +1024,7 @@ export function MessageBubble({
                   type="button"
                   onClick={() => onReact?.(g.emoji)}
                   className={cn(
-                    'wasl-reaction-pill inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors',
+                    'wasl-reaction-pill wasl-reaction-pop inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors wasl-tap-scale',
                     mineReacted
                       ? 'bg-[var(--wasl-green)]/15 border-[var(--wasl-green)]/50 text-foreground'
                       : 'bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-foreground hover:bg-muted'

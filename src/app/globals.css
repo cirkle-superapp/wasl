@@ -1923,3 +1923,203 @@ kbd {
     transform: none !important;
   }
 }
+
+/* ============================================================================
+   TASK 71 — SIGNATURE UI: BUBBLE TAILS, GRADIENT TEXT, ANIMATED HEADER,
+   SEND WHOOSH, REACTION POP, COMMAND PALETTE, FAB, SKELETON MORPH
+   The "truly memorable" tier — what makes Wasl instantly recognizable.
+   ============================================================================ */
+
+/* ---- Chat bubble tails (the signature WhatsApp/iMessage pointy corner) ----
+   A CSS-only tail that gives bubbles that classic chat feel.
+   Applied via .wasl-bubble-tail-out (outgoing, right side, tail bottom-right)
+   and .wasl-bubble-tail-in (incoming, left side, tail bottom-left).
+   The tail is a pseudo-element rotated 45deg, colored to match the bubble. */
+.wasl-bubble-tail-out {
+  position: relative;
+}
+.wasl-bubble-tail-out::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--wasl-bubble-out);
+  border-bottom-left-radius: 50%;
+  transform: rotate(45deg) translate(-2px, -2px);
+  z-index: 0;
+}
+.wasl-bubble-tail-in {
+  position: relative;
+}
+.wasl-bubble-tail-in::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--wasl-bubble-in);
+  border-bottom-right-radius: 50%;
+  transform: rotate(45deg) translate(2px, -2px);
+  z-index: 0;
+}
+/* Dark mode: bubble-in is a different color, so the tail must match */
+.dark .wasl-bubble-tail-in::after {
+  background: var(--wasl-bubble-in);
+}
+/* When bubble is grouped (consecutive from same sender), hide the tail
+   except on the last message in the group. */
+.wasl-bubble-tail-out.wasl-bubble-grouped::after,
+.wasl-bubble-tail-in.wasl-bubble-grouped::after {
+  display: none;
+}
+
+/* ---- Gradient text headings ----
+   Premium gradient-filled text for the Wasl wordmark + section titles.
+   Uses background-clip: text for the gradient fill. */
+.wasl-text-gradient {
+  background: linear-gradient(135deg, var(--wasl-green) 0%, var(--wasl-teal) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+[data-theme="cirkle"] .wasl-text-gradient {
+  background: linear-gradient(135deg, #e5c98a 0%, #c2a060 40%, #c25a6e 70%, #1a4a5a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.wasl-text-gradient-gold {
+  background: linear-gradient(135deg, #e5c98a 0%, #c2a060 50%, #9a7a3e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ---- Animated sidebar header gradient ----
+   The sidebar header gets a slowly-shifting gradient instead of a flat
+   solid color. Subtle but adds life to the always-visible header. */
+@keyframes wasl-header-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.wasl-header-animated {
+  background-size: 200% 200%;
+  animation: wasl-header-shift 8s ease-in-out infinite;
+}
+
+/* ---- Send button whoosh ----
+   When the user sends a message, the send button does a quick whoosh:
+   scale up → fly right → reset. Apply .wasl-whoosh to the button temporarily. */
+@keyframes wasl-whoosh {
+  0%   { transform: scale(1) translateX(0); }
+  30%  { transform: scale(1.2) translateX(4px); }
+  100% { transform: scale(1) translateX(0); }
+}
+.wasl-whoosh {
+  animation: wasl-whoosh 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---- Reaction pop ----
+   When a user adds a reaction, the emoji bounces in with a spring. */
+@keyframes wasl-reaction-pop {
+  0%   { transform: scale(0) rotate(-15deg); }
+  60%  { transform: scale(1.3) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.wasl-reaction-pop {
+  animation: wasl-reaction-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---- Premium command palette (⌘K) ----
+   Glassmorphic overlay with spring entrance + keyboard nav highlight. */
+.wasl-command-palette {
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: var(--wasl-shadow-xl);
+  border-radius: 20px;
+  animation: wasl-spring-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-command-item {
+  transition: background-color 0.1s ease-out, transform 0.1s ease-out;
+  border-radius: 10px;
+}
+.wasl-command-item[data-selected="true"] {
+  background-color: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  transform: translateX(4px);
+}
+
+/* ---- Floating action button (FAB) ----
+   Premium floating button for "New chat" with gradient + shadow + spring. */
+.wasl-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--wasl-green) 0%, var(--wasl-teal) 100%);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--wasl-shadow-lg), 0 0 0 1px color-mix(in oklab, var(--wasl-green) 20%, transparent);
+  cursor: pointer;
+  z-index: 30;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease-out;
+  animation: wasl-scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-fab:hover {
+  transform: scale(1.08) rotate(5deg);
+  box-shadow: var(--wasl-shadow-xl), 0 0 0 2px color-mix(in oklab, var(--wasl-green) 30%, transparent);
+}
+.wasl-fab:active {
+  transform: scale(0.95);
+}
+[data-theme="cirkle"] .wasl-fab {
+  background: linear-gradient(135deg, #e5c98a 0%, #c2a060 40%, #c25a6e 70%, #1a4a5a 100%);
+}
+
+/* ---- Skeleton → content morph ----
+   When data loads, the skeleton smoothly morphs into the real content
+   (not just a hard swap). Apply .wasl-morph-in to the real content. */
+@keyframes wasl-morph-in {
+  0%   { opacity: 0; transform: scale(0.98); filter: blur(4px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+.wasl-morph-in {
+  animation: wasl-morph-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---- Gradient mesh avatar (for users without a photo) ----
+   Instead of a flat color, avatars get a subtle gradient mesh background. */
+.wasl-avatar-mesh {
+  background-image:
+    linear-gradient(135deg, var(--avatar-color, var(--wasl-green)) 0%, transparent 50%),
+    radial-gradient(circle at 30% 30%, color-mix(in oklab, var(--avatar-color, var(--wasl-green)) 40%, white) 0%, transparent 60%),
+    var(--avatar-color, var(--wasl-green));
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-header-animated,
+  .wasl-whoosh,
+  .wasl-reaction-pop,
+  .wasl-command-palette,
+  .wasl-fab,
+  .wasl-morph-in {
+    animation: none !important;
+  }
+  .wasl-fab:hover {
+    transform: none !important;
+  }
+}

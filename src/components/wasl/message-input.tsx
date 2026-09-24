@@ -55,6 +55,8 @@ export function MessageInput({
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
+  // Send button whoosh — briefly set to true on send for the scale+fly animation
+  const [whoosh, setWhoosh] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
   // Lock override for the next message:
   //   null  → use the user's `defaultProtectMessages` setting
@@ -386,6 +388,9 @@ export function MessageInput({
     const trimmed = value.trim()
     if (!trimmed || sending) return
     setSending(true)
+    // Trigger the whoosh animation on the send button
+    setWhoosh(true)
+    setTimeout(() => setWhoosh(false), 400)
     try {
       await onSend(trimmed, 'text', { protected: effectiveProtect, businessId: selectedBusinessId || undefined })
       setValue('')
@@ -960,10 +965,11 @@ export function MessageInput({
             onClick={value.trim() ? handleSend : startRecording}
             disabled={sending}
             className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 text-white',
+              'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 text-white wasl-tap-scale',
               value.trim()
                 ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] wasl-send-pulse shadow-md shadow-[var(--wasl-green)]/30'
-                : 'bg-gray-400 hover:bg-gray-500'
+                : 'bg-gray-400 hover:bg-gray-500',
+              whoosh && 'wasl-whoosh'
             )}
             title={value.trim() ? 'Send' : 'Record voice message'}
             aria-label={value.trim() ? 'Send message' : 'Record voice message'}
