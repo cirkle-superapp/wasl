@@ -322,10 +322,15 @@ export function SchoolAdminDialog({
               </DialogTitle>
             </DialogHeader>
             <div className="flex flex-col items-center py-2">
-              <QRCodeDisplay
-                value={formatSchoolConnectNumber(school.code, qrStudent.studentId, qrStudent.joinCode).replace(/\s/g, '')}
-                size={200}
-              />
+              <div className="wasl-qr-frame wasl-anim-scale-in">
+                <QRCodeDisplay
+                  value={formatSchoolConnectNumber(school.code, qrStudent.studentId, qrStudent.joinCode).replace(/\s/g, '')}
+                  size={200}
+                />
+                <div className="wasl-qr-logo-overlay" style={{ background: school.logoColor || '#075E54', color: 'white', fontWeight: 'bold' }}>
+                  {school.name.charAt(0)}
+                </div>
+              </div>
               <div className="mt-3 font-semibold text-sm">{qrStudent.fullName}</div>
               <div className="font-mono text-xs text-muted-foreground mt-0.5">{qrStudent.studentId}</div>
               <div className="font-mono text-[11px] text-muted-foreground mt-0.5">{qrStudent.joinCode}</div>

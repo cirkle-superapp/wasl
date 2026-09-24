@@ -1704,3 +1704,222 @@ kbd {
     scroll-behavior: auto;
   }
 }
+
+/* ============================================================================
+   TASK 70 — NEXT-LEVEL UI UPSCALE
+   Animated mesh, directional bubbles, avatar rings, glass dropdowns,
+   button ripples, QR frames, voice waveforms, connected smart-reply.
+   ============================================================================ */
+
+/* ---- Animated moving mesh background ----
+   The static .wasl-mesh-bg gets a slow-shifting variant that makes the
+   auth screen + empty states feel "alive". The gradient positions move
+   over 20s for a subtle, breathing atmosphere. */
+@keyframes wasl-mesh-shift {
+  0%   { background-position: 0% 0%, 100% 0%, 0% 100%, 100% 100%; }
+  25%  { background-position: 10% 5%, 90% 10%, 5% 90%, 95% 85%; }
+  50%  { background-position: 5% 10%, 85% 5%, 10% 85%, 90% 90%; }
+  75%  { background-position: 10% 5%, 90% 10%, 5% 90%, 95% 85%; }
+  100% { background-position: 0% 0%, 100% 0%, 0% 100%, 100% 100%; }
+}
+.wasl-mesh-animated {
+  background-size: 120% 120%, 120% 120%, 120% 120%, 120% 120%;
+  animation: wasl-mesh-shift 20s ease-in-out infinite;
+}
+
+/* ---- Directional bubble entrance ----
+   Incoming messages slide from the left, outgoing from the right.
+   Both use spring physics for a natural feel. */
+@keyframes wasl-bubble-in-left {
+  0%   { opacity: 0; transform: translateX(-12px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes wasl-bubble-in-right {
+  0%   { opacity: 0; transform: translateX(12px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+.wasl-bubble-enter-left {
+  animation: wasl-bubble-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-bubble-enter-right {
+  animation: wasl-bubble-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---- Avatar gradient ring ----
+   A premium gradient ring (gold→teal) around avatars. Works with any
+   avatar size — the ring is drawn via a wrapping element. */
+.wasl-avatar-ring {
+  position: relative;
+}
+.wasl-avatar-ring::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--wasl-green) 0%, var(--wasl-teal) 100%);
+  z-index: -1;
+}
+[data-theme="cirkle"] .wasl-avatar-ring::before {
+  background: linear-gradient(135deg, #e5c98a 0%, #c25a6e 50%, #1a4a5a 100%);
+}
+
+/* ---- Refined online pulse ----
+   A softer, more premium online dot with a double-ring pulse. */
+@keyframes wasl-online-pulse-premium {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 6px color-mix(in oklab, var(--wasl-green) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--wasl-green) 0%, transparent); }
+}
+.wasl-online-premium {
+  animation: wasl-online-pulse-premium 2.5s ease-in-out infinite;
+}
+
+/* ---- Glassmorphic dropdown menu ----
+   All Radix dropdown menus get a frosted glass background + spring entrance. */
+[data-radix-popper-content-wrapper] [role="menu"] {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: var(--wasl-shadow-lg);
+  border-radius: 14px;
+  animation: wasl-scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+[data-radix-popper-content-wrapper] [role="menuitem"] {
+  transition: background-color 0.12s ease-out;
+  border-radius: 8px;
+}
+
+/* ---- Button ripple + tap scale ----
+   A subtle scale-down on active (tap) for tactile feedback. */
+.wasl-tap-scale {
+  transition: transform 0.08s ease-out;
+}
+.wasl-tap-scale:active {
+  transform: scale(0.97);
+}
+
+/* ---- Ripple effect on click ----
+   Creates a circular ripple from the click point. Apply .wasl-ripple to
+   any button + add the JS handler (or use the CSS-only version below). */
+.wasl-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.wasl-ripple::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, color-mix(in oklab, currentColor 20%, transparent) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+  pointer-events: none;
+}
+.wasl-ripple:active::after {
+  opacity: 1;
+  transform: scale(1.5);
+  transition: 0s;
+}
+
+/* ---- Premium QR code frame ----
+   A branded frame around QR codes with a logo overlay in the center. */
+.wasl-qr-frame {
+  position: relative;
+  padding: 16px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: var(--wasl-shadow-lg);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.wasl-qr-frame::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  border: 2px solid var(--wasl-green);
+  border-radius: 12px;
+  opacity: 0.15;
+  pointer-events: none;
+}
+.wasl-qr-logo-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 0 0 4px white;
+}
+
+/* ---- Voice message waveform ----
+   Animated vertical bars that simulate an audio waveform. */
+@keyframes wasl-waveform-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+.wasl-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+.wasl-waveform-bar {
+  width: 3px;
+  background: currentColor;
+  border-radius: 2px;
+  transform-origin: center;
+  animation: wasl-waveform-bar 0.8s ease-in-out infinite;
+}
+.wasl-waveform-bar:nth-child(odd) { animation-delay: 0.1s; }
+.wasl-waveform-bar:nth-child(3n)  { animation-delay: 0.2s; }
+.wasl-waveform-bar:nth-child(4n)  { animation-delay: 0.3s; }
+.wasl-waveform-bar:nth-child(5n)  { animation-delay: 0.15s; }
+
+/* ---- Connected smart-reply bar ----
+   The smart-reply chips get a subtle gradient connector to the input
+   field, making them feel like part of the composer rather than floating. */
+.wasl-smart-reply-connected {
+  position: relative;
+}
+.wasl-smart-reply-connected::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--wasl-green) 30%, transparent), transparent);
+}
+
+/* ---- Premium focus glow on interactive elements ----
+   A softer, wider focus ring for buttons + interactive elements. */
+.wasl-focus-glow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wasl-green) 25%, transparent),
+              0 0 0 4px color-mix(in oklab, var(--wasl-green) 10%, transparent);
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-mesh-animated,
+  .wasl-bubble-enter-left,
+  .wasl-bubble-enter-right,
+  .wasl-online-premium,
+  .wasl-waveform-bar,
+  [data-radix-popper-content-wrapper] [role="menu"] {
+    animation: none !important;
+  }
+  .wasl-tap-scale:active {
+    transform: none !important;
+  }
+}

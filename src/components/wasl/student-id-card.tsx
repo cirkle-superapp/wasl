@@ -158,7 +158,12 @@ export function StudentIdCard({ school, student }: StudentIdCardProps) {
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center py-2">
-            <QRCodeDisplay value={connectNumber.replace(/\s/g, '')} size={200} />
+            <div className="wasl-qr-frame wasl-anim-scale-in">
+              <QRCodeDisplay value={connectNumber.replace(/\s/g, '')} size={200} />
+              <div className="wasl-qr-logo-overlay" style={{ background: school.logoColor || '#075E54', color: 'white', fontWeight: 'bold' }}>
+                {school.name.charAt(0)}
+              </div>
+            </div>
             <div className="mt-3 font-mono text-xs text-center">
               {student.studentId}
             </div>

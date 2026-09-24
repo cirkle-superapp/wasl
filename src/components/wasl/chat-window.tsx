@@ -1523,7 +1523,7 @@ export function ChatWindow({
                 <div
                   key={m.id}
                   data-message-id={m.id}
-                  className="wasl-message-wrapper wasl-anim-fade-scale"
+                  className={`wasl-message-wrapper ${m.senderId === user?.id ? 'wasl-bubble-enter-right' : 'wasl-bubble-enter-left'}`}
                   title={new Date(m.createdAt).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 >
                   {showDate && (

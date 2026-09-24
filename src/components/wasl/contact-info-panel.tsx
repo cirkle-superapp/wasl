@@ -810,7 +810,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
       <div className="flex-1 overflow-y-auto wasl-scroll p-4 space-y-6">
         {/* Hero */}
         <div className="flex flex-col items-center text-center">
-          <div className="relative inline-block">
+          <div className="relative inline-block wasl-avatar-ring wasl-anim-scale-in">
             <WaslAvatar
               name={conversation.name}
               src={effectiveAvatar}

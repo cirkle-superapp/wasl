@@ -66,13 +66,14 @@ export function SmartReplyChips({ conversationId }: { conversationId: string }) 
   if (!show || replies.length === 0) return null
 
   return (
-    <div className="px-3 py-1 flex items-center gap-1.5 overflow-x-auto wasl-scroll">
+    <div className="px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto wasl-scroll wasl-smart-reply-connected wasl-anim-slide-up">
       <Sparkles className="w-3 h-3 text-[var(--wasl-green)] shrink-0" />
       {replies.map((reply, i) => (
         <button
           key={i}
           type="button"
-          className="shrink-0 px-3 py-1 rounded-full text-xs bg-[var(--wasl-green)]/10 text-foreground border border-[var(--wasl-green)]/30 hover:bg-[var(--wasl-green)]/20 transition-colors"
+          className="shrink-0 px-3 py-1 rounded-full text-xs bg-[var(--wasl-green)]/10 text-foreground border border-[var(--wasl-green)]/30 hover:bg-[var(--wasl-green)]/20 hover:border-[var(--wasl-green)]/50 transition-all wasl-tap-scale wasl-stagger-{i+1}"
+          style={{ animationDelay: `${(i + 1) * 0.04}s` }}
           onClick={() => {
             window.dispatchEvent(new CustomEvent('wasl:smart-reply', { detail: { reply } }))
             setShow(false)

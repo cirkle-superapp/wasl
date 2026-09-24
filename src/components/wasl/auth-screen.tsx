@@ -271,7 +271,7 @@ export function AuthScreen() {
     <>
       <style dangerouslySetInnerHTML={{ __html: ANIM_CSS }} />
       <div
-        className="wasl-mesh-bg"
+        className="wasl-mesh-bg wasl-mesh-animated"
         data-theme="cirkle"
         style={{
           minHeight: '100vh',

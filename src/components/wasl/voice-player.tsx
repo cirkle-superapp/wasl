@@ -366,7 +366,10 @@ export function VoicePlayer({
               return (
                 <div
                   key={i}
-                  className="w-0.5 rounded-full transition-colors"
+                  className={cn(
+                    'w-0.5 rounded-full transition-colors',
+                    playing && active && 'wasl-waveform-bar'
+                  )}
                   style={{
                     height: `${h}%`,
                     backgroundColor: active
@@ -374,6 +377,7 @@ export function VoicePlayer({
                       : mine
                       ? 'color-mix(in oklab, var(--foreground) 30%, transparent)'
                       : 'color-mix(in oklab, var(--foreground) 22%, transparent)',
+                    animationDelay: `${(i % 5) * 0.08}s`,
                   }}
                 />
               )
