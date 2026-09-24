@@ -1,0 +1,684 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useCallback, useRef } from 'react'
+     4→import { useRouter } from 'next/navigation'
+     5→import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff, ShieldCheck, Zap, Users } from 'lucide-react'
+     6→import { toast } from 'sonner'
+     7→import { useWaslStore } from '@/lib/store'
+     8→import { CirkleMark } from './cirkle-mark'
+     9→
+    10→const DEMO_USERNAME = 'demo'
+    11→const DEMO_PASSWORD = 'demo123'
+    12→
+    13→// Cirkle color palette
+    14→const C = {
+    15→  teal: '#1a4a5a',
+    16→  tealLight: '#2a6b7e',
+    17→  tealDark: '#123843',
+    18→  gold: '#c2a060',
+    19→  goldLight: '#e5c98a',
+    20→  goldDark: '#9a7a3e',
+    21→  rose: '#c25a6e',
+    22→  cream: '#fdfcf9',
+    23→  charcoal: '#1a1a14',
+    24→  white: '#ffffff',
+    25→}
+    26→
+    27→// Cinematic entrance keyframes — only for animations, all visual styling is inline
+    28→const ANIM_CSS = `
+    29→@keyframes cinenav-bg{0%{opacity:0;transform:scale(1.1)}100%{opacity:1;transform:scale(1)}}
+    30→@keyframes cinenav-logo{0%{opacity:0;transform:scale(0.5) translateY(20px);filter:blur(10px)}50%{opacity:0.5;filter:blur(4px)}100%{opacity:1;transform:scale(1) translateY(0);filter:blur(0)}}
+    31→@keyframes cinenav-up{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+    32→@keyframes cinenav-fade{0%{opacity:0}100%{opacity:1}}
+    33→@keyframes cinenav-card{0%{opacity:0;transform:translateY(40px) scale(0.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
+    34→@keyframes glow-pulse{0%,100%{box-shadow:0 0 30px rgba(194,160,96,0.15),0 0 60px rgba(26,74,90,0.1)}50%{box-shadow:0 0 50px rgba(194,160,96,0.25),0 0 80px rgba(26,74,90,0.15)}}
+    35→@keyframes ring-rotate{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+    36→@keyframes ring-pulse{0%,100%{opacity:0.3}50%{opacity:0.8}}
+    37→@keyframes float-slow{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+    38→@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+    39→.wasl-cirkle-spin{animation:ring-rotate 30s linear infinite;transform-origin:center}
+    40→.wasl-cirkle-glow{animation:ring-pulse 2.5s ease-in-out infinite}
+    41→.wasl-float{animation:float-slow 4s ease-in-out infinite}
+    42→.wasl-glow-card{animation:glow-pulse 4s ease-in-out infinite}
+    43→.wasl-shimmer-text{background:linear-gradient(90deg,${C.gold},${C.goldLight},${C.gold},${C.goldLight},${C.gold});background-size:200% auto;background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite}
+    44→@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+    45→`
+    46→
+    47→// Cinematic entrance wrapper — applies the animation with a delay
+    48→function Cinematic({ children, delay, anim = 'cinenav-up' }: { children: React.ReactNode; delay: string; anim?: string }) {
+    49→  return <div style={{ animation: `${anim} 0.7s cubic-bezier(0.16,1,0.3,1) ${delay} both` }}>{children}</div>
+    50→}
+    51→
+    52→export function AuthScreen() {
+    53→  const [mode, setMode] = useState<'login' | 'signup'>('signup')
+    54→  const [identifier, setIdentifier] = useState('')
+    55→  const [signupIdentifier, setSignupIdentifier] = useState('')
+    56→  const [password, setPassword] = useState('')
+    57→  const [name, setName] = useState('')
+    58→  const [username, setUsername] = useState('')
+    59→  const [usernameTouched, setUsernameTouched] = useState(false)
+    60→  const [usernameStatus, setUsernameStatus] = useState<{
+    61→    checking: boolean
+    62→    available: boolean | null
+    63→    message: string
+    64→    suggestions: string[]
+    65→  }>({ checking: false, available: null, message: '', suggestions: [] })
+    66→  const [loading, setLoading] = useState(false)
+    67→  const [showPassword, setShowPassword] = useState(false)
+    68→  const setUser = useWaslStore((s) => s.setUser)
+    69→  const router = useRouter()
+    70→  const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    71→
+    72→  // Live username availability check (debounced)
+    73→  useEffect(() => {
+    74→    if (mode !== 'signup' || !usernameTouched) return
+    75→    const u = username.trim().toLowerCase()
+    76→    if (!u) {
+    77→      setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
+    78→      return
+    79→    }
+    80→    if (usernameTimer.current) clearTimeout(usernameTimer.current)
+    81→    setUsernameStatus((s) => ({ ...s, checking: true }))
+    82→    usernameTimer.current = setTimeout(async () => {
+    83→      try {
+    84→        const res = await fetch(`/api/auth/check-username?u=${encodeURIComponent(u)}`)
+    85→        const data = await res.json()
+    86→        setUsernameStatus({ checking: false, available: data.available, message: data.message || '', suggestions: data.suggestions || [] })
+    87→      } catch {
+    88→        setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
+    89→      }
+    90→    }, 350)
+    91→    return () => { if (usernameTimer.current) clearTimeout(usernameTimer.current) }
+    92→  }, [username, usernameTouched, mode])
+    93→
+    94→  // Auto-generate username from name
+    95→  useEffect(() => {
+    96→    if (mode !== 'signup' || usernameTouched) return
+    97→    const auto = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 15)
+    98→    if (auto && auto !== username) setUsername(auto)
+    99→  }, [name, usernameTouched, mode, username])
+   100→
+   101→  const authenticate = useCallback(
+   102→    async (
+   103→      overrideMode?: 'login' | 'signup',
+   104→      overrideIdentifier?: string,
+   105→      overridePassword?: string,
+   106→      overrideName?: string,
+   107→      overrideUsername?: string,
+   108→      overrideSignupId?: string
+   109→    ) => {
+   110→      const m = overrideMode ?? mode
+   111→      const p = overridePassword ?? password
+   112→      setLoading(true)
+   113→      try {
+   114→        if (m === 'login') {
+   115→          const id = overrideIdentifier ?? identifier
+   116→          if (!id.trim()) { toast.error('Please enter your email, phone, or username'); return }
+   117→          if (!p) { toast.error('Please enter your password'); return }
+   118→          const res = await fetch('/api/auth/login', {
+   119→            method: 'POST',
+   120→            headers: { 'Content-Type': 'application/json' },
+   121→            body: JSON.stringify({ identifier: id, password: p }),
+   122→          })
+   123→          const data = await res.json()
+   124→          if (!res.ok) { toast.error(data?.error || 'Login failed'); return }
+   125→          setUser(data)
+   126→          toast.success(`Welcome to Wasl, ${data.name}!`)
+   127→          router.refresh()
+   128→        } else {
+   129→          const n = (overrideName ?? name).trim()
+   130→          const u = (overrideUsername ?? username).trim().toLowerCase()
+   131→          const sid = overrideSignupId ?? signupIdentifier
+   132→          if (!n || n.length < 2) { toast.error('Please enter your name (at least 2 characters)'); return }
+   133→          if (!u || u.length < 3) { toast.error('Please choose a Cirkle username (at least 3 characters)'); return }
+   134→          if (!p || p.length < 6) { toast.error('Password must be at least 6 characters'); return }
+   135→          const res = await fetch('/api/auth/signup', {
+   136→            method: 'POST',
+   137→            headers: { 'Content-Type': 'application/json' },
+   138→            body: JSON.stringify({ identifier: sid || undefined, password: p, name: n, username: u }),
+   139→          })
+   140→          const data = await res.json()
+   141→          if (!res.ok) {
+   142→            if (data.suggestions?.length) { toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` }) }
+   143→            else { toast.error(data?.error || 'Sign up failed') }
+   144→            return
+   145→          }
+   146→          setUser(data)
+   147→          toast.success(`Welcome to Wasl, ${data.name}!`)
+   148→          router.refresh()
+   149→        }
+   150→      } catch (err) {
+   151→        console.error(err)
+   152→        toast.error('Network error')
+   153→      } finally {
+   154→        setLoading(false)
+   155→      }
+   156→    },
+   157→    [mode, identifier, password, name, username, signupIdentifier, setUser, router]
+   158→  )
+   159→
+   160→  function submit(e: React.FormEvent) {
+   161→    e.preventDefault()
+   162→    void authenticate()
+   163→  }
+   164→
+   165→  async function handleDemoLogin() {
+   166→    setIdentifier(DEMO_USERNAME)
+   167→    setPassword(DEMO_PASSWORD)
+   168→    setMode('login')
+   169→    setLoading(true)
+   170→    try {
+   171→      const loginRes = await fetch('/api/auth/login', {
+   172→        method: 'POST',
+   173→        headers: { 'Content-Type': 'application/json' },
+   174→        body: JSON.stringify({ identifier: DEMO_USERNAME, password: DEMO_PASSWORD }),
+   175→      })
+   176→      if (loginRes.ok) {
+   177→        const data = await loginRes.json()
+   178→        setUser(data)
+   179→        // Seed the rich demo dataset for this user. The `{ reset: true }`
+   180→        // option wipes any previous demo data first so the demo always
+   181→        // starts from a known state (great for presentations / sales
+   182→        // demos that need predictable, curated content).
+   183→        //
+   184→        // We split the seeding into TWO calls because Vercel's 10s
+   185→        // serverless timeout can't fit all the writes in a single call:
+   186→        //   1. /api/seed-demo  — personas, conversations, groups, stories, etc.
+   187→        //   2. /api/seed-schools — Nile International School + 3 students
+   188→        // Both are idempotent so a partial-failure retry is safe.
+   189→        try {
+   190→          await fetch('/api/seed-demo', {
+   191→            method: 'POST',
+   192→            headers: { 'Content-Type': 'application/json' },
+   193→            body: JSON.stringify({ reset: true }),
+   194→          })
+   195→          // Fire-and-forget the school seeding — if it fails, the user can
+   196→          // still use the rest of the app.
+   197→          fetch('/api/seed-schools', { method: 'POST' }).catch(() => {})
+   198→        } catch {}
+   199→        toast.success(`Welcome to Wasl, ${data.name}!`)
+   200→        router.refresh()
+   201→        return
+   202→      }
+   203→      const signupRes = await fetch('/api/auth/signup', {
+   204→        method: 'POST',
+   205→        headers: { 'Content-Type': 'application/json' },
+   206→        body: JSON.stringify({ identifier: '+201001234567', password: DEMO_PASSWORD, name: 'Demo User', username: DEMO_USERNAME }),
+   207→      })
+   208→      const data = await signupRes.json()
+   209→      if (!signupRes.ok) { toast.error(data?.error || 'Failed to start demo'); return }
+   210→      setUser(data)
+   211→      // After a fresh signup, the user has no data — seed the rich demo
+   212→      // dataset so the chat experience is immediately impressive.
+   213→      try {
+   214→        await fetch('/api/seed-demo', {
+   215→          method: 'POST',
+   216→          headers: { 'Content-Type': 'application/json' },
+   217→          body: JSON.stringify({ reset: true }),
+   218→        })
+   219→      } catch {}
+   220→      toast.success(`Welcome to Wasl, ${data.name}!`)
+   221→      router.refresh()
+   222→    } catch (err) {
+   223→      console.error(err)
+   224→      toast.error('Network error')
+   225→    } finally {
+   226→      setLoading(false)
+   227→    }
+   228→  }
+   229→
+   230→  const loginIdType = identifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(identifier) && identifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
+   231→  const LoginIcon = loginIdType === 'email' ? Mail : loginIdType === 'phone' ? Phone : AtSign
+   232→  const signupIdType = signupIdentifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
+   233→  const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
+   234→
+   235→  // Shared inline style objects
+   236→  const inputStyle: React.CSSProperties = {
+   237→    width: '100%',
+   238→    height: '44px',
+   239→    padding: '0 12px 0 40px',
+   240→    border: `1px solid ${C.teal}33`,
+   241→    borderRadius: '12px',
+   242→    fontSize: '14px',
+   243→    fontFamily: 'inherit',
+   244→    background: C.cream,
+   245→    color: C.charcoal,
+   246→    outline: 'none',
+   247→    transition: 'border-color 0.2s, box-shadow 0.2s',
+   248→    boxSizing: 'border-box',
+   249→  }
+   250→  const labelStyle: React.CSSProperties = {
+   251→    fontSize: '13px',
+   252→    fontWeight: 600,
+   253→    color: C.teal,
+   254→    marginBottom: '6px',
+   255→    display: 'block',
+   256→    fontFamily: 'inherit',
+   257→  }
+   258→  const iconWrapStyle: React.CSSProperties = {
+   259→    position: 'absolute',
+   260→    left: '14px',
+   261→    top: '50%',
+   262→    transform: 'translateY(-50%)',
+   263→    color: C.goldDark,
+   264→    pointerEvents: 'none',
+   265→    display: 'flex',
+   266→    alignItems: 'center',
+   267→  }
+   268→
+   269→  return (
+   270→    <>
+   271→      <style dangerouslySetInnerHTML={{ __html: ANIM_CSS }} />
+   272→      <div style={{
+   273→        minHeight: '100vh',
+   274→        width: '100%',
+   275→        display: 'flex',
+   276→        flexDirection: 'column',
+   277→        fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+   278→        background: `linear-gradient(135deg, ${C.teal} 0%, ${C.tealLight} 40%, ${C.teal} 70%, ${C.gold} 100%)`,
+   279→        position: 'relative',
+   280→        overflow: 'hidden',
+   281→      }}>
+   282→        {/* Futuristic background glow orbs */}
+   283→        <div style={{
+   284→          position: 'absolute',
+   285→          top: '-100px',
+   286→          left: '50%',
+   287→          transform: 'translateX(-50%)',
+   288→          width: '600px',
+   289→          height: '600px',
+   290→          borderRadius: '50%',
+   291→          background: `radial-gradient(circle, ${C.gold}33 0%, transparent 60%)`,
+   292→          animation: 'cinenav-fade 2s ease-out 0.5s both',
+   293→          pointerEvents: 'none',
+   294→        }} />
+   295→        <div style={{
+   296→          position: 'absolute',
+   297→          bottom: '-200px',
+   298→          right: '-100px',
+   299→          width: '500px',
+   300→          height: '500px',
+   301→          borderRadius: '50%',
+   302→          background: `radial-gradient(circle, ${C.rose}22 0%, transparent 60%)`,
+   303→          animation: 'cinenav-fade 2s ease-out 1s both',
+   304→          pointerEvents: 'none',
+   305→        }} />
+   306→
+   307→        {/* Hero section */}
+   308→        <div style={{
+   309→          textAlign: 'center',
+   310→          padding: '40px 24px 20px',
+   311→          position: 'relative',
+   312→          zIndex: 1,
+   313→        }}>
+   314→          <Cinematic delay="0.2s" anim="cinenav-logo">
+   315→            <div className="wasl-float" style={{ display: 'inline-block', marginBottom: '16px' }}>
+   316→              <CirkleMark size={80} animated />
+   317→            </div>
+   318→          </Cinematic>
+   319→
+   320→          <Cinematic delay="0.5s">
+   321→            <h1 className="wasl-shimmer-text" style={{
+   322→              fontSize: '2.5rem',
+   323→              fontWeight: 800,
+   324→              letterSpacing: '-0.03em',
+   325→              margin: '0 0 4px',
+   326→              lineHeight: 1,
+   327→            }}>Wasl</h1>
+   328→          </Cinematic>
+   329→
+   330→          <Cinematic delay="0.7s">
+   331→            <p style={{
+   332→              color: 'rgba(255,255,255,0.85)',
+   333→              fontSize: '0.875rem',
+   334→              margin: '0 0 16px',
+   335→              letterSpacing: '0.05em',
+   336→            }}>Simple. Secure. Connected.</p>
+   337→          </Cinematic>
+   338→
+   339→          <Cinematic delay="0.9s">
+   340→            <div style={{
+   341→              display: 'flex',
+   342→              alignItems: 'center',
+   343→              justifyContent: 'center',
+   344→              gap: '20px',
+   345→              flexWrap: 'wrap' as const,
+   346→            }}>
+   347→              {[
+   348→                { icon: <ShieldCheck style={{ width: 14, height: 14 }} />, text: 'End-to-end encrypted' },
+   349→                { icon: <Zap style={{ width: 14, height: 14 }} />, text: 'Real-time' },
+   350→                { icon: <Users style={{ width: 14, height: 14 }} />, text: 'Verified agreements' },
+   351→              ].map((f, i) => (
+   352→                <div key={i} style={{
+   353→                  display: 'flex',
+   354→                  alignItems: 'center',
+   355→                  gap: '5px',
+   356→                  color: 'rgba(255,255,255,0.7)',
+   357→                  fontSize: '11px',
+   358→                  fontWeight: 500,
+   359→                }}>
+   360→                  {f.icon}
+   361→                  {f.text}
+   362→                </div>
+   363→              ))}
+   364→            </div>
+   365→          </Cinematic>
+   366→        </div>
+   367→
+   368→        {/* Glassmorphism card */}
+   369→        <div style={{
+   370→          flex: 1,
+   371→          display: 'flex',
+   372→          alignItems: 'center',
+   373→          justifyContent: 'center',
+   374→          padding: '0 24px 40px',
+   375→          position: 'relative',
+   376→          zIndex: 1,
+   377→        }}>
+   378→          <Cinematic delay="1.1s" anim="cinenav-card">
+   379→            <div className="wasl-glow-card" style={{
+   380→              width: '100%',
+   381→              maxWidth: '420px',
+   382→              background: 'rgba(253, 252, 249, 0.95)',
+   383→              backdropFilter: 'blur(20px) saturate(180%)',
+   384→              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+   385→              borderRadius: '24px',
+   386→              border: `1px solid ${C.gold}44`,
+   387→              boxShadow: `0 20px 60px rgba(26, 74, 90, 0.3), 0 0 40px rgba(194, 160, 96, 0.1)`,
+   388→              padding: '32px 28px 28px',
+   389→              boxSizing: 'border-box' as const,
+   390→            }}>
+   391→              {/* Tab switcher */}
+   392→              <div style={{
+   393→                display: 'flex',
+   394→                padding: '4px',
+   395→                background: `rgba(26, 74, 90, 0.06)`,
+   396→                borderRadius: '14px',
+   397→                border: `1px solid ${C.teal}22`,
+   398→                marginBottom: '24px',
+   399→              }}>
+   400→                {(['signup', 'login'] as const).map((tab) => (
+   401→                  <button
+   402→                    key={tab}
+   403→                    type="button"
+   404→                    onClick={() => setMode(tab)}
+   405→                    style={{
+   406→                      flex: 1,
+   407→                      padding: '10px 16px',
+   408→                      borderRadius: '10px',
+   409→                      border: 'none',
+   410→                      cursor: 'pointer',
+   411→                      fontFamily: 'inherit',
+   412→                      fontSize: '14px',
+   413→                      fontWeight: 600,
+   414→                      transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
+   415→                      ...(mode === tab
+   416→                        ? { background: `linear-gradient(135deg, ${C.gold}, ${C.goldDark})`, color: C.charcoal, boxShadow: `0 4px 12px ${C.gold}44` }
+   417→                        : { background: 'transparent', color: C.teal + '99' }),
+   418→                    }}
+   419→                  >
+   420→                    {tab === 'signup' ? 'Sign up' : 'Log in'}
+   421→                  </button>
+   422→                ))}
+   423→              </div>
+   424→
+   425→              {/* Heading */}
+   426→              <Cinematic delay="1.3s">
+   427→                <h2 style={{
+   428→                  fontSize: '1.5rem',
+   429→                  fontWeight: 700,
+   430→                  color: C.teal,
+   431→                  margin: '0 0 4px',
+   432→                  fontFamily: 'inherit',
+   433→                }}>
+   434→                  {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+   435→                </h2>
+   436→                <p style={{
+   437→                  fontSize: '13px',
+   438→                  color: C.teal + '99',
+   439→                  margin: '0 0 24px',
+   440→                  fontFamily: 'inherit',
+   441→                }}>
+   442→                  {mode === 'signup'
+   443→                    ? 'Sign up with your Cirkle email or phone.'
+   444→                    : 'Log in with your email, phone, or username.'}
+   445→                </p>
+   446→              </Cinematic>
+   447→
+   448→              {/* Form */}
+   449→              <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+   450→                {mode === 'signup' ? (
+   451→                  <>
+   452→                    {/* Name + Username */}
+   453→                    <Cinematic delay="1.4s">
+   454→                      <div>
+   455→                        <label style={labelStyle} htmlFor="name">Your name</label>
+   456→                        <div style={{ position: 'relative' }}>
+   457→                          <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
+   458→                          <input
+   459→                            id="name"
+   460→                            type="text"
+   461→                            placeholder="e.g. Ahmad Ali"
+   462→                            value={name}
+   463→                            onChange={(e) => setName(e.target.value)}
+   464→                            autoComplete="name"
+   465→                            disabled={loading}
+   466→                            style={inputStyle}
+   467→                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+   468→                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+   469→                          />
+   470→                        </div>
+   471→                      </div>
+   472→                    </Cinematic>
+   473→
+   474→                    <Cinematic delay="1.5s">
+   475→                      <div>
+   476→                        <label style={labelStyle} htmlFor="username">Cirkle username</label>
+   477→                        <div style={{ position: 'relative' }}>
+   478→                          <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
+   479→                          <input
+   480→                            id="username"
+   481→                            type="text"
+   482→                            placeholder="ahmad_ali"
+   483→                            value={username}
+   484→                            onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
+   485→                            autoComplete="username"
+   486→                            disabled={loading}
+   487→                            style={inputStyle}
+   488→                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+   489→                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+   490→                          />
+   491→                          {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /></span>}
+   492→                          {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
+   493→                          {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
+   494→                        </div>
+   495→                      </div>
+   496→                    </Cinematic>
+   497→
+   498→                    {/* Email/Phone (optional) */}
+   499→                    <Cinematic delay="1.6s">
+   500→                      <div>
+   501→                        <label style={labelStyle} htmlFor="signup-id">Cirkle email or phone <span style={{ fontWeight: 400, color: C.teal + '66' }}>(optional)</span></label>
+   502→                        <div style={{ position: 'relative' }}>
+   503→                          <span style={iconWrapStyle}><SignupIdIcon style={{ width: 16, height: 16 }} /></span>
+   504→                          <input
+   505→                            id="signup-id"
+   506→                            type="text"
+   507→                            placeholder="you@cirkle.app or +20 100 123 4567"
+   508→                            value={signupIdentifier}
+   509→                            onChange={(e) => setSignupIdentifier(e.target.value)}
+   510→                            autoComplete="off"
+   511→                            disabled={loading}
+   512→                            style={inputStyle}
+   513→                            onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+   514→                            onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+   515→                          />
+   516→                        </div>
+   517→                        <p style={{ fontSize: '11px', color: C.teal + '77', margin: '4px 0 0' }}>
+   518→                          Add an email or phone so you can log in later.
+   519→                        </p>
+   520→                      </div>
+   521→                    </Cinematic>
+   522→                  </>
+   523→                ) : (
+   524→                  <Cinematic delay="1.4s">
+   525→                    <div>
+   526→                      <label style={labelStyle} htmlFor="identifier">Email, phone, or username</label>
+   527→                      <div style={{ position: 'relative' }}>
+   528→                        <span style={iconWrapStyle}><LoginIcon style={{ width: 16, height: 16 }} /></span>
+   529→                        <input
+   530→                          id="identifier"
+   531→                          type="text"
+   532→                          placeholder="you@cirkle.app, +20..., or @username"
+   533→                          value={identifier}
+   534→                          onChange={(e) => setIdentifier(e.target.value)}
+   535→                          autoComplete="username"
+   536→                          disabled={loading}
+   537→                          style={inputStyle}
+   538→                          onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+   539→                          onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+   540→                        />
+   541→                      </div>
+   542→                    </div>
+   543→                  </Cinematic>
+   544→                )}
+   545→
+   546→                {/* Password */}
+   547→                <Cinematic delay={mode === 'signup' ? '1.7s' : '1.5s'}>
+   548→                  <div>
+   549→                    <label style={labelStyle} htmlFor="password">Password</label>
+   550→                    <div style={{ position: 'relative' }}>
+   551→                      <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
+   552→                      <input
+   553→                        id="password"
+   554→                        type={showPassword ? 'text' : 'password'}
+   555→                        placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+   556→                        value={password}
+   557→                        onChange={(e) => setPassword(e.target.value)}
+   558→                        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+   559→                        disabled={loading}
+   560→                        style={{ ...inputStyle, paddingRight: '40px' }}
+   561→                        onFocus={(e) => { e.target.style.borderColor = C.gold; e.target.style.boxShadow = `0 0 0 3px ${C.gold}22` }}
+   562→                        onBlur={(e) => { e.target.style.borderColor = C.teal + '33'; e.target.style.boxShadow = 'none' }}
+   563→                      />
+   564→                      <button
+   565→                        type="button"
+   566→                        onClick={() => setShowPassword(!showPassword)}
+   567→                        style={{
+   568→                          position: 'absolute',
+   569→                          right: 14,
+   570→                          top: '50%',
+   571→                          transform: 'translateY(-50%)',
+   572→                          border: 'none',
+   573→                          background: 'transparent',
+   574→                          cursor: 'pointer',
+   575→                          color: C.teal + '99',
+   576→                          padding: 0,
+   577→                          display: 'flex',
+   578→                          alignItems: 'center',
+   579→                        }}
+   580→                      >
+   581→                        {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+   582→                      </button>
+   583→                    </div>
+   584→                  </div>
+   585→                </Cinematic>
+   586→
+   587→                {/* Submit button */}
+   588→                <Cinematic delay={mode === 'signup' ? '1.8s' : '1.6s'}>
+   589→                  <button
+   590→                    type="submit"
+   591→                    disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
+   592→                    style={{
+   593→                      width: '100%',
+   594→                      height: '44px',
+   595→                      border: 'none',
+   596→                      borderRadius: '12px',
+   597→                      fontSize: '14px',
+   598→                      fontWeight: 600,
+   599→                      fontFamily: 'inherit',
+   600→                      cursor: loading ? 'not-allowed' : 'pointer',
+   601→                      opacity: loading ? 0.6 : 1,
+   602→                      background: `linear-gradient(135deg, ${C.goldLight}, ${C.gold}, ${C.goldDark})`,
+   603→                      color: C.charcoal,
+   604→                      boxShadow: `0 4px 16px ${C.gold}44`,
+   605→                      transition: 'all 0.25s cubic-bezier(0.16,1,0.3,1)',
+   606→                      display: 'flex',
+   607→                      alignItems: 'center',
+   608→                      justifyContent: 'center',
+   609→                      gap: '8px',
+   610→                    }}
+   611→                    onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${C.gold}66` } }}
+   612→                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 16px ${C.gold}44` }}
+   613→                  >
+   614→                    {loading && <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} />}
+   615→                    {mode === 'signup' ? 'Sign up' : 'Log in'}
+   616→                  </button>
+   617→                </Cinematic>
+   618→              </form>
+   619→
+   620→              {/* Divider */}
+   621→              <div style={{
+   622→                display: 'flex',
+   623→                alignItems: 'center',
+   624→                gap: '12px',
+   625→                margin: '20px 0 16px',
+   626→              }}>
+   627→                <div style={{ flex: 1, height: '1px', background: C.teal + '22' }} />
+   628→                <span style={{ fontSize: '11px', color: C.teal + '66', textTransform: 'uppercase', letterSpacing: '0.05em' }}>or</span>
+   629→                <div style={{ flex: 1, height: '1px', background: C.teal + '22' }} />
+   630→              </div>
+   631→
+   632→              {/* Demo button */}
+   633→              <Cinematic delay={mode === 'signup' ? '1.9s' : '1.7s'}>
+   634→                <button
+   635→                  type="button"
+   636→                  onClick={handleDemoLogin}
+   637→                  disabled={loading}
+   638→                  style={{
+   639→                    width: '100%',
+   640→                    height: '40px',
+   641→                    border: `1px solid ${C.gold}55`,
+   642→                    borderRadius: '12px',
+   643→                    fontSize: '13px',
+   644→                    fontWeight: 500,
+   645→                    fontFamily: 'inherit',
+   646→                    cursor: loading ? 'not-allowed' : 'pointer',
+   647→                    background: 'transparent',
+   648→                    color: C.goldDark,
+   649→                    transition: 'all 0.25s',
+   650→                    display: 'flex',
+   651→                    alignItems: 'center',
+   652→                    justifyContent: 'center',
+   653→                    gap: '8px',
+   654→                  }}
+   655→                  onMouseEnter={(e) => { e.currentTarget.style.background = `${C.gold}11`; e.currentTarget.style.borderColor = C.gold }}
+   656→                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = `${C.gold}55` }}
+   657→                >
+   658→                  {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /> : <Sparkles style={{ width: 16, height: 16 }} />}
+   659→                  Try the rich demo
+   660→                </button>
+   661→              </Cinematic>
+   662→            </div>
+   663→          </Cinematic>
+   664→        </div>
+   665→
+   666→        {/* Footer */}
+   667→        <Cinematic delay="2s">
+   668→          <footer style={{
+   669→            textAlign: 'center',
+   670→            padding: '12px 24px',
+   671→            color: 'rgba(255,255,255,0.6)',
+   672→            fontSize: '11px',
+   673→            fontFamily: 'inherit',
+   674→            position: 'relative',
+   675→            zIndex: 1,
+   676→          }}>
+   677→            Wasl &copy; {new Date().getFullYear()} &middot; End-to-end inspired messaging &middot; Commit-verified agreements
+   678→          </footer>
+   679→        </Cinematic>
+   680→      </div>
+   681→    </>
+   682→  )
+   683→}
+   684→
