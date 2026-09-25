@@ -7843,3 +7843,45 @@ The theme was fundamentally wrong — using WhatsApp green instead of the Cirkle
 - **Brand**: "Wasl" + Arabic "دواير" subtitle (cultural grounding)
 - **Logo**: CirkleMark with gold→rose→teal gradient (was already correct)
 - **VLM score**: 8.5/10 (↑ from 7.5) — "classic luxury pairing", "editorial quality", "cultural grounding"
+
+---
+Task ID: 76 — Fix preview + cache
+Agent: main (COO / CTO / PM)
+
+### Root cause
+HTML pages were cached with `public, max-age=0, must-revalidate` — the `public` keyword allowed CDN edge caching, and `max-age=0` still let some browsers serve stale HTML. When a new deployment pushed new chunk hashes, the browser loaded stale HTML referencing old chunks → ChunkLoadError → "Wasl is reloading…" error page.
+
+### Fixes applied
+
+**vercel.json:**
+- HTML route: `public, max-age=0, must-revalidate` → `private, no-cache, no-store, must-revalidate` + `Surrogate-Control: no-store` + `Pragma: no-cache` + `Expires: 0`
+- Route pattern: `/(.*)` → `/((?!api|_next/static).*)` — prevents catch-all from overriding specific rules
+- Static chunks: unchanged (immutable, 1 year — correct for hashed assets)
+
+**layout.tsx:**
+- Added `<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">`
+- Added `<meta http-equiv="Pragma" content="no-cache">`
+- Added `<meta http-equiv="Expires" content="0">`
+
+**global-error.tsx:**
+- ChunkLoadError recovery now clears ALL browser caches before reloading
+- Reloads with cache-bust query param `?_t=timestamp`
+- Error page restyled to Cirkle brand (deep teal bg, gold accents, Fraunces font, Arabic "دواير")
+
+**manifest.ts:**
+- theme_color: `#075e54` (WhatsApp) → `#1a4a5a` (Cirkle deep teal)
+- background_color: `#0b141a` → `#fdfcf9` (Cirkle cream)
+- name: added Arabic "دواير"
+
+### Verified on Vercel production
+- `cache-control: private, no-cache, no-store, max-age=0, must-revalidate` ✅
+- `expires: 0` ✅
+- `pragma: no-cache` ✅
+- `surrogate-control: no-store` ✅
+- `x-vercel-cache: MISS` ✅ (fresh, not from cache)
+- Landing: HTTP 200, 0.84s ✅
+- Cirkle brand: `009588` + `دواير` present ✅
+
+### Code quality
+- Lint: 0 errors | TS: 0 errors
+- No protected files deleted
