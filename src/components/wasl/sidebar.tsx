@@ -807,11 +807,9 @@ function ConversationRow({
         'group relative flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border/60',
         'wasl-conv-row wasl-hover-lift',
         // Staggered cascade entrance — applies only to the first 6 rows
-        // so the sidebar feels alive on first load without making every
-        // subsequent re-render re-animate.
         index < 6 && `wasl-anim-slide-up wasl-stagger-${index + 1}`,
         active
-          ? 'wasl-conv-row-active wasl-active-accent bg-muted/70'
+          ? 'wasl-conv-active'
           : 'hover:bg-muted/40 bg-[var(--wasl-sidebar-bg)]'
       )}
     >
@@ -844,11 +842,14 @@ function ConversationRow({
         <div className="flex items-center justify-between gap-2">
           <div
             className={cn(
-              'font-semibold truncate text-foreground flex items-center gap-1.5',
-              conversation.unreadCount > 0 && 'text-foreground'
+              'wasl-conv-name truncate text-foreground flex items-center gap-1.5',
+              conversation.unreadCount > 0 && 'wasl-conv-name-unread'
             )}
           >
             <span className="truncate">{conversation.name}</span>
+            {conversation.unreadCount > 0 && (
+              <span className="wasl-unread-dot" />
+            )}
             {pinned && (
               <Pin className="w-3 h-3 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" fill="currentColor" />
             )}
@@ -883,21 +884,21 @@ function ConversationRow({
         <div className="flex items-center justify-between gap-2 mt-0.5">
           <div
             className={cn(
-              'text-sm truncate flex items-center gap-1',
+              'wasl-conv-preview flex items-center gap-1',
               isTyping
                 ? 'text-[var(--wasl-green)] font-medium'
                 : conversation.unreadCount > 0
-                  ? 'text-foreground font-medium'
-                  : 'text-muted-foreground'
+                  ? 'wasl-conv-preview-unread'
+                  : 'wasl-conv-preview-read'
             )}
           >
             {isTyping ? (
               <>
-                {/* Animated typing dots for the sidebar preview */}
+                {/* Premium typing dots — using the wasl-typing-pill-dot class */}
                 <span className="inline-flex items-center gap-0.5 mr-0.5">
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
-                  <span className="wasl-typing-dot w-1 h-1 bg-[var(--wasl-green)] rounded-full inline-block" />
+                  <span className="wasl-typing-pill-dot" />
+                  <span className="wasl-typing-pill-dot" />
+                  <span className="wasl-typing-pill-dot" />
                 </span>
                 <span className="truncate">{typingText}</span>
               </>

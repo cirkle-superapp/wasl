@@ -2123,3 +2123,216 @@ kbd {
     transform: none !important;
   }
 }
+
+/* ============================================================================
+   TASK 74 — TOP-TIER USER SATISFACTION UI
+   Algorithmically designed based on UX research: inline timestamps,
+   premium status checks, active gradient, glassmorphic typing, quick-react.
+   ============================================================================ */
+
+/* ---- Inline timestamp (inside bubble, iMessage-style) ----
+   Timestamps sit at the bottom-right of the bubble content, semi-transparent,
+   so they don't break the reading flow but are always visible on glance. */
+.wasl-timestamp-inline {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.55;
+  margin-left: 8px;
+  white-space: nowrap;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.wasl-bubble-out .wasl-timestamp-inline {
+  color: color-mix(in oklab, var(--wasl-green-dark) 70%, white);
+}
+.wasl-bubble-in .wasl-timestamp-inline {
+  color: var(--muted-foreground);
+}
+.dark .wasl-bubble-out .wasl-timestamp-inline {
+  color: color-mix(in oklab, white 50%, transparent);
+}
+.dark .wasl-bubble-in .wasl-timestamp-inline {
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+}
+
+/* ---- Premium status checks (sent → delivered → read) ----
+   Animated checkmarks that transition from single → double → blue.
+   Uses the existing wasl-ticks system but with smoother animation. */
+@keyframes wasl-check-draw {
+  0%   { stroke-dashoffset: 20; opacity: 0.3; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.wasl-check-anim {
+  animation: wasl-check-draw 0.3s ease-out both;
+}
+
+/* ---- Active conversation gradient highlight ----
+   More prominent than just the accent bar — adds a subtle gradient
+   wash to the entire active row so it's instantly identifiable. */
+.wasl-conv-active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--wasl-green) 8%, transparent) 0%,
+    color-mix(in oklab, var(--wasl-green) 4%, transparent) 50%,
+    transparent 100%
+  );
+  border-left: 3px solid var(--wasl-green);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--wasl-green) 6%, transparent);
+}
+[data-theme="cirkle"] .wasl-conv-active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, #e5c98a 10%, transparent) 0%,
+    color-mix(in oklab, #c2a060 5%, transparent) 50%,
+    transparent 100%
+  );
+  border-left-color: #e5c98a;
+}
+
+/* ---- Conversation preview refinement ----
+   Unread: bold + green dot. Read: muted + no dot.
+   Smart truncation with ellipsis. */
+.wasl-conv-preview {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wasl-conv-preview-unread {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.wasl-conv-preview-read {
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+.wasl-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wasl-green);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--wasl-green) 20%, transparent);
+  flex-shrink: 0;
+}
+[data-theme="cirkle"] .wasl-unread-dot {
+  background: #e5c98a;
+  box-shadow: 0 0 0 2px color-mix(in oklab, #e5c98a 20%, transparent);
+}
+
+/* ---- Glassmorphic typing indicator ----
+   A premium floating pill that shows "typing..." with animated dots.
+   More elegant than the inline dots in the chat header. */
+.wasl-typing-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: var(--wasl-shadow-sm);
+}
+.wasl-typing-pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--wasl-green);
+  animation: wasl-typing-bounce 1.4s ease-in-out infinite;
+}
+.wasl-typing-pill-dot:nth-child(2) { animation-delay: 0.18s; }
+.wasl-typing-pill-dot:nth-child(3) { animation-delay: 0.36s; }
+
+/* ---- Quick reaction picker ----
+   A premium emoji bar that appears on hover/long-press above the message.
+   Uses glassmorphism + spring entrance + staggered emoji pop. */
+.wasl-quick-react-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 85%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: var(--wasl-shadow-md);
+  animation: wasl-scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-quick-react-emoji {
+  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.12s ease-out;
+  animation: wasl-reaction-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-quick-react-emoji:hover {
+  transform: scale(1.3) translateY(-2px);
+  background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+/* ---- Message hover action bar (refined) ----
+   The floating toolbar above messages on hover gets a more premium treatment:
+   tighter spacing, glassmorphic, spring entrance. */
+.wasl-msg-actions {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background-color: color-mix(in oklab, var(--background) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+  box-shadow: var(--wasl-shadow-md);
+  border-radius: 999px;
+  padding: 2px;
+  animation: wasl-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wasl-msg-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  transition: background-color 0.1s ease-out, color 0.1s ease-out, transform 0.08s ease-out;
+  cursor: pointer;
+}
+.wasl-msg-action-btn:hover {
+  background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+  transform: scale(1.1);
+}
+
+/* ---- Conversation name typography ----
+   Unread conversations get bolder names + the unread dot. */
+.wasl-conv-name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wasl-conv-name-unread {
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-check-anim,
+  .wasl-quick-react-bar,
+  .wasl-quick-react-emoji,
+  .wasl-msg-actions {
+    animation: none !important;
+  }
+  .wasl-quick-react-emoji:hover,
+  .wasl-msg-action-btn:hover {
+    transform: none !important;
+  }
+}
