@@ -2,14 +2,14 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Wasl — Simple. Secure. Connected.',
+    name: 'Wasl — دواير',
     short_name: 'Wasl',
     description:
-      'Wasl is a fast, simple and secure messaging app that connects you with the people who matter.',
+      'Wasl (دواير) — a fast, simple and secure messaging app. End-to-end encrypted, real-time, verified agreements. Part of the Cirkle ecosystem.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#0b141a',
-    theme_color: '#075e54',
+    background_color: '#fdfcf9',
+    theme_color: '#1a4a5a',
     icons: [
       { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml' },
       { src: '/wasl-favicon.svg', sizes: 'any', type: 'image/svg+xml' },

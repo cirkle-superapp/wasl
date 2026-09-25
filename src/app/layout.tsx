@@ -287,6 +287,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Cache-busting meta tags — prevent the preview panel and browsers
+            from serving stale HTML after a new deployment. The chunk URLs in
+            the HTML change with every build, so caching HTML = stale chunks
+            = ChunkLoadError = "Wasl is reloading…" error page. */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
         <style dangerouslySetInnerHTML={{ __html: criticalCSS }} />
         <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
