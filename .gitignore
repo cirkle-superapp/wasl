@@ -60,3 +60,4 @@ prisma/migrations/
 
 # Agent context
 agent-ctx/
+scripts/restore-env.sh
