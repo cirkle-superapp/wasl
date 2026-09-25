@@ -142,3 +142,29 @@ if [[ $FAILED -gt 0 ]]; then
   exit 1
 fi
 exit 0
+
+# ---- .env credential check + restore (Task 73) ------------------------------
+# The recurring webDevReview cron job sometimes resets .env to a single
+# DATABASE_URL line. This check detects that and restores all 5 service
+# credentials via restore-env.sh before the commit/push proceeds.
+ENV_FILE="$REPO_ROOT/.env"
+RESTORE_SCRIPT="$REPO_ROOT/scripts/restore-env.sh"
+
+if [[ -f "$ENV_FILE" ]]; then
+  ENV_LINES=$(wc -l < "$ENV_FILE")
+  TURSO_PRESENT=$(grep -c "TURSO_DATABASE_URL" "$ENV_FILE" || true)
+  INNGEST_PRESENT=$(grep -c "INNGEST_EVENT_KEY" "$ENV_FILE" || true)
+
+  if [[ $TURSO_PRESENT -eq 0 ]] || [[ $INNGEST_PRESENT -eq 0 ]]; then
+    if [[ "$CHECK_ONLY" == "true" ]]; then
+      echo ""
+      echo "⚠️  .env is missing service credentials ($ENV_LINES lines, Turso=$TURSO_PRESENT, Inngest=$INNGEST_PRESENT)"
+      echo "   Run: ./scripts/restore-env.sh"
+    else
+      if [[ -x "$RESTORE_SCRIPT" ]]; then
+        "$RESTORE_SCRIPT" >/dev/null 2>&1
+        echo "✓ .env credentials restored (was $ENV_LINES lines, now $(wc -l < "$ENV_FILE"))"
+      fi
+    fi
+  fi
+fi
