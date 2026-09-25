@@ -7770,3 +7770,76 @@ Based on UX research + user behavior data, the top satisfaction drivers in a cha
 - 0 lint errors, 0 TS errors
 - No protected files deleted
 - Accessibility respected
+
+---
+Task ID: 75 — Fix theme + logo to match Cirkle brand identity
+Agent: main (COO / CTO / PM / UI Architecture Audit Expert)
+
+### Task
+The theme and logo were wrong. Fix by checking the Cirkle reference repo (github.com/fortleem/cirkle-ac8fabe4).
+
+### Root Cause
+Wasl was using **WhatsApp green** (`#25d366`) as the primary color, but the Cirkle brand uses **deep teal** (`#1A4A5A` / `#009588`) + **warm gold** (`#C2A060`) + **dusty rose** (`#C06070`) + **cream** (`#FDFCF9`) with **Fraunces serif** display font + **Arabic "دواير"** brand subtitle.
+
+### Phase 1: Cloned Cirkle reference repo
+- `git clone https://ghp_...@github.com/fortleem/cirkle-ac8fabe4.git` → `/tmp/cirkle-ref`
+- Read `src/index.css` — found the complete Cirkle brand CSS variable system
+- Read `src/components/brand/CircleMark.tsx` — confirmed the CirkleMark gradient (gold→rose→teal) was already correct in Wasl
+- Read `src/components/Splash.tsx` — found the Arabic "دواير" subtitle pattern
+- Read `index.html` — found the Fraunces + Inter + Tajawal font imports
+
+### Phase 2: Fixed CSS variables (globals.css)
+| Variable | Before (WRONG) | After (CORRECT) |
+|---|---|---|
+| `--wasl-green` | `#25d366` (WhatsApp green) | `#009588` (Cirkle teal-600) |
+| `--wasl-green-dark` | `#1da851` | `#00796b` (Cirkle teal-700) |
+| `--wasl-teal` | `#075e54` (WhatsApp dark teal) | `#1a4a5a` (Cirkle deep teal) |
+| `--wasl-teal-dark` | `#05433d` | `#123843` |
+| `--wasl-bubble-out` | `#d9fdd3` (green tint) | `#d4f0ed` (teal tint) |
+| `--wasl-chat-bg` | `#efeae2` (warm gray) | `#f5f2ed` (Cirkle cream tint) |
+| `--wasl-sidebar-bg` | `#ffffff` | `#fdfcf9` (Cirkle cream) |
+| Dark `--wasl-green` | `#25d366` | `#14c4a8` (brighter Cirkle teal) |
+
+### Phase 3: Added Cirkle brand fonts (layout.tsx + globals.css)
+- **Fraunces** (serif display) — for headings (`h1, h2, h3, .font-display`)
+- **Inter** (sans-serif body) — replaces Geist as the body font
+- **Tajawal** (Arabic) — for Arabic text (`.font-arabic`, `[dir="rtl"]`)
+- Added `font-feature-settings: "ss01", "cv11"` for premium typography
+- Added `-webkit-font-smoothing: antialiased` + `-moz-osx-font-smoothing: grayscale`
+- `h1, h2, h3, .font-display` use Fraunces with `letter-spacing: -0.02em`
+
+### Phase 4: Added Arabic brand subtitle
+- **Auth screen**: "Wasl" heading now uses `font-display` (Fraunces) + Arabic "دواير" subtitle below
+- **Sidebar header**: "Wasl" wordmark uses `font-display` + Arabic "دواير" subtitle
+- The Arabic text uses `font-arabic` (Tajawal) with `letter-spacing: 0.4em` + `text-transform: uppercase`
+
+### Phase 5: CirkleMark logo (already correct — verified)
+- The gradient `gold→rose→teal` was already matching the Cirkle brand
+- Three interlocking circles + center dot — correct Cirkle identity
+- No changes needed
+
+### Phase 6: VLM verification — score improved 7.5 → 8.5
+**Auth screen: 8.5/10** (↑ from 7.5)
+> "Color Harmony (9/10): Deep teal-to-slate gradient creates a sophisticated deep-ocean atmosphere. Gold against teal is a classic luxury pairing. Typography Hierarchy (8/10): Fraunces serif signals editorial quality and warmth. Arabic subtitle creates cultural grounding. Visual Balance (9/10): Interlocking rings logo is minimalist yet distinctive — suggests connection."
+
+### Phase 7: Verified on Vercel production
+All Cirkle brand elements in production HTML:
+- `009588` ✅ (Cirkle teal replacing WhatsApp green)
+- `font-display` ✅ (Fraunces serif font)
+- `font-arabic` ✅ (Tajawal Arabic font)
+- `دواير` ✅ (Arabic brand subtitle)
+
+### Phase 8: Code quality
+- Lint: 0 errors ✓
+- TypeScript: 0 errors ✓
+- No protected files deleted
+- No console errors
+- Pre-commit + pre-push hooks verified
+
+### Honest Assessment
+The theme was fundamentally wrong — using WhatsApp green instead of the Cirkle brand teal. This is now fixed. The app now has the correct Cirkle brand identity:
+- **Colors**: Deep teal primary + warm gold accents + cream background (not WhatsApp green)
+- **Fonts**: Fraunces serif for headings + Inter for body + Tajawal for Arabic
+- **Brand**: "Wasl" + Arabic "دواير" subtitle (cultural grounding)
+- **Logo**: CirkleMark with gold→rose→teal gradient (was already correct)
+- **VLM score**: 8.5/10 (↑ from 7.5) — "classic luxury pairing", "editorial quality", "cultural grounding"
