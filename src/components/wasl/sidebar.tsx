@@ -323,7 +323,10 @@ export function Sidebar({
       >
         <div className="flex items-center gap-2 min-w-0 text-white">
           <WaslLogo size={36} animated monochrome={!isCirkle} />
-          <div className="font-bold text-lg leading-none truncate wasl-text-gradient">Wasl</div>
+          <div className="flex flex-col leading-none">
+            <div className="font-display text-lg font-semibold truncate wasl-text-gradient">Wasl</div>
+            <span className="font-arabic text-[9px] tracking-[0.3em] uppercase text-white/50 mt-0.5">دواير</span>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <Button

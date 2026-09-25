@@ -331,13 +331,21 @@ export function AuthScreen() {
           </div>
 
           <div className="wasl-anim-slide-up wasl-stagger-2">
-            <h1 className="wasl-shimmer-text" style={{
+            <h1 className="wasl-shimmer-text font-display" style={{
               fontSize: '2.5rem',
-              fontWeight: 800,
-              letterSpacing: '-0.03em',
-              margin: '0 0 4px',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              margin: '0 0 2px',
               lineHeight: 1,
             }}>Wasl</h1>
+            <span className="font-arabic" style={{
+              display: 'block',
+              fontSize: '0.625rem',
+              letterSpacing: '0.4em',
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.5)',
+              marginTop: '4px',
+            }}>دواير</span>
           </div>
 
           <div className="wasl-anim-slide-up wasl-stagger-3">

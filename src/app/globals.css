@@ -6,8 +6,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display), 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+  --font-arabic: var(--font-arabic), 'Tajawal', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -94,15 +96,19 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* Wasl signature palette (light) */
-  --wasl-green: #25d366;
-  --wasl-green-dark: #1da851;
-  --wasl-teal: #075e54;
-  --wasl-teal-dark: #05433d;
-  --wasl-bubble-out: #d9fdd3; /* light green for outgoing bubbles */
-  --wasl-bubble-in: #ffffff;  /* white for incoming bubbles */
-  --wasl-chat-bg: #efeae2;    /* cream chat background */
-  --wasl-sidebar-bg: #ffffff;
+  /* Wasl signature palette — ALIGNED with Cirkle brand (Task 75)
+     Wasl uses the Cirkle brand colors as the DEFAULT, not WhatsApp green.
+     --wasl-green is now the Cirkle teal-600 (#009588) for semantic
+     consistency (online/active/success indicators use teal, not green).
+     --wasl-teal is the Cirkle deep teal (#1a4a5a) for headers/gradients. */
+  --wasl-green: #009588;            /* Cirkle teal-600 — primary accent */
+  --wasl-green-dark: #00796b;       /* Cirkle teal-700 — darker accent */
+  --wasl-teal: #1a4a5a;             /* Cirkle deep teal — headers/gradients */
+  --wasl-teal-dark: #123843;       /* Cirkle deep teal dark — gradient end */
+  --wasl-bubble-out: #d4f0ed;      /* Light teal tint for outgoing bubbles */
+  --wasl-bubble-in: #ffffff;       /* White for incoming bubbles */
+  --wasl-chat-bg: #f5f2ed;          /* Warm cream chat background (Cirkle cream tint) */
+  --wasl-sidebar-bg: #fdfcf9;       /* Cirkle cream — sidebar background */
 
   /* Cirkle brand tokens — constant across themes (gold / teal / rose / steel / charcoal / cream).
      Imported from github.com/fortleem/CIRKLE and tuned to match the live
@@ -153,12 +159,12 @@
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.546 0.16 142.5);
 
-  /* Wasl signature palette (dark) */
-  --wasl-green: #25d366;
-  --wasl-green-dark: #1da851;
-  --wasl-teal: #128c7e;
-  --wasl-teal-dark: #0b5a51;
-  --wasl-bubble-out: #005c4b;
+  /* Wasl signature palette (dark) — ALIGNED with Cirkle brand */
+  --wasl-green: #14c4a8;             /* Cirkle teal — brighter for dark mode contrast */
+  --wasl-green-dark: #00a391;
+  --wasl-teal: #1a4a5a;             /* Cirkle deep teal — same as light mode */
+  --wasl-teal-dark: #123843;
+  --wasl-bubble-out: #1a3a3a;        /* Dark teal tint for outgoing bubbles */
   --wasl-bubble-in: #1f2c34;
   --wasl-chat-bg: #0b141a;
   --wasl-sidebar-bg: #111b21;
@@ -281,6 +287,19 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
+  }
+  /* Cirkle display font — Fraunces serif for headings (brand identity) */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  /* Arabic font — Tajawal for Arabic text */
+  .font-arabic, [dir="rtl"] {
+    font-family: var(--font-arabic);
   }
 }
 
