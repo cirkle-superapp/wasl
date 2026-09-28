@@ -281,7 +281,8 @@ export function AuthScreen() {
           fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           background: `linear-gradient(135deg, ${C.teal} 0%, ${C.tealLight} 40%, ${C.teal} 70%, ${C.gold} 100%)`,
           position: 'relative',
-          overflow: 'hidden',
+          overflowY: 'auto',
+          overflowX: 'hidden',
         }}>
         {/* Futuristic background glow orbs */}
         <div style={{
