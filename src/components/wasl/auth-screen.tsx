@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff, ShieldCheck, Zap, Users } from 'lucide-react'
+import { Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff, ShieldCheck, Zap, Users, Download, Apple, Monitor, Cpu, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { CirkleMark } from './cirkle-mark'
@@ -673,6 +673,60 @@ export function AuthScreen() {
                   {loading ? <Loader2 style={{ width: 16, height: 16, animation: 'ring-rotate 0.8s linear infinite' }} /> : <Sparkles style={{ width: 16, height: 16 }} />}
                   Try the rich demo
                 </button>
+              </div>
+
+              {/* ── Download Wasl for all platforms ─────────────────────── */}
+              <div style={{ marginTop: '20px' }}>
+                <div style={{
+                  textAlign: 'center',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  letterSpacing: '0.15em',
+                  textTransform: 'uppercase',
+                  color: 'rgba(255,255,255,0.45)',
+                  marginBottom: '12px',
+                }}>
+                  Download Wasl
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '8px',
+                }}>
+                  {[
+                    { icon: <Monitor style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'macOS', sub: 'Intel', msg: 'macOS Intel build — coming soon to the App Store' },
+                    { icon: <Apple style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'macOS', sub: 'Silicon', msg: 'macOS Apple Silicon build — coming soon to the App Store' },
+                    { icon: <Monitor style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Windows', sub: 'x64', msg: 'Windows build — coming soon to the Microsoft Store' },
+                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'iOS', sub: 'App Store', msg: 'iOS app — coming soon to the App Store' },
+                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Android', sub: 'Play Store', msg: 'Android app — coming soon to Google Play' },
+                    { icon: <Cpu style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Linux', sub: 'All distros', msg: 'Linux build — coming soon (.deb / .AppImage / .rpm)' },
+                  ].map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toast.info(p.msg)}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '10px 6px',
+                        borderRadius: '12px',
+                        border: `1px solid rgba(255,255,255,0.12)`,
+                        background: 'rgba(255,255,255,0.04)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        backdropFilter: 'blur(8px)',
+                        WebkitBackdropFilter: 'blur(8px)',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = `${C.gold}55` }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)' }}
+                    >
+                      {p.icon}
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{p.label}</span>
+                      <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.4)' }}>{p.sub}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
