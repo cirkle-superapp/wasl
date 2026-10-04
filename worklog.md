@@ -8219,3 +8219,73 @@ Changed the outer container from `overflow: 'hidden'` to `overflowY: 'auto', ove
 
 ### Code quality
 - Lint: 0 | TS: 0 | 48/48 protected files | 23 recovery tags
+
+---
+Task ID: 84 — Premium school + business UI upscale
+Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert)
+
+### Task
+Upscale the UI design of Wasl chat regarding schools and business, making it user-friendly with top-of-the-line UI design to outstand competitors.
+
+### Phase 1: CSS foundation (globals.css +232 lines)
+13 new premium utility classes:
+
+**School-specific:**
+- `wasl-school-card` — premium card with shadow-md, hover lift to shadow-lg, 20px radius
+- `wasl-school-header` — gradient overlay strip with ::before pseudo-element
+- `wasl-role-badge` — glassmorphic pill with backdrop-blur(8px), 4 variants:
+  - `wasl-role-admin` (amber)
+  - `wasl-role-student` (teal/Cirkle green)
+  - `wasl-role-parent` (pink)
+  - `wasl-role-teacher` (violet)
+  - All with dark-mode color variants
+- `wasl-stat-card` — icon + value + label with hover background tint
+- `wasl-stat-icon` — 36px rounded square with green tint background
+- `wasl-stat-value` — 18px bold tabular-nums
+- `wasl-stat-label` — 10px uppercase tracking
+- `wasl-student-row` — premium list row with hover bg + bottom border
+- `wasl-quick-tile` — 3-column grid tile with icon + label + hover lift
+- `wasl-quick-tile-icon` — 32px rounded square
+- `wasl-quick-tile-label` — 11px medium muted
+
+**Business-specific:**
+- `wasl-business-card` — glassmorphic card with shadow-sm, hover lift to shadow-md
+- `wasl-status-badge` — status pill with 3 variants:
+  - `wasl-status-approved` (green)
+  - `wasl-status-pending` (amber)
+  - `wasl-status-rejected` (red)
+  - All with dark-mode variants
+
+**Accessibility:**
+- `prefers-reduced-motion` fallbacks for all hover transforms
+
+### Phase 2: School component upgrades (my-school-dialog.tsx)
+- School cards: `wasl-school-card` + `wasl-anim-slide-up` (staggered entrance)
+- School header: `wasl-school-header` (gradient overlay strip)
+- Role badges: `wasl-role-badge` with 4 variants (glassmorphic pills)
+- Stat cards: `wasl-stat-card` (premium icon + value + label)
+- Quick-action tiles: `wasl-quick-tile` (3-column grid replacing flat buttons)
+
+### Phase 3: School admin upgrades (school-admin-dialog.tsx)
+- Student rows: `wasl-student-row` (premium list with hover bg)
+- Staggered entrance: `wasl-anim-slide-up` on each student row
+
+### Phase 4: Business dashboard upgrades (business-dashboard-dialog.tsx)
+- Business group cards: `wasl-business-card` (glassmorphic with hover lift)
+- Business member rows: `wasl-student-row` (premium list styling)
+- Staggered entrance: `wasl-anim-slide-up` on group cards
+
+### Phase 5: VLM verification
+**Vercel production: 8/10**
+> "Absolutely professional and premium—rivals banking/fintech onboarding flows. The design language suggests a B2B or high-trust consumer product. Comparable to: Notion's simplicity + Stripe's trust signals + Aesop's color palette. Would convert well for enterprise adoption or security-conscious users."
+
+### Phase 6: All 5 services verified
+- GitHub: ✅ synced (0/0)
+- Vercel: ✅ deployed (Landing 200, Login 200, School API returns Nile International)
+- Turso: ✅ connected (school data on Turso)
+- Neon: ✅ reachable
+- Inngest: ✅ configured (200)
+- AI: ✅ 200 in 0.35s (3 replies, self-healing 28 models)
+
+### Code quality
+- Lint: 0 | TS: 0 | 48/48 protected files | 24 recovery tags
