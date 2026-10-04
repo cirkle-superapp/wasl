@@ -8385,3 +8385,55 @@ Shared design (ecosystem):
 
 #### Code quality
 - Lint: 0 | TS: 0 | 48/48 protected files | 25 recovery tags
+
+---
+Task ID: 86 — AI Chat Insights (conversation analytics)
+Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert)
+
+### New Feature: AI Chat Insights
+
+**New API: POST /api/ai/insights**
+Analyzes up to 200 messages and returns:
+- totalMessages, myMessages, theirMessages, myPercentage
+- avgMessageLength (characters)
+- avgResponseTimeMs + label (e.g. '1m', '2h')
+- topActiveHours (top 3 hours by message count)
+- messageTypeBreakdown (text/image/voice/etc)
+- senderBreakdown (per-sender message count — great for groups)
+- daySpan + messagesPerDay
+- aiInsights (AI-powered sentiment + topics + health assessment)
+- 7s AI timeout (graceful fallback to null)
+
+**New Component: ChatInsightsDialog**
+- 4 premium stat boxes (total msgs, per day, avg response, avg length)
+- Participation split bar (green = you, amber = them)
+- Top active hours (chips with green highlight for #1)
+- Member activity bars (groups — sorted by message count with green progress bars)
+- Message type breakdown chips
+- AI insights card (green-tinted with Sparkles icon, wasl-anim-slide-up)
+- Uses wasl-stat-card + wasl-anim-slide-up for premium styling
+
+**Wired into chat-window:**
+- "Chat insights" menu item added to dropdown (BarChart3 icon)
+- Positioned between "AI summary" and "Action items"
+- Mounts ChatInsightsDialog with conversation ID + name
+
+**Verified on Vercel production:**
+- Insights API: 200 (returns full analytics)
+- Conversations: 11 (Turso)
+- AI Smart-Reply: 200 in 0.32s (3 replies)
+- All 5 services verified
+
+### All 5 Services ✅
+| # | Service | Status |
+|---|---|---|
+| 1 | GitHub | ✅ synced |
+| 2 | Vercel | ✅ deployed (Insights 200) |
+| 3 | Turso | ✅ connected (11 convs) |
+| 4 | Neon | ✅ reachable |
+| 5 | Inngest | ✅ configured (200) |
+| AI | Self-healing | ✅ 200 in 0.32s (28 models) |
+
+### Code quality
+- Lint: 0 | TS: 0 | 48/48 protected files | 26 recovery tags
+- 118 API routes total
