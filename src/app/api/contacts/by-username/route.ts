@@ -87,22 +87,24 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Create the contact linked to the matched user
+  // Create the contact linked to the matched user — PENDING confirmation
+  // The contact starts as "pending-confirmation:<requesterId>" in the notes
+  // field. The other party (the target user) must accept via
+  // /api/contact-requests before the contact appears in their address book.
+  // This implements the "other party has to confirm" requirement.
   const contact = await db.contact.create({
     data: {
       ownerId: session.id,
       userId: target.id,
-      // nickname defaults to the target user's name when not provided
       nickname: nickname || target.name,
-      notes,
-      // phone is not stored when adding by username — it's pulled from the
-      // linked user record at read time. If the target user hides their
-      // number, the contact view respects that.
+      notes: `pending-confirmation:${session.id}`,
     },
   })
 
   return NextResponse.json({
     ok: true,
+    pendingConfirmation: true,
+    message: `Contact request sent to @${target.username}. They need to confirm before the contact is established.`,
     contact: {
       id: contact.id,
       nickname: contact.nickname,
