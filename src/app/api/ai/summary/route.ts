@@ -94,7 +94,18 @@ export async function POST(req: NextRequest) {
 
   const userMessage = `Please summarize this conversation${rangeContext}:\n\n${convoText}`
 
-  const aiResult = await aiChat(systemPrompt, userMessage, 400)
+  // Call AI with a hard 7s timeout — if AI is too slow (Vercel 10s limit),
+  // fall back to the rule-based summary immediately.
+  let aiResult: string | null = null
+  try {
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000))
+    aiResult = await Promise.race([
+      aiChat(systemPrompt, userMessage, 400),
+      timeoutPromise,
+    ])
+  } catch {
+    aiResult = null
+  }
 
   let summary: string
 
