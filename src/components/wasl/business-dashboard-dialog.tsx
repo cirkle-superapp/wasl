@@ -353,7 +353,7 @@ export function BusinessDashboardDialog({
               {business.groups.map((g) => (
                 <div
                   key={g.id}
-                  className="rounded-lg border border-border p-3"
+                  className="wasl-business-card p-3 wasl-anim-slide-up"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -475,7 +475,7 @@ export function BusinessDashboardDialog({
               {business.members.map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50"
+                  className="wasl-student-row !py-2"
                 >
                   <WaslAvatar
                     name={m.name}

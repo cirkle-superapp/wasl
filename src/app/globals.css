@@ -2355,3 +2355,216 @@ kbd {
     transform: none !important;
   }
 }
+
+/* ============================================================================
+   TASK 84 — SCHOOL + BUSINESS PREMIUM UI
+   Top-tier design for school connect, business dashboards, student cards.
+   ============================================================================ */
+
+/* ---- Premium school card ---- */
+.wasl-school-card {
+  border-radius: 20px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--background) 90%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: var(--wasl-shadow-md);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease-out;
+}
+.wasl-school-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--wasl-shadow-lg);
+}
+
+/* ---- School header strip with brand gradient ---- */
+.wasl-school-header {
+  position: relative;
+  overflow: hidden;
+}
+.wasl-school-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--wasl-green) 15%, transparent) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ---- Premium role badge ---- */
+.wasl-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.wasl-role-admin {
+  background: color-mix(in oklab, #f59e0b 15%, transparent);
+  color: #b45309;
+  border: 1px solid color-mix(in oklab, #f59e0b 25%, transparent);
+}
+.wasl-role-student {
+  background: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  color: var(--wasl-green);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 25%, transparent);
+}
+.wasl-role-parent {
+  background: color-mix(in oklab, #ec4899 12%, transparent);
+  color: #be185d;
+  border: 1px solid color-mix(in oklab, #ec4899 25%, transparent);
+}
+.wasl-role-teacher {
+  background: color-mix(in oklab, #8b5cf6 12%, transparent);
+  color: #6d28d9;
+  border: 1px solid color-mix(in oklab, #8b5cf6 25%, transparent);
+}
+.dark .wasl-role-admin { color: #fbbf24; }
+.dark .wasl-role-student { color: #5eead4; }
+.dark .wasl-role-parent { color: #f9a8d4; }
+.dark .wasl-role-teacher { color: #c4b5fd; }
+
+/* ---- Premium stat card ---- */
+.wasl-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+  transition: background-color 0.2s ease-out;
+}
+.wasl-stat-card:hover {
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+.wasl-stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  color: var(--wasl-green);
+  flex-shrink: 0;
+}
+.wasl-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.wasl-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+/* ---- Premium student roster row ---- */
+.wasl-student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  transition: background-color 0.15s ease-out;
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.wasl-student-row:last-child {
+  border-bottom: none;
+}
+.wasl-student-row:hover {
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+
+/* ---- Premium business card ---- */
+.wasl-business-card {
+  border-radius: 16px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--background) 90%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow: var(--wasl-shadow-sm);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease-out;
+}
+.wasl-business-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--wasl-shadow-md);
+}
+
+/* ---- Business status badge ---- */
+.wasl-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.wasl-status-approved {
+  background: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  color: var(--wasl-green);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 25%, transparent);
+}
+.wasl-status-pending {
+  background: color-mix(in oklab, #f59e0b 12%, transparent);
+  color: #b45309;
+  border: 1px solid color-mix(in oklab, #f59e0b 25%, transparent);
+}
+.wasl-status-rejected {
+  background: color-mix(in oklab, #ef4444 12%, transparent);
+  color: #b91c1c;
+  border: 1px solid color-mix(in oklab, #ef4444 25%, transparent);
+}
+.dark .wasl-status-pending { color: #fbbf24; }
+.dark .wasl-status-rejected { color: #f87171; }
+
+/* ---- Premium quick-action tile ---- */
+.wasl-quick-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 5%, transparent);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+.wasl-quick-tile:hover {
+  background: color-mix(in oklab, var(--wasl-green) 8%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-green) 20%, transparent);
+  transform: translateY(-1px);
+}
+.wasl-quick-tile-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  color: var(--wasl-green);
+}
+.wasl-quick-tile-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-school-card:hover,
+  .wasl-business-card:hover,
+  .wasl-quick-tile:hover {
+    transform: none !important;
+  }
+}

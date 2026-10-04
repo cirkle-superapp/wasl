@@ -187,9 +187,9 @@ export function SchoolAdminDialog({
                 <span className="text-sm">{search ? 'No students match your search' : 'No students yet — add the first one'}</span>
               </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul>
                 {filtered.map((s) => (
-                  <li key={s.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <li key={s.id} className="wasl-student-row wasl-anim-slide-up" style={{ animationDelay: `${Math.min(s.id.length * 0.02, 0.2)}s` }}>
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
                       <div className="h-10 w-10 rounded-full bg-[var(--wasl-green)]/10 text-[var(--wasl-green)] flex items-center justify-center text-sm font-semibold shrink-0">

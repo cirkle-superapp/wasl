@@ -243,10 +243,10 @@ function SchoolCard({
   const verified = school.status === 'verified' && !!school.verifiedAt
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden wasl-hover-lift" style={{ boxShadow: 'var(--wasl-shadow-sm)' }}>
+    <div className="wasl-school-card wasl-anim-slide-up" style={{ animationDelay: '0.04s' }}>
       {/* Header strip */}
       <div
-        className="px-4 py-3 flex items-center gap-3"
+        className="wasl-school-header px-4 py-3 flex items-center gap-3"
         style={{
           background: `linear-gradient(135deg, ${(school.logoColor || '#075E54')}22 0%, transparent 100%)`,
         }}
@@ -330,20 +330,20 @@ function SchoolCard({
           </div>
         )}
 
-        {/* Quick action row */}
-        <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="flex-1 text-[12px]" disabled>
-            <Calendar className="h-3.5 w-3.5 mr-1.5" />
-            Events
-          </Button>
-          <Button variant="ghost" size="sm" className="flex-1 text-[12px]" disabled>
-            <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-            Classes
-          </Button>
-          <Button variant="ghost" size="sm" className="flex-1 text-[12px]" disabled>
-            <Users className="h-3.5 w-3.5 mr-1.5" />
-            Family
-          </Button>
+        {/* Quick action tiles — premium grid */}
+        <div className="mt-3 pt-3 border-t border-border/60 grid grid-cols-3 gap-2">
+          <div className="wasl-quick-tile">
+            <div className="wasl-quick-tile-icon"><Calendar className="h-4 w-4" /></div>
+            <span className="wasl-quick-tile-label">Events</span>
+          </div>
+          <div className="wasl-quick-tile">
+            <div className="wasl-quick-tile-icon"><BookOpen className="h-4 w-4" /></div>
+            <span className="wasl-quick-tile-label">Classes</span>
+          </div>
+          <div className="wasl-quick-tile">
+            <div className="wasl-quick-tile-icon"><Users className="h-4 w-4" /></div>
+            <span className="wasl-quick-tile-label">Family</span>
+          </div>
         </div>
       </div>
     </div>
@@ -352,16 +352,16 @@ function SchoolCard({
 
 function RoleBadge({ role }: { role: string }) {
   const labels: Record<string, { label: string; cls: string }> = {
-    admin: { label: 'Admin', cls: 'bg-amber-500/10 text-amber-700 dark:text-amber-300' },
-    teacher: { label: 'Teacher', cls: 'bg-violet-500/10 text-violet-700 dark:text-violet-300' },
-    staff: { label: 'Staff', cls: 'bg-blue-500/10 text-blue-700 dark:text-blue-300' },
-    student: { label: 'Student', cls: 'bg-[var(--wasl-green)]/10 text-[var(--wasl-green)]' },
-    parent: { label: 'Parent', cls: 'bg-pink-500/10 text-pink-700 dark:text-pink-300' },
-    none: { label: 'Connected', cls: 'bg-muted text-muted-foreground' },
+    admin: { label: 'Admin', cls: 'wasl-role-admin' },
+    teacher: { label: 'Teacher', cls: 'wasl-role-teacher' },
+    staff: { label: 'Staff', cls: 'wasl-role-teacher' },
+    student: { label: 'Student', cls: 'wasl-role-student' },
+    parent: { label: 'Parent', cls: 'wasl-role-parent' },
+    none: { label: 'Connected', cls: 'wasl-role-student' },
   }
   const cfg = labels[role] || labels.none
   return (
-    <span className={cn('text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full', cfg.cls)}>
+    <span className={cn('wasl-role-badge', cfg.cls)}>
       {cfg.label}
     </span>
   )
@@ -377,13 +377,13 @@ function StatCard({
   icon: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background/60 p-2.5 flex items-center gap-2.5">
-      <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+    <div className="wasl-stat-card">
+      <div className="wasl-stat-icon">
         {icon}
       </div>
       <div>
-        <div className="text-base font-semibold leading-none">{value}</div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{label}</div>
+        <div className="wasl-stat-value">{value}</div>
+        <div className="wasl-stat-label">{label}</div>
       </div>
     </div>
   )
