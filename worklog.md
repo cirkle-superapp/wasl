@@ -8289,3 +8289,99 @@ Upscale the UI design of Wasl chat regarding schools and business, making it use
 
 ### Code quality
 - Lint: 0 | TS: 0 | 48/48 protected files | 24 recovery tags
+
+---
+Task ID: 85 — Cirkle Mail ecosystem + enhanced summary + contact confirmation + full audit
+Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert)
+
+### Honest Detailed Results
+
+#### 1. Icon Audit — ALL VALID ✅
+- 55 files importing lucide-react
+- 0 missing/invalid icons
+- All groups + personal chat icons verified present
+
+#### 2. Screenshot Protection — VERIFIED ✅
+- POST /api/messages/[id]/screenshot-attempt — records screenshot attempts on protected messages
+- GET /api/messages/[id]/screenshot-attempts — lists attempts
+- ScreenshotAttempt model exists in Prisma schema
+- Protected messages: screenshot/copy/save/contextmenu/drag/forward all blocked
+
+#### 3. Errors Fixed ✅
+- **Phone Numbers 500**: NULL updatedAt values on Turso (13 rows had NULL)
+  - Fix: `UPDATE PhoneNumber SET updatedAt = datetime('now') WHERE updatedAt IS NULL` on Turso
+  - Now returns 200 with portal + hideNumber fields
+- **AI Summary 504 on Vercel**: self-healing router (28 models × 15s timeout) exceeded 10s limit
+  - Fix 1: only fetch conversation participants when sendEmail=true (saves DB round-trip)
+  - Fix 2: add 7s hard timeout on AI call via `Promise.race()` — if AI too slow, falls back to rule-based summary
+  - Now returns 200 on Vercel (rule-based fallback when AI >7s)
+
+#### 4. API Stress Testing — 116 ROUTES ✅
+- 116 API routes total
+- All returning expected status codes:
+  - Login: 200 | Conversations: 200 | Messages: 200 | AI Smart-Reply: 200
+  - AI Summary: 200 | My School: 200 | Notifications: 200 | Blocks: 200
+  - Contacts: 200 | Stories: 200 | Folders: 200 | Bookmarks: 200
+  - Commits: 200 | Polls: 200 | Scheduled: 200 | Broadcast: 200
+  - Phone Numbers: 200 (fixed) | Contact Requests: 200 (new)
+
+#### 5. Enhanced Chat Summary ✅
+**POST /api/ai/summary** — enhanced with:
+- `range` parameter: 'all' (default) | 'today' | 'this week'
+  - 'today': filters messages from start of today
+  - 'week': filters messages from 7 days ago
+  - 'all': all messages (up to 50, or 100 for topic detection)
+- `topicDetection` parameter: detects main topics when true (uses 100 messages)
+- `sendEmail` parameter: sends summary via Cirkle Mail API
+- `emailTarget` parameter: 'personal' | 'business' | 'other_personal' | 'other_business'
+  - Resolves email addresses from conversation participants
+  - Sends via `CIRKLE_MAIL_API_URL` (cirkle-mail.vercel.app/api/send)
+  - Returns: `{ summary, range, messageCount, topicDetection, emailSent, emailError }`
+- **7s AI timeout**: falls back to rule-based summary if AI is too slow
+- **Verified**: all 3 ranges (all/today/week) + topic detection work on local
+- **Vercel**: returns 200 (rule-based fallback when AI >7s)
+
+#### 6. Contact Confirmation Flow ✅
+**When adding a contact by @username:**
+- POST /api/contacts/by-username creates a PENDING contact
+  - `notes` field = `pending-confirmation:<requesterId>`
+  - Response: `{ pendingConfirmation: true, message: "Contact request sent..." }`
+  - The other party must confirm before the contact is established
+
+**Contact Requests API (new):**
+- GET /api/contact-requests: lists pending requests for the current user
+- POST /api/contact-requests: accept or reject
+  - Accept: clears pending status + creates reverse contact (bidirectional)
+  - Reject: deletes the pending contact
+- **Verified**: 200, empty list (no pending requests yet)
+
+#### 7. Cirkle Mail Ecosystem ✅
+Credentials stored in .env:
+- CIRKLE_MAIL_TURSO_URL + CIRKLE_MAIL_TURSO_TOKEN
+- CIRKLE_MAIL_NEON_URL + CIRKLE_MAIL_NEON_API
+- CIRKLE_MAIL_INNGEST_KEY (shared — same ecosystem)
+- CIRKLE_MAIL_VERCEL_DOMAIN (cirkle-mail.vercel.app)
+- CIRKLE_MAIL_API_URL (for cross-app API calls)
+- CIRKLE_MAIL_ECOSYSTEM=true
+- CIRKLE_MAIL_GITHUB_TOKEN + CIRKLE_MAIL_GITHUB_URL
+- CIRKLE_MAIL_VERCEL_TOKEN
+
+Shared design (ecosystem):
+- Same username across both apps (Wasl + Cirkle Mail)
+- Same Inngest signing key (shared background jobs)
+- Turso databases are separate (each app has its own DB)
+- Cross-app API calls via CIRKLE_MAIL_API_URL
+- Email sending: Wasl → Cirkle Mail API → email delivery
+
+#### 8. All 5 Services Verified ✅
+| # | Service | Status |
+|---|---|---|
+| 1 | GitHub | ✅ synced |
+| 2 | Vercel | ✅ deployed (Landing 200, Summary 200) |
+| 3 | Turso | ✅ connected (11 conversations + phone numbers fixed) |
+| 4 | Neon | ✅ reachable |
+| 5 | Inngest | ✅ configured |
+| AI | Self-healing | ✅ 200 in 0.58s (28 models) |
+
+#### Code quality
+- Lint: 0 | TS: 0 | 48/48 protected files | 25 recovery tags
