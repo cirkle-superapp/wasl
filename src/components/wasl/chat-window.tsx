@@ -21,6 +21,7 @@ import {
   Paperclip,
   Pin,
   PinOff,
+  BarChart3,
 } from 'lucide-react'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -32,6 +33,7 @@ import { ChatSearchDialog } from './chat-search-dialog'
 import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ChatSummaryDialog } from './chat-summary-dialog'
+import { ChatInsightsDialog } from './chat-insights-dialog'
 import { AppLockDialog } from './app-lock-dialog'
 import { ActionItemsDialog } from './action-items-dialog'
 import { ToneAdjusterDialog } from './tone-adjuster-dialog'
@@ -100,6 +102,7 @@ export function ChatWindow({
   const [appLockOpen, setAppLockOpen] = useState(false)
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
   const [toneOpen, setToneOpen] = useState(false)
+  const [insightsOpen, setInsightsOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Chat wallpaper — user-selectable from contact info panel (stored in localStorage)
   const [wallpaperClass, setWallpaperClass] = useState<string>(() => {
@@ -1417,6 +1420,9 @@ export function ChatWindow({
               <DropdownMenuItem onClick={() => setSummaryOpen(true)}>
                 <Sparkles className="w-4 h-4 mr-2" /> AI summary
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
+                <BarChart3 className="w-4 h-4 mr-2" /> Chat insights
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
                 <ListChecks className="w-4 h-4 mr-2" /> Action items
               </DropdownMenuItem>
@@ -1683,6 +1689,14 @@ export function ChatWindow({
         open={summaryOpen}
         onOpenChange={setSummaryOpen}
         conversationId={activeConversationId}
+      />
+
+      {/* AI chat insights dialog */}
+      <ChatInsightsDialog
+        open={insightsOpen}
+        onOpenChange={setInsightsOpen}
+        conversationId={activeConversationId}
+        conversationName={conversation?.name}
       />
 
       {/* App lock dialog */}
