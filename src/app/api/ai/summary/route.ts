@@ -47,22 +47,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ summary: `No messages found ${rangeLabel}.` })
   }
 
-  // Get conversation + participants for email resolution
-  const conversation = await db.conversation.findUnique({
-    where: { id: conversationId },
-    include: {
-      participants: {
-        include: {
-          user: {
-            select: { id: true, name: true, email: true, username: true, phone: true },
+  // Get conversation + participants for email resolution (ONLY when sendEmail is true)
+  // This saves a DB round-trip on Vercel where the 10s timeout is tight.
+  let conversation: any = null
+  let participants: any[] = []
+  if (sendEmail) {
+    conversation = await db.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, username: true, phone: true },
+            },
           },
         },
       },
-    },
-  })
-
-  // Build conversation text with sender names
-  const participants = conversation?.participants || []
+    })
+    participants = conversation?.participants || []
+  }
   const convoText = messages
     .reverse()
     .map((m) => {
