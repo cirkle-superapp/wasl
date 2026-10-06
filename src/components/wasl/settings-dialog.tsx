@@ -23,6 +23,7 @@ import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
   UserCircle, Shield, Users, Landmark, Ghost, Clock, Camera, Ban,
+  ChevronRight, Key, Send,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -33,6 +34,8 @@ import { BusinessDashboardDialog } from './business-dashboard-dialog'
 import { BusinessSearchDialog } from './business-search-dialog'
 import { ServiceProviderDialog } from './service-provider-dialog'
 import { BlockListDialog } from './block-list-dialog'
+import { ApiTokensDialog } from './api-tokens-dialog'
+import { ScheduleBatchDialog } from './schedule-batch-dialog'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -56,6 +59,8 @@ export function SettingsDialog({
   const [bizSearchOpen, setBizSearchOpen] = useState(false)
   const [spOpen, setSpOpen] = useState(false)
   const [blockListOpen, setBlockListOpen] = useState(false)
+  const [apiTokensOpen, setApiTokensOpen] = useState(false)
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [myBusinesses, setMyBusinesses] = useState<any[]>([])
   const [activeBizId, setActiveBizId] = useState<string | null>(null)
   const [bizDashOpen, setBizDashOpen] = useState(false)
@@ -435,6 +440,43 @@ export function SettingsDialog({
               </Button>
             </div>
 
+            {/* Developer / Integrations section */}
+            <div className="space-y-2 pt-3 border-t border-border">
+              <Label className="flex items-center gap-2">
+                <Key className="w-4 h-4" /> Developer & integrations
+              </Label>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setApiTokensOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-[var(--wasl-green)]/40 hover:bg-[var(--wasl-green)]/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[var(--wasl-green)]/10 flex items-center justify-center shrink-0">
+                    <Key className="w-4 h-4 text-[var(--wasl-green)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">API tokens</div>
+                    <div className="text-[11px] text-muted-foreground">Generate scoped tokens for external platforms (CRM, school admin, business automation)</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchDialogOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-[var(--wasl-green)]/40 hover:bg-[var(--wasl-green)]/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[var(--wasl-green)]/10 flex items-center justify-center shrink-0">
+                    <Send className="w-4 h-4 text-[var(--wasl-green)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">Schedule multi-message blast</div>
+                    <div className="text-[11px] text-muted-foreground">Send multiple messages to multiple recipients at a chosen day/time</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
+              </div>
+            </div>
+
             {/* Save/Cancel for profile tab */}
             <div className="flex justify-end gap-2 pt-2 border-t border-border">
               <Button
@@ -775,6 +817,12 @@ export function SettingsDialog({
 
       {/* Blocked users management dialog (Task 67) */}
       <BlockListDialog open={blockListOpen} onOpenChange={setBlockListOpen} />
+
+      {/* API tokens management dialog (Task 89) */}
+      <ApiTokensDialog open={apiTokensOpen} onOpenChange={setApiTokensOpen} />
+
+      {/* Multi-message multi-recipient scheduler dialog (Task 89) */}
+      <ScheduleBatchDialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen} />
     </Dialog>
   )
 }

@@ -3017,3 +3017,171 @@ kbd {
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 89 — API Token System + Multi-message Multi-recipient Scheduler
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* API token card — premium with hover lift + scope chips */
+.wasl-token-card {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  background: var(--background);
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+}
+.wasl-token-card:hover {
+  border-color: color-mix(in oklab, var(--wasl-green) 30%, transparent);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--wasl-green) 10%, transparent);
+}
+.wasl-token-card-revoked {
+  border-color: color-mix(in oklab, #f43f5e 30%, transparent);
+  background: color-mix(in oklab, #f43f5e 5%, transparent);
+}
+.wasl-token-card-expired {
+  border-color: color-mix(in oklab, #f59e0b 30%, transparent);
+  background: color-mix(in oklab, #f59e0b 5%, transparent);
+}
+
+/* Scope chip variants — category scopes use the green brand color,
+   permission scopes use blue. */
+.wasl-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: var(--wasl-radius-full);
+  font-size: 9px;
+  font-weight: 600;
+}
+.wasl-scope-chip-category {
+  background: color-mix(in oklab, var(--wasl-green) 12%, transparent);
+  color: var(--wasl-green);
+}
+.wasl-scope-chip-permission {
+  background: color-mix(in oklab, #3b82f6 12%, transparent);
+  color: #3b82f6;
+}
+
+/* Token reveal — monospace, breaking word, on amber background */
+.wasl-token-reveal {
+  border: 1px solid color-mix(in oklab, #f59e0b 30%, transparent);
+  background: color-mix(in oklab, #f59e0b 5%, transparent);
+  padding: var(--wasl-space-md);
+  border-radius: var(--wasl-radius-lg);
+}
+.wasl-token-reveal code {
+  font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 11px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+/* Scope selector button (used in CreateTokenDialog + ScheduleBatchDialog) */
+.wasl-scope-btn {
+  text-align: left;
+  padding: var(--wasl-space-sm) var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  border-radius: var(--wasl-radius-md);
+  font-size: 12px;
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+  background: var(--background);
+}
+.wasl-scope-btn:hover {
+  border-color: color-mix(in oklab, var(--wasl-green) 40%, transparent);
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+.wasl-scope-btn-active {
+  border-color: var(--wasl-green);
+  background: color-mix(in oklab, var(--wasl-green) 10%, transparent);
+}
+
+/* Batch preview card — gradient + animated slide-up */
+.wasl-batch-preview {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 25%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklab, var(--wasl-green) 8%, transparent),
+    transparent);
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+
+/* Message editor item in batch dialog */
+.wasl-batch-msg-item {
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  border-radius: var(--wasl-radius-md);
+  padding: var(--wasl-space-sm) var(--wasl-space-md);
+  background: var(--background);
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+.wasl-batch-msg-item:focus-within {
+  border-color: color-mix(in oklab, var(--wasl-green) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wasl-green) 15%, transparent);
+}
+
+/* Recipient chip — for selected conversations */
+.wasl-recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--wasl-radius-full);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  font-size: 11px;
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+}
+.wasl-recipient-chip:hover {
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+.wasl-recipient-chip-active {
+  border-color: var(--wasl-green);
+  background: color-mix(in oklab, var(--wasl-green) 10%, transparent);
+  color: var(--wasl-green);
+}
+
+/* Recipient row in conversation picker (checkbox style) */
+.wasl-recipient-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--wasl-space-sm);
+  padding: 6px var(--wasl-space-md);
+  text-align: left;
+  transition: background var(--wasl-duration-fast) var(--wasl-ease);
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.wasl-recipient-row:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.wasl-recipient-row-selected {
+  background: color-mix(in oklab, var(--wasl-green) 10%, transparent);
+}
+
+/* Rank badge for batch messages (1, 2, 3) */
+.wasl-msg-rank-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--wasl-radius-full);
+  background: color-mix(in oklab, var(--wasl-green) 15%, transparent);
+  color: var(--wasl-green);
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Reduced motion — disable new Task 89 animations too */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-batch-preview,
+  .wasl-batch-msg-item,
+  .wasl-scope-btn,
+  .wasl-recipient-chip,
+  .wasl-recipient-row,
+  .wasl-token-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}

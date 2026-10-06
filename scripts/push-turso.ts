@@ -243,6 +243,92 @@ const tables = [
     "updatedAt" DATETIME NOT NULL,
     FOREIGN KEY ("businessId") REFERENCES "Business"("id") ON DELETE CASCADE
   )`,
+
+  // ---- Task 89: API Token System + Multi-recipient Multi-message Scheduler ----
+  `CREATE TABLE IF NOT EXISTS "ApiToken" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "prefix" TEXT NOT NULL,
+    "scopes" TEXT NOT NULL DEFAULT '[]',
+    "rateLimitPerMin" INTEGER NOT NULL DEFAULT 60,
+    "expiresAt" DATETIME,
+    "lastUsedAt" DATETIME,
+    "lastUsedIp" TEXT,
+    "lastUserAgent" TEXT,
+    "revokedAt" DATETIME,
+    "totalCalls" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "AuditLog" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "tokenId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "endpoint" TEXT NOT NULL,
+    "method" TEXT NOT NULL,
+    "ip" TEXT,
+    "userAgent" TEXT,
+    "statusCode" INTEGER NOT NULL,
+    "durationMs" INTEGER NOT NULL DEFAULT 0,
+    "context" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("tokenId") REFERENCES "ApiToken"("id") ON DELETE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "ScheduledBatch" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL,
+    "name" TEXT,
+    "scheduledFor" DATETIME NOT NULL,
+    "repeat" TEXT NOT NULL DEFAULT 'none',
+    "repeatUntil" DATETIME,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "progress" TEXT,
+    "processedAt" DATETIME,
+    "totalSent" INTEGER NOT NULL DEFAULT 0,
+    "totalFailed" INTEGER NOT NULL DEFAULT 0,
+    "createdByTokenId" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "ScheduledBatchMessage" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "batchId" TEXT NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "delaySeconds" INTEGER NOT NULL DEFAULT 0,
+    "content" TEXT NOT NULL,
+    "type" TEXT NOT NULL DEFAULT 'text',
+    "attachmentUrl" TEXT,
+    FOREIGN KEY ("batchId") REFERENCES "ScheduledBatch"("id") ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "ScheduledBatchRecipient" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "batchId" TEXT NOT NULL,
+    "recipientType" TEXT NOT NULL DEFAULT 'conversation',
+    "conversationId" TEXT,
+    "scope" TEXT,
+    "folderId" TEXT,
+    FOREIGN KEY ("batchId") REFERENCES "ScheduledBatch"("id") ON DELETE CASCADE
+  )`,
+]
+
+// Indexes for the new tables (Task 89)
+const newTableIndexes = [
+  `CREATE INDEX IF NOT EXISTS "idx_apitoken_user" ON "ApiToken"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_apitoken_prefix" ON "ApiToken"("prefix")`,
+  `CREATE INDEX IF NOT EXISTS "idx_auditlog_token" ON "AuditLog"("tokenId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_auditlog_user" ON "AuditLog"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_auditlog_created" ON "AuditLog"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatch_user" ON "ScheduledBatch"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatch_due" ON "ScheduledBatch"("scheduledFor", "status")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchmsg_batch" ON "ScheduledBatchMessage"("batchId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchmsg_order" ON "ScheduledBatchMessage"("order")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchrcpt_batch" ON "ScheduledBatchRecipient"("batchId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchrcpt_type" ON "ScheduledBatchRecipient"("recipientType")`,
 ]
 
 async function main() {
@@ -254,6 +340,17 @@ async function main() {
       console.log('  ✓', name)
     } catch (err: any) {
       console.error('  ✗ Error:', err.message)
+    }
+  }
+  // Task 89 indexes
+  console.log('\nPushing Task 89 indexes...')
+  for (const sql of newTableIndexes) {
+    try {
+      await client.execute(sql)
+      const name = sql.match(/idx_(\w+)/)?.[1] || sql.slice(0, 50)
+      console.log('  ✓', name)
+    } catch (err: any) {
+      console.error('  ✗ Index error:', err.message)
     }
   }
   console.log('\nSchema push complete.')

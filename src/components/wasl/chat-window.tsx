@@ -23,6 +23,7 @@ import {
   PinOff,
   BarChart3,
   Heart,
+  Send,
 } from 'lucide-react'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -33,6 +34,7 @@ import { NewPollDialog } from './new-poll-dialog'
 import { ChatSearchDialog } from './chat-search-dialog'
 import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
+import { ScheduleBatchDialog } from './schedule-batch-dialog'
 import { ChatSummaryDialog } from './chat-summary-dialog'
 import { ChatInsightsDialog } from './chat-insights-dialog'
 import { HealthScoreDialog } from './health-score-dialog'
@@ -108,6 +110,7 @@ export function ChatWindow({
   const [toneOpen, setToneOpen] = useState(false)
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Chat wallpaper — user-selectable from contact info panel (stored in localStorage)
   const [wallpaperClass, setWallpaperClass] = useState<string>(() => {
@@ -1437,6 +1440,9 @@ export function ChatWindow({
               <DropdownMenuItem onClick={() => setToneOpen(true)}>
                 <Wand2 className="w-4 h-4 mr-2" /> Tone adjuster
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBatchDialogOpen(true)}>
+                <Send className="w-4 h-4 mr-2" /> Schedule multi-message blast
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCopyLast}>
                 <Copy className="w-4 h-4 mr-2" /> Copy last message
               </DropdownMenuItem>
@@ -1750,6 +1756,12 @@ export function ChatWindow({
         onOpenChange={setHealthScoreOpen}
         conversationId={activeConversationId}
         conversationName={conversation?.name}
+      />
+
+      {/* Multi-message multi-recipient batch scheduler dialog */}
+      <ScheduleBatchDialog
+        open={batchDialogOpen}
+        onOpenChange={setBatchDialogOpen}
       />
 
       {/* App lock dialog */}
