@@ -8437,3 +8437,60 @@ Analyzes up to 200 messages and returns:
 ### Code quality
 - Lint: 0 | TS: 0 | 48/48 protected files | 26 recovery tags
 - 118 API routes total
+
+---
+Task ID: 87 — Design system refinement + premium dark mode + top-tier UI
+Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert)
+
+### CSS additions (globals.css +243 lines → 2813 total)
+
+**Design tokens (standardized across the app):**
+- `--wasl-radius-sm/md/lg/xl/full`: 8px, 12px, 16px, 20px, 999px
+- `--wasl-space-xs/sm/md/lg/xl`: 4px, 8px, 16px, 24px, 32px
+- `--wasl-ease`: cubic-bezier(0.16, 1, 0.3, 1)
+- `--wasl-ease-spring`: cubic-bezier(0.34, 1.56, 0.64, 1)
+- `--wasl-duration-fast/normal/slow`: 0.15s, 0.25s, 0.4s
+
+**Premium dark mode:**
+- Richer blacks: oklch(0.13 0.005 142.5) instead of pure black
+- Glass tint: rgba(255,255,255,0.04) for depth
+- Refined bubble colors: #1a3a3a (out) / #1f2c34 (in)
+
+**New premium component classes:**
+| Class | What it does |
+|---|---|
+| `wasl-conv-card` | Premium conversation row (radius-md, border on hover) |
+| `wasl-conv-card-active` | Gradient green wash + 3px left border |
+| `wasl-bubble-out/in` | Refined layered shadows (not flat shadow-sm) |
+| `wasl-bubble-grouped-out/in` | Tighter corners for consecutive messages |
+| `wasl-chat-header` | Glassmorphic (blur 20px + saturate 180%) |
+| `wasl-sidebar-header` | Glassmorphic (blur 20px + saturate 200%) |
+| `wasl-search-input` | Premium focus glow (3px green ring) |
+| `wasl-composer` | Glassmorphic backdrop blur |
+| `wasl-tab-bar` | Pill-shaped container with gap + padding |
+| `wasl-tab-item` | Premium tab (12px, 500 weight, ease transition) |
+| `wasl-tab-item-active` | Green bg + white text + 600 weight |
+| `wasl-unread-badge` | Green pill with shadow + tabular-nums |
+| `wasl-online-dot-premium` | Cirkle signal-dot pulse animation |
+| `wasl-empty-sidebar` | Centered flex column with icon |
+| `wasl-empty-icon` | 64px gradient square with green tint border |
+| `wasl-date-divider` | Flex centered with padding |
+| `wasl-scroll-btn-premium` | Glassmorphic floating button |
+
+### Component upgrades applied:
+- **Sidebar search**: `wasl-search-input` (premium focus ring)
+- **Sidebar filter tabs**: `wasl-tab-bar` + `wasl-tab-item` (pill-shaped premium)
+- **Sidebar conversation rows**: `wasl-conv-card` (premium card with hover border)
+- **Chat header**: `wasl-chat-header` (glassmorphic blur 20px)
+- **Message bubbles**: removed inline `shadow-sm`, using CSS `wasl-bubble-out/in` (refined layered shadows)
+
+### VLM verification
+**Vercel production: 8.5/10**
+> "SaaS-grade polish with sophisticated, trustworthy aesthetic. Refined color palette (teal+gold = expensive, calming). Typography hierarchy (bold serif editorial feel). Glassmorphism card. Asymmetric balance guides eye from brand → value → action. CTA hierarchy. Cultural localization. Execution-level design work typical of well-funded fintech or secure communications platforms."
+
+### All 5 Services ✅
+- GitHub: ✅ synced | Vercel: ✅ deployed (200) | Turso: ✅ (11 convs) | Neon: ✅ | Inngest: ✅
+- AI: ✅ 200 in 0.32s (28 models, self-healing)
+
+### Code quality
+- Lint: 0 | TS: 0 | 48/48 protected files | 27 recovery tags | 2,813 lines CSS
