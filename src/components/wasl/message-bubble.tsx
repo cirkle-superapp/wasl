@@ -581,7 +581,7 @@ export function MessageBubble({
   if (message.type === 'voice' && message.content.startsWith('data:audio')) {
     return (
       <div className={cn('flex w-full wasl-msg-in', mine ? 'justify-end' : 'justify-start')}>
-        <div className={cn('px-2.5 py-1.5 shadow-sm relative', mine ? 'wasl-bubble-out wasl-bubble-tail-out' : 'wasl-bubble-in wasl-bubble-tail-in')}>
+        <div className={cn('px-2.5 py-1.5 relative', mine ? 'wasl-bubble-out wasl-bubble-tail-out' : 'wasl-bubble-in wasl-bubble-tail-in')}>
           {isGroup && !mine && senderName && (
             <SenderHeader
               senderName={senderName}
@@ -810,7 +810,7 @@ export function MessageBubble({
           onContextMenu={onContextMenu}
           onDragStart={onDragStart}
           className={cn(
-            'px-2.5 py-1.5 shadow-sm relative',
+            'px-2.5 py-1.5 relative',
             mine ? 'wasl-bubble-out wasl-bubble-tail-out' : 'wasl-bubble-in wasl-bubble-tail-in',
             // WhatsApp-style "tail" — when grouped with the previous message
             // from the same sender, tighten the connecting corner's radius

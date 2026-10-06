@@ -1299,7 +1299,7 @@ export function ChatWindow({
         )
       })()}
       {/* Chat header */}
-      <div className="wasl-glass-soft px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border" style={{ boxShadow: 'var(--wasl-shadow-sm)' }}>
+      <div className="wasl-chat-header px-3 sm:px-4 py-2.5 flex items-center gap-3 border-b border-border">
         <button
           onClick={onBack}
           className="md:hidden p-2 -ml-1 rounded-full hover:bg-muted text-foreground"

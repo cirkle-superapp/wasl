@@ -427,7 +427,7 @@ export function Sidebar({
               }
             }}
             placeholder="Search or start a new chat"
-            className="wasl-input-premium pl-9 pr-12 bg-muted/50 border-0 h-9 rounded-full"
+            className="wasl-input-premium wasl-search-input pl-9 pr-12 bg-muted/50 border-0 h-9"
           />
           {!search && (
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-medium text-muted-foreground/60 bg-muted-foreground/10 px-1.5 py-0.5 rounded border border-muted-foreground/15 pointer-events-none">
@@ -500,7 +500,7 @@ export function Sidebar({
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 px-2 py-2 border-b border-border bg-[var(--wasl-sidebar-bg)]">
+      <div className="wasl-tab-bar flex px-2 py-2 border-b border-border">
         {[
           { key: 'all', label: 'All', count: conversations.length },
           { key: 'unread', label: 'Unread', count: conversations.filter(c => (c.unreadCount || 0) > 0).length },
@@ -510,10 +510,8 @@ export function Sidebar({
             key={f.key}
             onClick={() => setFilter(f.key as any)}
             className={cn(
-              'px-3 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5',
-              filter === f.key
-                ? 'bg-[var(--wasl-teal)] text-white'
-                : 'bg-muted text-foreground hover:bg-muted/80'
+              'wasl-tab-item flex items-center gap-1.5',
+              filter === f.key ? 'wasl-tab-item-active' : ''
             )}
           >
             {f.label}
@@ -807,13 +805,12 @@ function ConversationRow({
     <div
       onClick={onClick}
       className={cn(
-        'group relative flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border/60',
-        'wasl-conv-row wasl-hover-lift',
-        // Staggered cascade entrance — applies only to the first 6 rows
+        'group relative flex items-center gap-3 cursor-pointer border-b border-border/60',
+        'wasl-conv-card wasl-conv-row',
         index < 6 && `wasl-anim-slide-up wasl-stagger-${index + 1}`,
         active
-          ? 'wasl-conv-active'
-          : 'hover:bg-muted/40 bg-[var(--wasl-sidebar-bg)]'
+          ? 'wasl-conv-card-active'
+          : ''
       )}
     >
       {/* Selected conversation: gradient accent bar — rendered by the
