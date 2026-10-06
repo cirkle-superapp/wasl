@@ -1,0 +1,975 @@
+     1→'use client'
+     2→
+     3→import { useState, useRef, useEffect } from 'react'
+     4→import {
+     5→  Search,
+     6→  Plus,
+     7→  Settings,
+     8→  Users,
+     9→  LogOut,
+    10→  Moon,
+    11→  Sun,
+    12→  MoreVertical,
+    13→  Trash2,
+    14→  CheckCheck,
+    15→  Phone,
+    16→  Archive,
+    17→  Landmark,
+    18→  Contact as ContactIcon,
+    19→  Star,
+    20→  Bookmark as BookmarkIcon,
+    21→  TextSearch,
+    22→  PencilLine,
+    23→  Pin,
+    24→  PinOff,
+    25→  MailOpen,
+    26→  GraduationCap,
+    27→  Lock,
+    28→  Bell,
+    29→} from 'lucide-react'
+    30→import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
+    31→import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
+    32→import { WaslLogo } from './wasl-logo'
+    33→import { StoryBar } from './story-bar'
+    34→import { PhoneNumbersDialog } from './phone-numbers-dialog'
+    35→import { NotificationCenterDialog } from './notification-center-dialog'
+    36→import { useColorTheme } from './color-theme-provider'
+    37→import { cn } from '@/lib/utils'
+    38→import { Button } from '@/components/ui/button'
+    39→import { Input } from '@/components/ui/input'
+    40→import { AnnouncementsDialog } from './announcements-dialog'
+    41→import { ContactsDialog } from './contacts-dialog'
+    42→import { BookmarksDialog } from './bookmarks-dialog'
+    43→import { GlobalStarredDialog } from './global-starred-dialog'
+    44→import { GlobalSearchDialog } from './global-search-dialog'
+    45→import {
+    46→  DropdownMenu,
+    47→  DropdownMenuContent,
+    48→  DropdownMenuItem,
+    49→  DropdownMenuLabel,
+    50→  DropdownMenuSeparator,
+    51→  DropdownMenuTrigger,
+    52→} from '@/components/ui/dropdown-menu'
+    53→import { formatRelative, formatTimeShort } from '@/lib/time'
+    54→import { useTheme } from 'next-themes'
+    55→import { toast } from 'sonner'
+    56→
+    57→export function Sidebar({
+    58→  onNewChat,
+    59→  onOpenSettings,
+    60→  onOpenMySchool,
+    61→}: {
+    62→  onNewChat: () => void
+    63→  onOpenSettings: () => void
+    64→  onOpenMySchool?: () => void
+    65→}) {
+    66→  const {
+    67→    user,
+    68→    setUser,
+    69→    conversations,
+    70→    activeConversationId,
+    71→    setActiveConversation,
+    72→    setConversations,
+    73→    removeConversation,
+    74→    upsertConversation,
+    75→    onlineUserIds,
+    76→  } = useWaslStore()
+    77→  const [search, setSearch] = useState('')
+    78→  const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
+    79→  const [loading, setLoading] = useState(true)
+    80→  const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
+    81→  const [notificationsOpen, setNotificationsOpen] = useState(false)
+    82→  const [notifUnreadCount, setNotifUnreadCount] = useState(0)
+    83→  const [announcementsOpen, setAnnouncementsOpen] = useState(false)
+    84→  const [contactsOpen, setContactsOpen] = useState(false)
+    85→  const [bookmarksOpen, setBookmarksOpen] = useState(false)
+    86→  // Subscribe to the bookmarked-message-ids set so the sidebar badge updates
+    87→  // when the user adds/removes a bookmark from the message toolbar or dialog.
+    88→  const bookmarksCount = useWaslStore(
+    89→    (s) => s.bookmarkedMessageIds.size
+    90→  )
+    91→  const [starredOpen, setStarredOpen] = useState(false)
+    92→  const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+    93→  // When the user opens global search from the sidebar search box (by
+    94→  // pressing Enter with a non-empty query), the typed text is forwarded
+    95→  // to the dialog as its initial query so they don't have to re-type it.
+    96→  const [globalSearchInitialQuery, setGlobalSearchInitialQuery] = useState('')
+    97→  const { theme, setTheme } = useTheme()
+    98→  const { colorTheme } = useColorTheme()
+    99→  const isCirkle = colorTheme === 'cirkle'
+   100→
+   101→  // ---- Portals (Task 67 follow-up: sidebar quick-switcher) ---------------
+   102→  // The user's phone numbers, each acting as a "portal" (sub-identity).
+   103→  // Loaded once on mount and refreshed after a switch.
+   104→  const [portals, setPortals] = useState<UserPhoneNumber[]>([])
+   105→  const activePortal = portals.find((p) => p.active) || null
+   106→
+   107→  useEffect(() => {
+   108→    let cancelled = false
+   109→    async function loadPortals() {
+   110→      try {
+   111→        const res = await fetch('/api/phone-numbers', { cache: 'no-store' })
+   112→        if (!res.ok) return
+   113→        const data = await res.json()
+   114→        if (cancelled) return
+   115→        setPortals(data.phoneNumbers || [])
+   116→      } catch {}
+   117→    }
+   118→    loadPortals()
+   119→    return () => { cancelled = true }
+   120→  }, [])
+   121→
+   122→  // ---- Notification unread count (Task 68) -------------------------------
+   123→  // Poll /api/notifications every 60s for the unread-count badge on the
+   124→  // bell icon. We only fetch the count summary, not the full list, to keep
+   125→  // the polling cheap.
+   126→  useEffect(() => {
+   127→    let cancelled = false
+   128→    async function loadCount() {
+   129→      try {
+   130→        const res = await fetch('/api/notifications', { cache: 'no-store' })
+   131→        if (!res.ok) return
+   132→        const data = await res.json()
+   133→        if (cancelled) return
+   134→        setNotifUnreadCount(data.unreadCount || 0)
+   135→      } catch {}
+   136→    }
+   137→    loadCount()
+   138→    const interval = setInterval(loadCount, 60_000) // every 60s
+   139→    return () => {
+   140→      cancelled = true
+   141→      clearInterval(interval)
+   142→    }
+   143→  }, [])
+   144→
+   145→  async function switchPortal(id: string) {
+   146→    setPortals((cur) => cur.map((p) => ({ ...p, active: p.id === id })))
+   147→    try {
+   148→      const res = await fetch(`/api/phone-numbers/${id}`, {
+   149→        method: 'PATCH',
+   150→        headers: { 'Content-Type': 'application/json' },
+   151→        body: JSON.stringify({ active: true }),
+   152→      })
+   153→      if (!res.ok) {
+   154→        const d = await res.json()
+   155→        toast.error(d?.error || 'Failed to switch portal')
+   156→        // Reload to restore the server's truth
+   157→        const fresh = await fetch('/api/phone-numbers', { cache: 'no-store' })
+   158→        if (fresh.ok) {
+   159→          const data = await fresh.json()
+   160→          setPortals(data.phoneNumbers || [])
+   161→        }
+   162→        return
+   163→      }
+   164→      const data = await res.json()
+   165→      // Sync the user.phone field so the sidebar shows the new active number
+   166→      if (user) {
+   167→        setUser({ ...user, phone: data.number, phoneNumbers: portals.map((p) => ({ ...p, active: p.id === id })) })
+   168→      }
+   169→      toast.success(`Switched to ${data.portalName || 'default'} portal`)
+   170→    } catch {
+   171→      toast.error('Network error')
+   172→    }
+   173→  }
+   174→
+   175→  async function loadConversations() {
+   176→    setLoading(true)
+   177→    try {
+   178→      const res = await fetch(`/api/conversations?q=${encodeURIComponent(search)}`, {
+   179→        cache: 'no-store',
+   180→      })
+   181→      if (!res.ok) return
+   182→      const data = await res.json()
+   183→      setConversations(data.conversations || [])
+   184→    } catch (e) {
+   185→      console.error(e)
+   186→    } finally {
+   187→      setLoading(false)
+   188→    }
+   189→  }
+   190→
+   191→  useEffect(() => {
+   192→    loadConversations()
+   193→     
+   194→  }, [search])
+   195→
+   196→  // Global keyboard shortcuts:
+   197→  // - Ctrl/Cmd+Shift+F: open global message search
+   198→  // - Ctrl/Cmd+N: open new chat dialog
+   199→  // - Ctrl/Cmd+/: open keyboard shortcuts help
+   200→  useEffect(() => {
+   201→    function onKey(e: KeyboardEvent) {
+   202→      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+   203→        e.preventDefault()
+   204→        setGlobalSearchInitialQuery('')
+   205→        setGlobalSearchOpen(true)
+   206→      }
+   207→      // Ctrl/Cmd+N → new chat (don't conflict with browser's new window
+   208→      // because we preventDefault)
+   209→      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'n') {
+   210→        e.preventDefault()
+   211→        onNewChat()
+   212→      }
+   213→    }
+   214→    window.addEventListener('keydown', onKey)
+   215→    return () => window.removeEventListener('keydown', onKey)
+   216→  }, [])
+   217→
+   218→  const filtered = conversations.filter((c) => {
+   219→    if (filter === 'unread' && c.unreadCount === 0) return false
+   220→    if (filter === 'groups' && !c.isGroup) return false
+   221→    return true
+   222→  })
+   223→
+   224→  // Client-side conversation pinning (stored in localStorage)
+   225→  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+   226→    try {
+   227→      const stored = localStorage.getItem('wasl-pinned-conversations')
+   228→      return stored ? new Set(JSON.parse(stored)) : new Set()
+   229→    } catch { return new Set() }
+   230→  })
+   231→
+   232→  function togglePin(id: string) {
+   233→    setPinnedIds((prev) => {
+   234→      const next = new Set(prev)
+   235→      if (next.has(id)) {
+   236→        next.delete(id)
+   237→        toast.success('Conversation unpinned')
+   238→      } else {
+   239→        next.add(id)
+   240→        toast.success('Conversation pinned to top')
+   241→      }
+   242→      try { localStorage.setItem('wasl-pinned-conversations', JSON.stringify([...next])) } catch {}
+   243→      return next
+   244→    })
+   245→  }
+   246→
+   247→  // Sort: pinned conversations first, then by last message time
+   248→  const sorted = [...filtered].sort((a, b) => {
+   249→    const aPinned = pinnedIds.has(a.id) ? 1 : 0
+   250→    const bPinned = pinnedIds.has(b.id) ? 1 : 0
+   251→    if (aPinned !== bPinned) return bPinned - aPinned
+   252→    const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : new Date(a.updatedAt).getTime()
+   253→    const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : new Date(b.updatedAt).getTime()
+   254→    return bTime - aTime
+   255→  })
+   256→
+   257→  async function handleLogout() {
+   258→    // Mark offline BEFORE clearing the session cookie (so /api/profile can
+   259→    // still identify the user).
+   260→    try {
+   261→      await fetch('/api/profile', {
+   262→        method: 'POST',
+   263→        headers: { 'Content-Type': 'application/json' },
+   264→        body: JSON.stringify({ online: false }),
+   265→        keepalive: true,
+   266→      })
+   267→    } catch {}
+   268→    await fetch('/api/auth/logout', { method: 'POST' })
+   269→    window.location.href = '/'
+   270→  }
+   271→
+   272→  async function handleDeleteConversation(id: string) {
+   273→    try {
+   274→      await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+   275→      removeConversation(id)
+   276→      toast.success('Conversation deleted')
+   277→    } catch {
+   278→      toast.error('Failed to delete')
+   279→    }
+   280→  }
+   281→
+   282→  async function handleArchive(id: string) {
+   283→    try {
+   284→      await fetch(`/api/conversations/${id}/archive`, {
+   285→        method: 'POST',
+   286→        headers: { 'Content-Type': 'application/json' },
+   287→        body: JSON.stringify({ archived: true }),
+   288→      })
+   289→      removeConversation(id)
+   290→      toast.success('Chat archived')
+   291→    } catch {
+   292→      toast.error('Failed to archive')
+   293→    }
+   294→  }
+   295→
+   296→  async function handleMarkUnread(id: string) {
+   297→    // Mark conversation as unread by setting lastReadAt to epoch 0 via the messages API
+   298→    try {
+   299→      // We need to set the participant's lastReadAt to before the first message
+   300→      // The simplest approach: set unreadCount locally and let the next load refresh
+   301→      const conv = conversations.find(c => c.id === id)
+   302→      if (conv) {
+   303→        upsertConversation({ ...conv, unreadCount: (conv.unreadCount || 0) + 1 })
+   304→      }
+   305→      toast.success('Marked as unread')
+   306→    } catch {
+   307→      toast.error('Failed to mark as unread')
+   308→    }
+   309→  }
+   310→
+   311→  return (
+   312→    <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)]">
+   313→      {/* Header */}
+   314→      <div
+   315→        className={cn(
+   316→          'text-white px-4 py-3 flex items-center justify-between gap-2 wasl-header-animated',
+   317→          isCirkle ? 'wasl-gradient-hero-cirkle' : 'bg-[var(--wasl-teal)]'
+   318→        )}
+   319→        style={!isCirkle ? {
+   320→          background: 'linear-gradient(135deg, var(--wasl-teal) 0%, var(--wasl-teal-dark) 50%, var(--wasl-teal) 100%)',
+   321→          backgroundSize: '200% 200%',
+   322→        } : undefined}
+   323→      >
+   324→        <div className="flex items-center gap-2 min-w-0 text-white">
+   325→          <WaslLogo size={36} animated monochrome={!isCirkle} />
+   326→          <div className="flex flex-col leading-none">
+   327→            <div className="font-display text-lg font-semibold truncate wasl-text-gradient">Wasl</div>
+   328→            <span className="font-arabic text-[9px] tracking-[0.3em] uppercase text-white/50 mt-0.5">دواير</span>
+   329→          </div>
+   330→        </div>
+   331→        <div className="flex items-center gap-1">
+   332→          <Button
+   333→            variant="ghost"
+   334→            size="icon"
+   335→            className="text-white hover:bg-white/10 hover:text-white relative"
+   336→            onClick={() => setNotificationsOpen(true)}
+   337→            title="Notifications"
+   338→            aria-label="Notifications"
+   339→          >
+   340→            <Bell className="w-5 h-5" />
+   341→            {notifUnreadCount > 0 && (
+   342→              <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+   343→                {notifUnreadCount > 99 ? '99+' : notifUnreadCount}
+   344→              </span>
+   345→            )}
+   346→          </Button>
+   347→          <Button
+   348→            variant="ghost"
+   349→            size="icon"
+   350→            className="text-white hover:bg-white/10 hover:text-white"
+   351→            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+   352→            title="Toggle theme"
+   353→          >
+   354→            {theme === 'dark' ? (
+   355→              <Sun className="w-5 h-5" />
+   356→            ) : (
+   357→              <Moon className="w-5 h-5" />
+   358→            )}
+   359→          </Button>
+   360→          <DropdownMenu>
+   361→            <DropdownMenuTrigger asChild>
+   362→              <Button
+   363→                variant="ghost"
+   364→                size="icon"
+   365→                className="text-white hover:bg-white/10 hover:text-white"
+   366→              >
+   367→                <MoreVertical className="w-5 h-5" />
+   368→              </Button>
+   369→            </DropdownMenuTrigger>
+   370→            <DropdownMenuContent align="end" className="w-56">
+   371→              <DropdownMenuLabel>Menu</DropdownMenuLabel>
+   372→              <DropdownMenuSeparator />
+   373→              <DropdownMenuItem onClick={onNewChat}>
+   374→                <Plus className="w-4 h-4 mr-2" /> New chat
+   375→              </DropdownMenuItem>
+   376→              <DropdownMenuItem
+   377→                onClick={() => {
+   378→                  setGlobalSearchInitialQuery('')
+   379→                  setGlobalSearchOpen(true)
+   380→                }}
+   381→              >
+   382→                <TextSearch className="w-4 h-4 mr-2 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" />
+   383→                Search messages
+   384→                <kbd className="ml-auto text-[10px] text-muted-foreground">
+   385→                  ⌘⇧F
+   386→                </kbd>
+   387→              </DropdownMenuItem>
+   388→              <DropdownMenuItem onClick={() => setStarredOpen(true)}>
+   389→                <Star className="w-4 h-4 mr-2 fill-amber-400 text-amber-400" />
+   390→                Starred messages
+   391→              </DropdownMenuItem>
+   392→              {onOpenMySchool && (
+   393→                <DropdownMenuItem onClick={onOpenMySchool}>
+   394→                  <GraduationCap className="w-4 h-4 mr-2 text-[var(--wasl-green)]" />
+   395→                  My School
+   396→                </DropdownMenuItem>
+   397→              )}
+   398→              <DropdownMenuItem onClick={onOpenSettings}>
+   399→                <Settings className="w-4 h-4 mr-2" /> Settings
+   400→              </DropdownMenuItem>
+   401→              <DropdownMenuSeparator />
+   402→              <DropdownMenuItem onClick={handleLogout}>
+   403→                <LogOut className="w-4 h-4 mr-2" /> Log out
+   404→              </DropdownMenuItem>
+   405→            </DropdownMenuContent>
+   406→          </DropdownMenu>
+   407→        </div>
+   408→      </div>
+   409→
+   410→      {/* Search & New chat */}
+   411→      <div className="px-3 py-2 bg-[var(--wasl-sidebar-bg)] border-b border-border flex items-center gap-2">
+   412→        <div className="relative flex-1">
+   413→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   414→          <Input
+   415→            value={search}
+   416→            onChange={(e) => setSearch(e.target.value)}
+   417→            onKeyDown={(e) => {
+   418→              // Enter with a non-empty query opens the global message
+   419→              // search (across ALL conversations) pre-seeded with the
+   420→              // typed text — mirrors WhatsApp's "search messages" UX
+   421→              // where pressing Enter in the sidebar search jumps into
+   422→              // full-text message search.
+   423→              if (e.key === 'Enter' && search.trim()) {
+   424→                e.preventDefault()
+   425→                setGlobalSearchInitialQuery(search.trim())
+   426→                setGlobalSearchOpen(true)
+   427→              }
+   428→            }}
+   429→            placeholder="Search or start a new chat"
+   430→            className="wasl-input-premium wasl-search-input pl-9 pr-12 bg-muted/50 border-0 h-9"
+   431→          />
+   432→          {!search && (
+   433→            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-medium text-muted-foreground/60 bg-muted-foreground/10 px-1.5 py-0.5 rounded border border-muted-foreground/15 pointer-events-none">
+   434→              ⌘K
+   435→            </kbd>
+   436→          )}
+   437→          {search && (
+   438→            <button
+   439→              type="button"
+   440→              onClick={() => {
+   441→                setGlobalSearchInitialQuery(search.trim())
+   442→                setGlobalSearchOpen(true)
+   443→              }}
+   444→              title="Search messages in all chats"
+   445→              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-6 w-6 rounded-full text-muted-foreground hover:text-[var(--wasl-teal)] dark:hover:text-[var(--wasl-green)] hover:bg-muted transition-colors"
+   446→            >
+   447→              <TextSearch className="w-3.5 h-3.5" />
+   448→            </button>
+   449→          )}
+   450→        </div>
+   451→        <Button
+   452→          size="icon"
+   453→          className="bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] text-white rounded-full h-9 w-9 shrink-0"
+   454→          onClick={onNewChat}
+   455→          title="New chat"
+   456→        >
+   457→          <Plus className="w-5 h-5" />
+   458→        </Button>
+   459→      </div>
+   460→
+   461→      {/* Official Announcements + Contacts buttons */}
+   462→      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)] space-y-1.5">
+   463→        <button
+   464→          onClick={() => setAnnouncementsOpen(true)}
+   465→          className="w-full flex items-center gap-2 p-2 rounded-lg border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/5 hover:bg-[var(--wasl-green)]/10 transition-colors text-left"
+   466→        >
+   467→          <Landmark className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
+   468→          <div className="flex-1 min-w-0">
+   469→            <div className="text-xs font-medium text-foreground">Official Announcements</div>
+   470→            <div className="text-[10px] text-muted-foreground">Government · Banks · Utilities</div>
+   471→          </div>
+   472→        </button>
+   473→        <button
+   474→          onClick={() => setContactsOpen(true)}
+   475→          className="w-full flex items-center gap-2 p-2 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors text-left"
+   476→        >
+   477→          <ContactIcon className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+   478→          <div className="flex-1 min-w-0">
+   479→            <div className="text-xs font-medium text-foreground">Contacts</div>
+   480→            <div className="text-[10px] text-muted-foreground">Address book</div>
+   481→          </div>
+   482→        </button>
+   483→        <button
+   484→          onClick={() => setBookmarksOpen(true)}
+   485→          className="w-full flex items-center gap-2 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+   486→        >
+   487→          <BookmarkIcon className="w-4 h-4 text-amber-500 shrink-0" />
+   488→          <div className="flex-1 min-w-0">
+   489→            <div className="text-xs font-medium text-foreground">Bookmarks</div>
+   490→            <div className="text-[10px] text-muted-foreground">
+   491→              Save for later
+   492→            </div>
+   493→          </div>
+   494→          {bookmarksCount > 0 && (
+   495→            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500 text-white">
+   496→              {bookmarksCount > 99 ? '99+' : bookmarksCount}
+   497→            </span>
+   498→          )}
+   499→        </button>
+   500→      </div>
+   501→
+   502→      {/* Filter tabs */}
+   503→      <div className="wasl-tab-bar flex px-2 py-2 border-b border-border">
+   504→        {[
+   505→          { key: 'all', label: 'All', count: conversations.length },
+   506→          { key: 'unread', label: 'Unread', count: conversations.filter(c => (c.unreadCount || 0) > 0).length },
+   507→          { key: 'groups', label: 'Groups', count: conversations.filter(c => c.isGroup).length },
+   508→        ].map((f) => (
+   509→          <button
+   510→            key={f.key}
+   511→            onClick={() => setFilter(f.key as any)}
+   512→            className={cn(
+   513→              'wasl-tab-item flex items-center gap-1.5',
+   514→              filter === f.key ? 'wasl-tab-item-active' : ''
+   515→            )}
+   516→          >
+   517→            {f.label}
+   518→            {f.count > 0 && (
+   519→              <span className={cn(
+   520→                'text-[10px] px-1.5 py-0.5 rounded-full font-semibold',
+   521→                filter === f.key
+   522→                  ? 'bg-white/20 text-white'
+   523→                  : f.key === 'unread'
+   524→                    ? 'bg-[var(--wasl-green)] text-white'
+   525→                    : 'bg-muted-foreground/20 text-muted-foreground'
+   526→              )}>
+   527→                {f.count}
+   528→              </span>
+   529→            )}
+   530→          </button>
+   531→        ))}
+   532→      </div>
+   533→
+   534→      {/* Conversation list */}
+   535→      <div className="flex-1 overflow-y-auto overflow-x-hidden wasl-scroll bg-[var(--wasl-sidebar-bg)]">
+   536→        <StoryBar />
+   537→        {loading && conversations.length === 0 ? (
+   538→          // Shimmer skeleton placeholders while the conversation list loads.
+   539→          // Uses the premium wasl-skeleton utility (Task 69) — inline rows
+   540→          // of avatar circle + name + preview text. Six rows is enough to
+   541→          // fill the visible sidebar area on first paint.
+   542→          <div className="py-2">
+   543→            {[0, 1, 2, 3, 4, 5].map((i) => (
+   544→              <div
+   545→                key={i}
+   546→                className={`flex items-center gap-3 px-3 py-3 wasl-anim-slide-up wasl-stagger-${i + 1}`}
+   547→              >
+   548→                <div
+   549→                  className="wasl-skeleton wasl-skeleton-circle shrink-0"
+   550→                  style={{ width: 48, height: 48 }}
+   551→                />
+   552→                <div className="flex-1 min-w-0">
+   553→                  <div className="flex justify-between items-center gap-2">
+   554→                    <div className="wasl-skeleton" style={{ width: 120, height: 12 }} />
+   555→                    <div className="wasl-skeleton" style={{ width: 32, height: 8 }} />
+   556→                  </div>
+   557→                  <div className="wasl-skeleton" style={{ width: 180, height: 10, marginTop: 4 }} />
+   558→                </div>
+   559→              </div>
+   560→            ))}
+   561→          </div>
+   562→        ) : filtered.length === 0 ? (
+   563→          <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground">
+   564→            {/* Empty-state glowing orb behind a large GraduationCap icon. */}
+   565→            <div className="wasl-empty-orb mb-4 flex items-center justify-center" style={{ width: 96, height: 96 }}>
+   566→              <GraduationCap className="w-12 h-12 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" strokeWidth={1.5} />
+   567→            </div>
+   568→            <p className="text-sm">
+   569→              {search
+   570→                ? 'No conversations match your search.'
+   571→                : 'No conversations yet. Tap the + button to start a new chat.'}
+   572→            </p>
+   573→          </div>
+   574→        ) : (
+   575→          sorted.map((c, i) => (
+   576→            <ConversationRow
+   577→              key={c.id}
+   578→              conversation={c}
+   579→              active={c.id === activeConversationId}
+   580→              onlineUserIds={onlineUserIds}
+   581→              pinned={pinnedIds.has(c.id)}
+   582→              onPin={() => togglePin(c.id)}
+   583→              onClick={() => setActiveConversation(c.id)}
+   584→              onDelete={() => handleDeleteConversation(c.id)}
+   585→              onArchive={() => handleArchive(c.id)}
+   586→              onMarkUnread={() => handleMarkUnread(c.id)}
+   587→              index={i}
+   588→            />
+   589→          ))
+   590→        )}
+   591→      </div>
+   592→
+   593→      {/* Profile footer */}
+   594→      <div className="border-t border-border bg-[var(--wasl-sidebar-bg)] px-3 py-2 flex items-center gap-2">
+   595→        <button
+   596→          onClick={onOpenSettings}
+   597→          className="flex items-center gap-3 flex-1 min-w-0 text-left hover:bg-muted/50 rounded-lg p-1 -m-1 transition-colors"
+   598→        >
+   599→          <WaslAvatar
+   600→            name={user?.name || 'Me'}
+   601→            src={user?.avatar}
+   602→            color={user?.avatarColor || undefined}
+   603→            size={36}
+   604→          />
+   605→          <div className="min-w-0">
+   606→            <div className="text-sm font-medium truncate flex items-center gap-1.5">
+   607→              {user?.name}
+   608→              {activePortal?.hideNumber && (
+   609→                <span title="Your number is hidden from others" aria-label="Number hidden">
+   610→                  <Lock className="w-3 h-3 text-amber-500" />
+   611→                </span>
+   612→              )}
+   613→            </div>
+   614→            <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+   615→              {activePortal?.portalName ? (
+   616→                <>
+   617→                  <span className="font-mono text-[10px] opacity-70">@{user?.username}</span>
+   618→                  <span className="opacity-40 text-[10px]">·</span>
+   619→                  <span className="text-[var(--wasl-green)]">{activePortal.portalName}</span>
+   620→                </>
+   621→              ) : (
+   622→                <span className="font-mono text-[10px] opacity-70">@{user?.username || user?.phone || 'No number'}</span>
+   623→              )}
+   624→            </div>
+   625→          </div>
+   626→        </button>
+   627→        {/* Portal quick-switcher — opens a dropdown to switch between the
+   628→            user's portals without opening the full phone-numbers dialog. */}
+   629→        <DropdownMenu>
+   630→          <DropdownMenuTrigger asChild>
+   631→            <button
+   632→              className="p-2 rounded-lg text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted transition-colors shrink-0"
+   633→              title="Switch portal / number"
+   634→              aria-label="Switch portal or phone number"
+   635→            >
+   636→              <Phone className="w-4 h-4" />
+   637→            </button>
+   638→          </DropdownMenuTrigger>
+   639→          <DropdownMenuContent align="end" className="w-64">
+   640→            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+   641→              Your portals
+   642→            </DropdownMenuLabel>
+   643→            <DropdownMenuSeparator />
+   644→            {portals.length === 0 ? (
+   645→              <div className="px-3 py-2 text-xs text-muted-foreground">No portals yet</div>
+   646→            ) : (
+   647→              portals.map((p) => (
+   648→                <DropdownMenuItem
+   649→                  key={p.id}
+   650→                  onClick={() => switchPortal(p.id)}
+   651→                  className="flex items-center gap-2 cursor-pointer"
+   652→                >
+   653→                  <div className={cn(
+   654→                    'h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0',
+   655→                  )} style={{ background: p.portalName ? 'var(--wasl-green)' : '#94a3b8' }}>
+   656→                    {p.portalName ? p.portalName.charAt(0).toUpperCase() : <Phone className="w-3 h-3" />}
+   657→                  </div>
+   658→                  <div className="flex-1 min-w-0">
+   659→                    <div className="text-sm font-medium truncate flex items-center gap-1">
+   660→                      {p.portalName || 'Default'}
+   661→                      {p.active && (
+   662→                        <span className="text-[9px] uppercase tracking-wide bg-[var(--wasl-green)]/15 text-[var(--wasl-green)] px-1 py-0.5 rounded-full">
+   663→                          Active
+   664→                        </span>
+   665→                      )}
+   666→                      {p.hideNumber && <Lock className="w-3 h-3 text-amber-500" />}
+   667→                    </div>
+   668→                    <div className="text-[10px] text-muted-foreground font-mono truncate">
+   669→                      {p.hideNumber ? 'Number hidden' : p.number}
+   670→                    </div>
+   671→                  </div>
+   672→                </DropdownMenuItem>
+   673→              ))
+   674→            )}
+   675→            <DropdownMenuSeparator />
+   676→            <DropdownMenuItem onClick={() => setPhoneNumbersOpen(true)}>
+   677→              <Plus className="w-4 h-4 mr-2" />
+   678→              Manage portals
+   679→            </DropdownMenuItem>
+   680→          </DropdownMenuContent>
+   681→        </DropdownMenu>
+   682→      </div>
+   683→
+   684→      <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
+   685→      <NotificationCenterDialog open={notificationsOpen} onOpenChange={setNotificationsOpen} />
+   686→      <AnnouncementsDialog open={announcementsOpen} onOpenChange={setAnnouncementsOpen} />
+   687→      <GlobalStarredDialog open={starredOpen} onOpenChange={setStarredOpen} />
+   688→      <GlobalSearchDialog
+   689→        open={globalSearchOpen}
+   690→        onOpenChange={setGlobalSearchOpen}
+   691→        initialQuery={globalSearchInitialQuery}
+   692→      />
+   693→      <ContactsDialog
+   694→        open={contactsOpen}
+   695→        onOpenChange={setContactsOpen}
+   696→        onStartChat={async (userId) => {
+   697→          // Start a 1-on-1 chat with the contact
+   698→          try {
+   699→            const res = await fetch('/api/conversations', {
+   700→              method: 'POST',
+   701→              headers: { 'Content-Type': 'application/json' },
+   702→              body: JSON.stringify({ participantIds: [userId] }),
+   703→            })
+   704→            const data = await res.json()
+   705→            if (res.ok && data.id) {
+   706→              setActiveConversation(data.id)
+   707→              setContactsOpen(false)
+   708→              // Refresh conversation list
+   709→              loadConversations()
+   710→            }
+   711→          } catch {
+   712→            toast.error('Failed to start chat')
+   713→          }
+   714→        }}
+   715→      />
+   716→      <BookmarksDialog open={bookmarksOpen} onOpenChange={setBookmarksOpen} />
+   717→    </div>
+   718→  )
+   719→}
+   720→
+   721→function ConversationRow({
+   722→  conversation,
+   723→  active,
+   724→  onlineUserIds,
+   725→  pinned,
+   726→  onPin,
+   727→  onClick,
+   728→  onDelete,
+   729→  onArchive,
+   730→  onMarkUnread,
+   731→  index = 0,
+   732→}: {
+   733→  conversation: Conversation
+   734→  active: boolean
+   735→  onlineUserIds: Set<string>
+   736→  pinned?: boolean
+   737→  onPin?: () => void
+   738→  onClick: () => void
+   739→  onDelete: () => void
+   740→  onArchive: () => void
+   741→  onMarkUnread?: () => void
+   742→  index?: number
+   743→}) {
+   744→  const last = conversation.lastMessage
+   745→  const otherUser = !conversation.isGroup
+   746→    ? conversation.participants.find((p) => p.userId !== useWaslStore.getState().user?.id)
+   747→    : null
+   748→  const isOnline =
+   749→    !conversation.isGroup &&
+   750→    !!otherUser &&
+   751→    (onlineUserIds.has(otherUser.userId) || otherUser.online)
+   752→
+   753→  // Reactive subscription to typing state for THIS conversation.
+   754→  // Select only the raw typing object (not a transformed array) so Zustand
+   755→  // can cache the reference and avoid infinite re-renders. The transformation
+   756→  // to display names is done in the component body below.
+   757→  const typingByConv = useWaslStore((s) => s.typingByConversation[conversation.id])
+   758→  const myId = useWaslStore((s) => s.user?.id)
+   759→  // Subscribe to the draft text for THIS conversation so the "Draft" badge
+   760→  // + "Draft: <preview>" last-message text react in real-time as the user
+   761→  // types or sends.
+   762→  const draftText = useWaslStore((s) => s.drafts[conversation.id] || '')
+   763→  const hasDraft = draftText.trim().length > 0
+   764→  const typingNames = typingByConv
+   765→    ? Object.entries(typingByConv)
+   766→        .filter(([uid]) => uid !== myId)
+   767→        .map(([uid]) => {
+   768→          const p = conversation.participants.find((pp) => pp.userId === uid)
+   769→          return p?.name?.split(' ')[0] || 'Someone'
+   770→        })
+   771→    : []
+   772→  const isTyping = typingNames.length > 0
+   773→
+   774→  const isMine = last?.senderId === useWaslStore.getState().user?.id
+   775→
+   776→  let preview = last?.content || 'Tap to start chatting'
+   777→  if (last?.type === 'image') preview = '📷 Photo'
+   778→  if (last?.type === 'pdf') preview = '📄 PDF'
+   779→  if (last?.type === 'document') preview = '📄 Document'
+   780→  if (last?.type === 'audio') preview = '🎵 Audio'
+   781→  if (last?.type === 'voice') preview = '🎤 Voice message'
+   782→  if (last?.type === 'system') preview = last?.content
+   783→
+   784→  // Draft preview takes precedence over the last-message preview — WhatsApp
+   785→  // shows "Draft: <text>" in the conversation row when there's an unsent
+   786→  // message saved for that conversation.
+   787→  const draftPreview = draftText.replace(/\s+/g, ' ').trim()
+   788→
+   789→  const previewSender =
+   790→    conversation.isGroup && last && !isMine && last.type !== 'system'
+   791→      ? `${conversation.participants.find((p) => p.userId === last.senderId)?.name?.split(' ')[0] || 'Someone'}: `
+   792→      : isMine && last && last.type !== 'system'
+   793→      ? 'You: '
+   794→      : ''
+   795→
+   796→  // Typing preview text — "typing…" for 1-on-1, "Name is typing…" for groups
+   797→  const typingText =
+   798→    conversation.isGroup && typingNames.length === 1
+   799→      ? `${typingNames[0]} is typing…`
+   800→      : conversation.isGroup && typingNames.length > 1
+   801→        ? `${typingNames.length} people typing…`
+   802→        : 'typing…'
+   803→
+   804→  return (
+   805→    <div
+   806→      onClick={onClick}
+   807→      className={cn(
+   808→        'group relative flex items-center gap-3 cursor-pointer border-b border-border/60',
+   809→        'wasl-conv-card wasl-conv-row',
+   810→        index < 6 && `wasl-anim-slide-up wasl-stagger-${index + 1}`,
+   811→        active
+   812→          ? 'wasl-conv-card-active'
+   813→          : ''
+   814→      )}
+   815→    >
+   816→      {/* Selected conversation: gradient accent bar — rendered by the
+   817→          .wasl-active-accent class via ::before (green→teal gradient with
+   818→          a soft glow). The previous solid-color span is removed in favor
+   819→          of this premium treatment. */}
+   820→      {conversation.isGroup ? (
+   821→        <WaslGroupAvatar
+   822→          name={conversation.name}
+   823→          src={conversation.avatar}
+   824→          participants={conversation.participants.map((p) => ({
+   825→            name: p.name,
+   826→            avatar: p.avatar,
+   827→            avatarColor: p.avatarColor,
+   828→          }))}
+   829→          size={48}
+   830→        />
+   831→      ) : (
+   832→        <WaslAvatar
+   833→          name={conversation.name}
+   834→          src={conversation.avatar}
+   835→          color={conversation.avatarColor}
+   836→          size={48}
+   837→          online={isOnline}
+   838→          showStatus
+   839→        />
+   840→      )}
+   841→      <div className="flex-1 min-w-0">
+   842→        <div className="flex items-center justify-between gap-2">
+   843→          <div
+   844→            className={cn(
+   845→              'wasl-conv-name truncate text-foreground flex items-center gap-1.5',
+   846→              conversation.unreadCount > 0 && 'wasl-conv-name-unread'
+   847→            )}
+   848→          >
+   849→            <span className="truncate">{conversation.name}</span>
+   850→            {conversation.unreadCount > 0 && (
+   851→              <span className="wasl-unread-dot" />
+   852→            )}
+   853→            {pinned && (
+   854→              <Pin className="w-3 h-3 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" fill="currentColor" />
+   855→            )}
+   856→            {/* Subtle "Draft" badge — shown only when there's unsent text for
+   857→                this conversation. Uses italic muted-foreground to match
+   858→                WhatsApp's quiet draft indicator. */}
+   859→            {hasDraft && (
+   860→              <span
+   861→                title="You have an unsent draft in this conversation"
+   862→                className="inline-flex items-center gap-0.5 text-[10px] italic font-medium text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] bg-[var(--wasl-green)]/10 rounded px-1 py-0.5 shrink-0"
+   863→              >
+   864→                <PencilLine className="w-2.5 h-2.5" />
+   865→                Draft
+   866→              </span>
+   867→            )}
+   868→          </div>
+   869→          <div className="flex items-center gap-1 shrink-0">
+   870→            {last && (
+   871→              <span
+   872→                className={cn(
+   873→                  'text-xs',
+   874→                  conversation.unreadCount > 0
+   875→                    ? 'text-[var(--wasl-green)] font-medium'
+   876→                    : 'text-muted-foreground'
+   877→                )}
+   878→              >
+   879→                {formatTimeShort(last.createdAt)}
+   880→              </span>
+   881→            )}
+   882→          </div>
+   883→        </div>
+   884→        <div className="flex items-center justify-between gap-2 mt-0.5">
+   885→          <div
+   886→            className={cn(
+   887→              'wasl-conv-preview flex items-center gap-1',
+   888→              isTyping
+   889→                ? 'text-[var(--wasl-green)] font-medium'
+   890→                : conversation.unreadCount > 0
+   891→                  ? 'wasl-conv-preview-unread'
+   892→                  : 'wasl-conv-preview-read'
+   893→            )}
+   894→          >
+   895→            {isTyping ? (
+   896→              <>
+   897→                {/* Premium typing dots — using the wasl-typing-pill-dot class */}
+   898→                <span className="inline-flex items-center gap-0.5 mr-0.5">
+   899→                  <span className="wasl-typing-pill-dot" />
+   900→                  <span className="wasl-typing-pill-dot" />
+   901→                  <span className="wasl-typing-pill-dot" />
+   902→                </span>
+   903→                <span className="truncate">{typingText}</span>
+   904→              </>
+   905→            ) : hasDraft ? (
+   906→              <>
+   907→                <PencilLine className="w-3.5 h-3.5 shrink-0 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]" />
+   908→                <span className="truncate">
+   909→                  Draft: {draftPreview}
+   910→                </span>
+   911→              </>
+   912→            ) : (
+   913→              <>
+   914→                {isMine && last && last.type !== 'system' && (
+   915→                  <CheckCheck
+   916→                    className={cn(
+   917→                      'w-4 h-4 shrink-0',
+   918→                      last.status === 'read'
+   919→                        ? 'text-sky-500'
+   920→                        : last.status === 'delivered'
+   921→                        ? 'text-sky-400'
+   922→                        : 'text-muted-foreground'
+   923→                    )}
+   924→                  />
+   925→                )}
+   926→                <span className="truncate">{previewSender + preview}</span>
+   927→              </>
+   928→            )}
+   929→          </div>
+   930→          <div className="flex items-center gap-1 shrink-0">
+   931→            {conversation.unreadCount > 0 ? (
+   932→              <span
+   933→                key={conversation.unreadCount}
+   934→                className="wasl-badge-bounce bg-[var(--wasl-green)] text-white text-xs min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center font-semibold"
+   935→              >
+   936→                {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+   937→              </span>
+   938→            ) : (
+   939→              <DropdownMenu>
+   940→                <DropdownMenuTrigger asChild>
+   941→                  <button
+   942→                    onClick={(e) => e.stopPropagation()}
+   943→                    className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-muted text-muted-foreground transition-opacity"
+   944→                  >
+   945→                    <MoreVertical className="w-4 h-4" />
+   946→                  </button>
+   947→                </DropdownMenuTrigger>
+   948→                <DropdownMenuContent align="end">
+   949→                  {onPin && (
+   950→                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPin() }}>
+   951→                      {pinned ? <PinOff className="w-4 h-4 mr-2" /> : <Pin className="w-4 h-4 mr-2" />}
+   952→                      {pinned ? 'Unpin chat' : 'Pin to top'}
+   953→                    </DropdownMenuItem>
+   954→                  )}
+   955→                  {onMarkUnread && (
+   956→                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onMarkUnread() }}>
+   957→                      <MailOpen className="w-4 h-4 mr-2" /> Mark as unread
+   958→                    </DropdownMenuItem>
+   959→                  )}
+   960→                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchive() }}>
+   961→                    <Archive className="w-4 h-4 mr-2" /> Archive chat
+   962→                  </DropdownMenuItem>
+   963→                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }} className="text-destructive focus:text-destructive">
+   964→                    <Trash2 className="w-4 h-4 mr-2" /> Delete chat
+   965→                  </DropdownMenuItem>
+   966→                </DropdownMenuContent>
+   967→              </DropdownMenu>
+   968→            )}
+   969→          </div>
+   970→        </div>
+   971→      </div>
+   972→    </div>
+   973→  )
+   974→}
+   975→

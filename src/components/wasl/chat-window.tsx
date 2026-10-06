@@ -22,6 +22,7 @@ import {
   Pin,
   PinOff,
   BarChart3,
+  Heart,
 } from 'lucide-react'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -34,6 +35,9 @@ import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ChatSummaryDialog } from './chat-summary-dialog'
 import { ChatInsightsDialog } from './chat-insights-dialog'
+import { HealthScoreDialog } from './health-score-dialog'
+import { CatchUpBanner } from './catch-up-banner'
+import { SafetyWarningBanner } from './safety-warning-banner'
 import { AppLockDialog } from './app-lock-dialog'
 import { ActionItemsDialog } from './action-items-dialog'
 import { ToneAdjusterDialog } from './tone-adjuster-dialog'
@@ -103,6 +107,7 @@ export function ChatWindow({
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
   const [toneOpen, setToneOpen] = useState(false)
   const [insightsOpen, setInsightsOpen] = useState(false)
+  const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Chat wallpaper — user-selectable from contact info panel (stored in localStorage)
   const [wallpaperClass, setWallpaperClass] = useState<string>(() => {
@@ -1423,6 +1428,9 @@ export function ChatWindow({
               <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
                 <BarChart3 className="w-4 h-4 mr-2" /> Chat insights
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setHealthScoreOpen(true)}>
+                <Heart className="w-4 h-4 mr-2" /> Health score
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
                 <ListChecks className="w-4 h-4 mr-2" /> Action items
               </DropdownMenuItem>
@@ -1459,6 +1467,43 @@ export function ChatWindow({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Smart safety scan — only run when the latest incoming message is
+          from a sender who hasn't appeared earlier in the loaded history.
+          That gives us a cheap "first-time message" heuristic without
+          needing an extra API call. */}
+      {(() => {
+        const lastIncoming = [...messages].reverse().find((m) => m.senderId !== user?.id && m.type !== 'system')
+        if (!lastIncoming) return null
+        const senderAppearances = messages.filter((m) => m.senderId === lastIncoming.senderId).length
+        // Only run the scan if this sender has <= 2 prior messages in the
+        // loaded history (i.e. they're effectively new to this thread).
+        const isPlausiblyFirstContact = senderAppearances <= 2
+        if (!isPlausiblyFirstContact) return null
+        return (
+          <SafetyWarningBanner
+            key={`${lastIncoming.senderId}-${lastIncoming.id}`}
+            conversationId={activeConversationId}
+            senderId={lastIncoming.senderId}
+            content={lastIncoming.content || ''}
+            messageId={lastIncoming.id}
+          />
+        )
+      })()}
+
+      {/* "Catch me up" digest banner — shown when the active conversation has
+          a large unread backlog on entry. The banner self-hides when unread
+          drops below 8 (e.g. after the user scrolls or marks read). */}
+      {initialUnreadRef.current >= 8 && (
+        <CatchUpBanner
+          conversationId={activeConversationId}
+          unreadCount={initialUnreadRef.current}
+          onJumpToMessage={(id) => {
+            window.dispatchEvent(new CustomEvent('wasl:jump-to-message', { detail: id }))
+          }}
+          onDismiss={() => { initialUnreadRef.current = 0 }}
+        />
+      )}
 
       {/* Messages */}
       <div
@@ -1695,6 +1740,14 @@ export function ChatWindow({
       <ChatInsightsDialog
         open={insightsOpen}
         onOpenChange={setInsightsOpen}
+        conversationId={activeConversationId}
+        conversationName={conversation?.name}
+      />
+
+      {/* Conversation Health Score dialog */}
+      <HealthScoreDialog
+        open={healthScoreOpen}
+        onOpenChange={setHealthScoreOpen}
         conversationId={activeConversationId}
         conversationName={conversation?.name}
       />

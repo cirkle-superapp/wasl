@@ -1021,6 +1021,64 @@ async function buildGroupConversations(
     out.push({ id: convId, name: 'Building 12 Residents', folder: 'Work' })
   }
 
+  // ---- "Trip Planning ✈️": busy group chat with 12+ UNREAD messages so the
+  // "Catch me up" digest banner is demoable. The trick: we set the user's
+  // lastReadAt to BEFORE the first message in this group, so the entire
+  // backlog shows as unread when they open the chat.
+  {
+    const members = [
+      session.id,
+      personas[0].id, // Amira
+      personas[2].id, // Layla
+      personas[5].id, // Sara
+      personas[7].id, // Hana
+    ]
+    const convId = await findOrCreateGroup(
+      'Trip Planning ✈️',
+      'Planning the Dubai weekend — flights, hotels, and dinner reservations.',
+      pickAvatarColor('trip-planning'),
+      members,
+      session.id,
+    )
+
+    // The backlog — 14 messages from various group members across 2 days.
+    // Mentions "Demo" (the user's first name) and includes a few links +
+    // action items so the catch-up digest surfaces meaningful content.
+    const backlogStart = new Date(Date.now() - 2 * 24 * 60 * 60_000)
+    const backlog = [
+      { senderId: personas[0].id, content: 'Ok team — Dubai trip planning officially starts NOW 🎉', hoursAgo: 47 },
+      { senderId: personas[2].id, content: 'Demo, you mentioned you can book the flights — can you confirm by tonight?', hoursAgo: 46 },
+      { senderId: personas[5].id, content: 'I found a great hotel deal: https://example.com/dubai-marina-hotel — $120/night', hoursAgo: 45 },
+      { senderId: personas[0].id, content: 'Oh nice! That hotel is right by the Marina.', hoursAgo: 44 },
+      { senderId: personas[7].id, content: 'I can handle the dinner reservations. How many people total?', hoursAgo: 43 },
+      { senderId: personas[2].id, content: 'Decision: we go Thursday → Sunday (4 days, 3 nights).', hoursAgo: 42 },
+      { senderId: personas[0].id, content: 'Reminder: passports need 6 months validity. Please check yours today!', hoursAgo: 36 },
+      { senderId: personas[5].id, content: 'I can cover the airport taxi — anyone want to split?', hoursAgo: 30 },
+      { senderId: personas[7].id, content: 'Action item for me: book Pierchic restaurant for Friday night 🍽️', hoursAgo: 24 },
+      { senderId: personas[2].id, content: 'Burj Khalifa tickets here: https://example.com/burj-tickets — get the sunset slot', hoursAgo: 20 },
+      { senderId: personas[0].id, content: 'Demo — please confirm flight booking ASAP, deadline is tonight.', hoursAgo: 6 },
+      { senderId: personas[5].id, content: 'I\'ll bring the itinerary spreadsheet tomorrow.', hoursAgo: 5 },
+      { senderId: personas[7].id, content: 'Booked Pierchic for 7pm Friday ✅', hoursAgo: 4 },
+      { senderId: personas[2].id, content: 'Final headcount: 5 people. Don\'t forget your swimwear 🏖️', hoursAgo: 2 },
+    ]
+    for (const m of backlog) {
+      await addMessage({
+        conversationId: convId,
+        senderId: m.senderId,
+        content: m.content,
+        createdAt: new Date(Date.now() - m.hoursAgo * 60 * 60_000),
+      })
+    }
+
+    // Mark all 14 messages as UNREAD by setting the user's lastReadAt to
+    // the start of the backlog (i.e. before the first message arrived).
+    await db.participant.updateMany({
+      where: { conversationId: convId, userId: session.id },
+      data: { lastReadAt: backlogStart },
+    })
+    out.push({ id: convId, name: 'Trip Planning ✈️', folder: 'Friends' })
+  }
+
   return out
 }
 

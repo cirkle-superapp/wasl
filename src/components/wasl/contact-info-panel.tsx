@@ -32,6 +32,7 @@ import {
   Link2,
   QrCode,
   Download,
+  Heart,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,6 +61,7 @@ import { cn } from '@/lib/utils'
 import { StarredMessagesDialog } from './starred-messages-dialog'
 import { EncryptionDialog } from './encryption-dialog'
 import { ReactionsSummaryDialog } from './reactions-summary-dialog'
+import { HealthScoreDialog } from './health-score-dialog'
 
 // Icon mapping for screenshot-attempt kinds → human-readable label + icon
 const KIND_META: Record<string, { label: string; icon: typeof Camera }> = {
@@ -121,6 +123,7 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
   const [muted, setMuted] = useState(false)
   const [encryptionOpen, setEncryptionOpen] = useState(false)
   const [reactionsOpen, setReactionsOpen] = useState(false)
+  const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   // Block-user state (Task 67). For 1-on-1 conversations only — we fetch
   // the block status once on conversation change and refresh after a
   // block/unblock action.
@@ -955,6 +958,48 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
+        {/* Conversation Health Score badge — only for 1-on-1 chats */}
+        {!conversation.isGroup && otherUser && (
+          <button
+            onClick={() => setHealthScoreOpen(true)}
+            className="w-full bg-gradient-to-br from-[var(--wasl-green)]/8 to-transparent rounded-lg p-3 border border-[var(--wasl-green)]/30 hover:border-[var(--wasl-green)]/50 hover:from-[var(--wasl-green)]/12 transition-colors text-left wasl-anim-slide-up"
+          >
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
+              <Heart className="w-3 h-3 text-[var(--wasl-green)]" />
+              Conversation Health
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm text-foreground/80">
+                Tap to compute algorithmic health score
+              </div>
+              <span className="shrink-0 text-[10px] text-[var(--wasl-green)] font-semibold px-2 py-1 rounded-full bg-[var(--wasl-green)]/10">
+                Analyze →
+              </span>
+            </div>
+          </button>
+        )}
+
+        {/* Conversation Health Score badge — only for 1-on-1 chats */}
+        {!conversation.isGroup && otherUser && (
+          <button
+            onClick={() => setHealthScoreOpen(true)}
+            className="w-full bg-gradient-to-br from-[var(--wasl-green)]/8 to-transparent rounded-lg p-3 border border-[var(--wasl-green)]/30 hover:border-[var(--wasl-green)]/50 hover:from-[var(--wasl-green)]/12 transition-colors text-left wasl-anim-slide-up"
+          >
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
+              <Heart className="w-3 h-3 text-[var(--wasl-green)]" />
+              Conversation Health
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm text-foreground/80">
+                Tap to compute algorithmic health score
+              </div>
+              <span className="shrink-0 text-[10px] text-[var(--wasl-green)] font-semibold px-2 py-1 rounded-full bg-[var(--wasl-green)]/10">
+                Analyze →
+              </span>
+            </div>
+          </button>
+        )}
+
         {/* About */}
         {!conversation.isGroup && otherUser && (
           <div className="bg-white dark:bg-[var(--wasl-chat-bg)] rounded-lg p-3 border border-border/60">
@@ -1624,6 +1669,13 @@ export function ContactInfoPanel({ onClose }: { onClose: () => void }) {
           onSaved={handleDescriptionChanged}
         />
       )}
+      {/* Health Score Dialog */}
+      <HealthScoreDialog
+        open={healthScoreOpen}
+        onOpenChange={setHealthScoreOpen}
+        conversationId={activeConversationId}
+        conversationName={conversation?.name}
+      />
     </div>
   )
 }

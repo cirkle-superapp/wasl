@@ -8494,3 +8494,177 @@ Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert
 
 ### Code quality
 - Lint: 0 | TS: 0 | 48/48 protected files | 27 recovery tags | 2,813 lines CSS
+
+---
+Task ID: 88 — High-value algorithmic upgrades (Priority Inbox, Health Score, Catch-up Digest, Send-time Optimizer, Safety Scanner)
+Agent: main (COO / CTO / PM / Social Media Expert / UI Architecture Audit Expert)
+
+## Goal
+User asked: "if there are any other upgrades, use your top of line algorithmic thinking to add it that will give high ad on value to users"
+
+→ Designed and shipped **5 algorithmic upgrades** that surface real, quantifiable intelligence on top of the chat data — all deterministic, with AI as a graceful enhancement layer (never a hard dependency).
+
+## 1. Priority Inbox — Multi-signal weighted ranking
+**New API:** `GET /api/ai/priority-inbox` → algorithmic conversation ranking.
+
+**Algorithm (7 signals, weighted sum):**
+| Signal | Weight | What it captures |
+|---|---|---|
+| Mention score | 0.24 | `@username` + first-name tokens in unread msgs |
+| Urgency keywords | 0.22 | urgent/asap/today/tomorrow/deadline/call me + date/time mentions |
+| Unread volume | 0.18 | log-scaled (saturates around 20) |
+| Sender importance | 0.16 | freq of msgs from other party × recency decay (exp, τ=14d) |
+| Action items | 0.12 | questions + "can you / please send / remind me" |
+| Thread engagement | 0.06 | replied in last 7d? +1.0 : +0.2 |
+| Time-of-day | 0.02 | boost for waking hours 8–23 |
+
+Plus **stale penalty**: conversations >7d old with no urgency fade out.
+Plus **algorithmic transparency footer** showing the 7 signals + weights + last-updated timestamp.
+
+**New UI:** `priority-inbox-view.tsx` — rank badges (#1 green gradient, #2 teal, #3 amber), reason chips (`Mentions you` / `Time-sensitive` / `Action needed`), priority meter bar on the right, auto-refresh every 60s.
+
+**Wired into sidebar** as a 4th tab: `All | Unread | Priority | Groups` (with Zap icon).
+
+**Verified:** Trip Planning ✈️ (14 unread) ranked #1 with score 0.404.
+
+## 2. Conversation Health Score — algorithmic composite metric
+**New API:** `POST /api/ai/health-score` → 0–100 score + label.
+
+**5-signal composite (weighted sum):**
+| Signal | Weight | What it captures |
+|---|---|---|
+| Response symmetry | 0.25 | ratio of my msgs vs theirs (1:1 → 100, 10:1 → 10) |
+| Latency trend | 0.20 | median response time first-half vs second-half |
+| Initiation balance | 0.20 | who starts conversations (6h+ gap = new initiation) |
+| Sentiment trend | 0.20 | AI-derived 0–100 + label + 40-word assessment |
+| Recency | 0.15 | exp decay (τ=10d) of days since last exchange |
+
+**Labels:** 80–100 🌱 Thriving | 60–79 ✓ Healthy | 40–59 ◐ Fading | 0–39 ⚠ At risk
+**Trend:** up / flat / down (compares first 25% vs last 25% message rate)
+**Group-aware:** For group chats, "their msgs" = sum of all other participants.
+
+**New UI:** `health-score-dialog.tsx` — circular SVG gauge with animated stroke-dashoffset, signal breakdown bars with weight badges, AI assessment card, stats grid (total msgs, initiations, response time first→second half), recalc button.
+
+**Wired into:**
+- Chat dropdown menu (Heart icon, "Health score")
+- Contact info panel — premium gradient badge button (1-on-1 chats only)
+
+**Verified:** Trip Planning 27/100 ⚠ At risk (lurking — 0 sent vs 14 received) | Amira 40/100 ◐ Fading (sent 1, received 5)
+
+## 3. "Catch me up" — Structured digest for busy chats
+**New API:** `POST /api/ai/catch-up`
+
+**Returns structured digest:**
+- `tldr` — 2-3 sentence plain-language summary (AI or fallback)
+- `decisions` — agreed-upon items (AI-extracted, JSON)
+- `actionItems` — text + ownerName (AI-extracted, JSON)
+- `mentionsOfYou` — local regex on `@username` + first-name (10 max)
+- `questions` — local regex on trailing `?` (8 max)
+- `links` — local regex on URLs (10 max)
+
+**Two-pass fetch strategy:** Caller passes `unreadCount` (captured client-side BEFORE the GET messages call auto-marks-read), so we fetch the LAST N messages even if lastReadAt has been bumped to NOW.
+
+**AI 7s timeout** with local-extraction fallback (mentions + links + questions always work).
+
+**New UI:** `catch-up-banner.tsx` — gradient strip above messages with shimmer button + dismiss. Expanded panel shows TL;DR card + 5 sections with icons (decisions, action items, mentions, questions, links). Click any mention/question to jump to the message.
+
+**Threshold:** Shows when `initialUnreadRef.current >= 8` (true "catch me up" scenario, not noisy for small unread counts).
+
+**Verified:** Trip Planning digest returned 14 messages, 2 mentions of you, 3 open questions, 2 links shared — all extracted locally.
+
+## 4. Send-time Optimizer — peak-hour prediction
+**New API:** `POST /api/ai/send-time`
+
+**Algorithm:**
+1. Fetch all messages sent BY the recipient (or all participants, for groups) in the last 30 days.
+2. Bin by hour-of-day (0–23).
+3. Apply **recency weighting** `exp(-ageDays/21)` so the last week counts more than 3 weeks ago.
+4. **3-hour moving-average smoothing** so a single late-night text doesn't shift the recommendation.
+5. Apply mild penalty for 0–6 AM (typical sleep).
+6. Find peak hour within the **next 24 hours** from NOW.
+7. Compute confidence: `peakRatio = peakWeight / totalWeight` + message count thresholds.
+
+**Returns:** `recommendedHour`, `recommendedLabel`, `recommendedTimeISO`, `confidence` (low/medium/high), `peakRatio`, `topHours[]`, `totalMessages`.
+
+**New UI:** Premium chip in `schedule-dialog.tsx` — gradient card with Sparkles icon, "Optimal send time", recommended time, confidence badge, top-3 hours chips. "Use this time →" button auto-fills the datetime-local input.
+
+**Verified:** Trip Planning (group) → 10:00 AM, medium confidence, top hours 10/11/12 AM.
+
+## 5. AI Safety / Spam Scanner — risk-score first-time messages
+**New API:** `POST /api/ai/safety-scan`
+
+**Deterministic 10-rule risk-scoring algorithm** (no AI dependency, <50ms cold-start):
+| Rule | Weight |
+|---|---|
+| Link present | +15 |
+| Suspicious link domain (TLDs/shorteners) | +20 |
+| Money / payment request ($, bank, crypto, gift cards) | +25 |
+| Credential request (password, OTP, PIN, CVV) | +20 |
+| Urgency language (urgent, act now, expire) | +15 |
+| Too-good-to-be-true (you won, free, lottery) | +15 |
+| Impersonation phrasing (it's me, new number, lost phone) | +15 |
+| Mixed scripts (Cyrillic lookalikes) | +10 |
+| Excessive emoji/unicode | +5 |
+| Long message + question (400+ chars + ?) | +10 |
+
+**Labels:** 0–19 Safe (allow) | 20–39 Cautious (warn) | 40–69 Suspicious (warn) | 70–100 Likely scam (block)
+**Short-circuit:** If sender has prior conversation history, returns 0/100 Safe immediately.
+
+**New UI:** `safety-warning-banner.tsx` — amber (warn) or rose (block) gradient strip above chat with risk score, expandable matched-rules list, dismiss per (senderId, messageId).
+
+**Smart gating (in chat-window):** Only renders when the latest incoming message is from a sender with ≤2 prior messages in the loaded history (cheap "first-time message" heuristic, no extra API call needed).
+
+**Verified:** Test scam message → 50/100 Suspicious with 4 matched rules (money, credentials, urgency, too-good).
+
+## Premium CSS additions (globals.css +204 lines → 3018 total)
+- `wasl-priority-row` + `wasl-priority-rank` (1-3 variants: green/teal/amber gradients) + `wasl-priority-meter` (animated bottom-up fill)
+- `wasl-health-gauge` (circular SVG) + `wasl-health-signal-bar` + `wasl-health-card` (gradient)
+- `wasl-catchup-banner` (gradient strip) + `wasl-catchup-button` (pill hover lift) + `wasl-catchup-panel` (max 60vh, animated slide-up)
+- `wasl-sendtime-card` (gradient) + `wasl-sendtime-chip` (primary/secondary variants)
+- `wasl-safety-banner` (warn amber / block rose variants) + `wasl-safety-icon`
+- Priority tab pill animation (`:has(.lucide-zap).wasl-tab-item-active` → green→teal gradient)
+- Reduced-motion fallbacks for all new animations
+
+## End-to-end verification (agent-browser)
+- ✅ Login flow → sidebar loads with 12 conversations, **Priority tab visible**
+- ✅ Click Priority tab → loads `PriorityInboxView`, shows "Top 7 priority conversations" + Trip Planning #1 (14 unread, green rank badge, priority meter bar)
+- ✅ Click Trip Planning → chat header loads + **Catch-up banner** appears ("14 new messages to catch up on" + "Catch me up" button)
+- ✅ Click Catch me up → digest panel slides up with **TL;DR + 2 MENTIONS YOU + 3 OPEN QUESTIONS + 2 LINKS SHARED**, all locally-extracted
+- ✅ Health-score API verified on Trip Planning (group) → 27/100 ⚠ At risk (correctly identifies lurking)
+- ✅ Health-score API verified on Amira (1-on-1) → 40/100 ◐ Fading (correctly identifies asymmetric engagement)
+- ✅ Send-time API verified on Trip Planning → 10:00 AM, medium confidence
+- ✅ Safety-scan API verified → 50/100 Suspicious with 4 matched rules
+
+## Seed-data enhancement
+Added **"Trip Planning ✈️"** group conversation to `seed-demo/route.ts`:
+- 5 participants (Demo + Amira + Layla + Sara + Hana)
+- 14 messages across 2 days (mentions Demo by name, includes links + action items + questions)
+- `lastReadAt` set to 3 days ago so all 14 show as unread → **catch-up banner is demoable**
+- Includes mentions of you, open questions, and shared links so the digest surfaces meaningful content
+
+## Code quality
+- **Lint: 0 errors / 0 warnings**
+- **TypeScript: 0 errors** (auto-verified via Next.js compile)
+- **All 5 new APIs return 200** with graceful AI fallback (the AI providers are currently timing out — nvidia/groq/openrouter/gemini/huggingface all unreachable in this session — but the deterministic algorithms still return correct results with AI=null)
+- **123 total API routes** (118 existing + 5 new)
+- **Premium CSS:** 3,018 lines
+
+## All 5 Services ✅ (unchanged)
+- GitHub ✅ | Vercel ✅ | Turso ✅ (12 convs now) | Neon ✅ | Inngest ✅
+- AI: ✅ self-healing router (28 models × 5 providers) — currently all timing out, but graceful fallbacks keep the new features 100% functional
+
+## Architecture highlights
+1. **Algorithmic transparency** — every new feature exposes its signals/weights in the UI (priority inbox footer, health score signal breakdown, safety scanner expandable rules). Users can SEE why the AI ranked something as #1 or scored a conversation as "Fading".
+2. **Deterministic core + AI enhancement** — none of the 5 features hard-depend on AI. If every AI provider is down (as is happening right now in this session), Priority Inbox still ranks, Health Score still computes, Catch-up still extracts mentions/links/questions locally, Send-time still predicts from message timestamps, Safety scanner still scores via rules. The AI only enhances (sentiment assessment, TL;DR generation) when available.
+3. **Graceful degradation** — 7s AI timeout with rule-based fallback for every AI-using endpoint.
+4. **Group-aware** — Health Score correctly handles group chats (counts all other participants as "their msgs"). Send-time optimizer aggregates across all group participants.
+5. **First-message heuristic** — Safety scanner uses a cheap client-side check (≤2 prior messages from this sender) before calling the API, avoiding wasteful scans on every conversation switch.
+
+## What's next?
+- **Phase 2 algorithmic upgrades** to consider for Task 89:
+  - Smart Folder auto-categorization (TF-IDF / keyword classifier → Work/Family/Finance/Promotions)
+  - Duplicate contact merge suggestions (fuzzy name + phone matching)
+  - Predictive emoji reactions (suggest most-likely reaction per incoming message)
+  - Cognitive load indicator (gentle "take a break" nudge after 2h of continuous messaging)
+  - Weekly wellness report (sent Sunday: msgs/engagement/peak hours/tone trend)
+  - AI-powered semantic contact search ("my doctor", "the apartment person")

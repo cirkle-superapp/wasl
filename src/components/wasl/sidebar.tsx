@@ -26,6 +26,7 @@ import {
   GraduationCap,
   Lock,
   Bell,
+  Zap,
 } from 'lucide-react'
 import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -42,6 +43,7 @@ import { ContactsDialog } from './contacts-dialog'
 import { BookmarksDialog } from './bookmarks-dialog'
 import { GlobalStarredDialog } from './global-starred-dialog'
 import { GlobalSearchDialog } from './global-search-dialog'
+import { PriorityInboxView } from './priority-inbox-view'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,7 +77,7 @@ export function Sidebar({
     onlineUserIds,
   } = useWaslStore()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'unread' | 'groups'>('all')
+  const [filter, setFilter] = useState<'all' | 'unread' | 'groups' | 'priority'>('all')
   const [loading, setLoading] = useState(true)
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -504,6 +506,7 @@ export function Sidebar({
         {[
           { key: 'all', label: 'All', count: conversations.length },
           { key: 'unread', label: 'Unread', count: conversations.filter(c => (c.unreadCount || 0) > 0).length },
+          { key: 'priority', label: 'Priority', count: -1 },
           { key: 'groups', label: 'Groups', count: conversations.filter(c => c.isGroup).length },
         ].map((f) => (
           <button
@@ -514,6 +517,7 @@ export function Sidebar({
               filter === f.key ? 'wasl-tab-item-active' : ''
             )}
           >
+            {f.key === 'priority' && <Zap className="w-3 h-3" />}
             {f.label}
             {f.count > 0 && (
               <span className={cn(
@@ -534,7 +538,9 @@ export function Sidebar({
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden wasl-scroll bg-[var(--wasl-sidebar-bg)]">
         <StoryBar />
-        {loading && conversations.length === 0 ? (
+        {filter === 'priority' ? (
+          <PriorityInboxView conversations={conversations} />
+        ) : loading && conversations.length === 0 ? (
           // Shimmer skeleton placeholders while the conversation list loads.
           // Uses the premium wasl-skeleton utility (Task 69) — inline rows
           // of avatar circle + name + preview text. Six rows is enough to
