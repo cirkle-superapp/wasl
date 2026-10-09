@@ -23,7 +23,7 @@ import {
   Loader2, Moon, Sun, Bell, Trash2, User, Phone, Info, RefreshCw,
   Palette, ShieldCheck, Building2, Search, Lock, EyeOff, ShieldAlert,
   UserCircle, Shield, Users, Landmark, Ghost, Clock, Camera, Ban,
-  ChevronRight, Key, Send,
+  ChevronRight, Key, Send, Network, Link2, GitMerge,
 } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { WaslAvatar } from './wasl-avatar'
@@ -36,6 +36,10 @@ import { ServiceProviderDialog } from './service-provider-dialog'
 import { BlockListDialog } from './block-list-dialog'
 import { ApiTokensDialog } from './api-tokens-dialog'
 import { ScheduleBatchDialog } from './schedule-batch-dialog'
+import { VaultDialog } from './vault-dialog'
+import { RelationshipGraphDialog } from './relationship-graph-dialog'
+import { IntegrityVerificationDialog } from './integrity-verification-dialog'
+import { ContactDuplicatesDialog } from './contact-duplicates-dialog'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -61,6 +65,10 @@ export function SettingsDialog({
   const [blockListOpen, setBlockListOpen] = useState(false)
   const [apiTokensOpen, setApiTokensOpen] = useState(false)
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const [graphOpen, setGraphOpen] = useState(false)
+  const [integrityOpen, setIntegrityOpen] = useState(false)
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
   const [myBusinesses, setMyBusinesses] = useState<any[]>([])
   const [activeBizId, setActiveBizId] = useState<string | null>(null)
   const [bizDashOpen, setBizDashOpen] = useState(false)
@@ -474,6 +482,62 @@ export function SettingsDialog({
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setVaultOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-amber-500/40 hover:bg-amber-500/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                    <Lock className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">Wasl Vault</div>
+                    <div className="text-[11px] text-muted-foreground">Zero-knowledge encrypted secrets (passwords, recovery codes, ID numbers)</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGraphOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-[var(--wasl-green)]/40 hover:bg-[var(--wasl-green)]/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[var(--wasl-green)]/10 flex items-center justify-center shrink-0">
+                    <Network className="w-4 h-4 text-[var(--wasl-green)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">Relationship graph</div>
+                    <div className="text-[11px] text-muted-foreground">Visualize your social network — built from scratch with force-directed spring physics</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntegrityOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <Link2 className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">Message integrity chain</div>
+                    <div className="text-[11px] text-muted-foreground">Cryptographic proof that your message history hasn't been tampered with</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicatesOpen(true)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-[var(--wasl-green)]/40 hover:bg-[var(--wasl-green)]/5 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[var(--wasl-green)]/10 flex items-center justify-center shrink-0">
+                    <GitMerge className="w-4 h-4 text-[var(--wasl-green)]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">Find duplicate contacts</div>
+                    <div className="text-[11px] text-muted-foreground">Smart fuzzy matching (Jaro-Winkler + E.164 phone normalization)</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </button>
               </div>
             </div>
 
@@ -823,6 +887,18 @@ export function SettingsDialog({
 
       {/* Multi-message multi-recipient scheduler dialog (Task 89) */}
       <ScheduleBatchDialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen} />
+
+      {/* Wasl Vault (Task 90) */}
+      <VaultDialog open={vaultOpen} onOpenChange={setVaultOpen} />
+
+      {/* Relationship graph (Task 90) */}
+      <RelationshipGraphDialog open={graphOpen} onOpenChange={setGraphOpen} />
+
+      {/* Message integrity chain (Task 90) */}
+      <IntegrityVerificationDialog open={integrityOpen} onOpenChange={setIntegrityOpen} />
+
+      {/* Contact duplicates (Task 90) */}
+      <ContactDuplicatesDialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen} />
     </Dialog>
   )
 }

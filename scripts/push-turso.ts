@@ -314,9 +314,38 @@ const tables = [
     "folderId" TEXT,
     FOREIGN KEY ("batchId") REFERENCES "ScheduledBatch"("id") ON DELETE CASCADE
   )`,
+
+  // ---- Task 90: Vault + Hash-chain ----
+  `CREATE TABLE IF NOT EXISTS "VaultEntry" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL DEFAULT 'note',
+    "titleCipher" TEXT NOT NULL,
+    "contentCipher" TEXT NOT NULL,
+    "categoryCipher" TEXT,
+    "tagsCipher" TEXT,
+    "expiresAt" DATETIME,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    "accessedAt" DATETIME,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS "MessageChainEntry" (
+    "id" TEXT PRIMARY KEY NOT NULL,
+    "messageId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "chainHash" TEXT NOT NULL,
+    "prevChainHash" TEXT,
+    "contentHash" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+  )`,
+  // Add vault salt + verifier columns to User table (ALTER for existing tables)
+  `ALTER TABLE "User" ADD COLUMN "vaultSalt" TEXT`,
+  `ALTER TABLE "User" ADD COLUMN "vaultVerifier" TEXT`,
 ]
 
-// Indexes for the new tables (Task 89)
+// Indexes for the new tables (Task 89 + Task 90)
 const newTableIndexes = [
   `CREATE INDEX IF NOT EXISTS "idx_apitoken_user" ON "ApiToken"("userId")`,
   `CREATE INDEX IF NOT EXISTS "idx_apitoken_prefix" ON "ApiToken"("prefix")`,
@@ -329,6 +358,11 @@ const newTableIndexes = [
   `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchmsg_order" ON "ScheduledBatchMessage"("order")`,
   `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchrcpt_batch" ON "ScheduledBatchRecipient"("batchId")`,
   `CREATE INDEX IF NOT EXISTS "idx_scheduledbatchrcpt_type" ON "ScheduledBatchRecipient"("recipientType")`,
+  // Task 90 indexes
+  `CREATE INDEX IF NOT EXISTS "idx_vaultentry_user" ON "VaultEntry"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "idx_vaultentry_expires" ON "VaultEntry"("expiresAt")`,
+  `CREATE INDEX IF NOT EXISTS "idx_chainentry_user_created" ON "MessageChainEntry"("userId", "createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "idx_chainentry_message" ON "MessageChainEntry"("messageId")`,
 ]
 
 async function main() {

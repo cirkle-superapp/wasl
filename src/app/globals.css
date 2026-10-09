@@ -3185,3 +3185,139 @@ kbd {
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 90 — Wasl Vault + Relationship Graph + Hash-chain + Dedup
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Vault entry card — premium with type-color accents */
+.wasl-vault-entry {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  background: var(--background);
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+.wasl-vault-entry:hover {
+  border-color: color-mix(in oklab, var(--wasl-green) 25%, transparent);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--wasl-green) 8%, transparent);
+}
+
+/* Vault strength meter — gradient bar */
+.wasl-vault-strength-bar {
+  height: 6px;
+  border-radius: var(--wasl-radius-full);
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  overflow: hidden;
+}
+.wasl-vault-strength-bar > div {
+  height: 100%;
+  border-radius: var(--wasl-radius-full);
+  transition: width 0.4s var(--wasl-ease);
+}
+
+/* Vault masked content — monospace dots */
+.wasl-vault-masked {
+  font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  padding: var(--wasl-space-sm) var(--wasl-space-md);
+  border-radius: var(--wasl-radius-md);
+  word-break: break-all;
+}
+
+/* Relationship graph — SVG node hover effect */
+.wasl-graph-node circle {
+  transition: r 0.2s var(--wasl-ease), opacity 0.2s var(--wasl-ease);
+}
+.wasl-graph-node:hover circle {
+  filter: brightness(1.2) drop-shadow(0 0 8px currentColor);
+}
+
+/* Hash-chain entry row — monospace hashes */
+.wasl-chain-row {
+  display: flex;
+  align-items: center;
+  gap: var(--wasl-space-sm);
+  padding: 8px var(--wasl-space-md);
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 4%, transparent);
+  transition: background var(--wasl-duration-fast) var(--wasl-ease);
+}
+.wasl-chain-row:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.wasl-chain-row-tampered {
+  background: color-mix(in oklab, #f43f5e 5%, transparent);
+}
+.wasl-chain-row-tampered:hover {
+  background: color-mix(in oklab, #f43f5e 10%, transparent);
+}
+.wasl-chain-hash {
+  font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  font-size: 10px;
+}
+
+/* Contact dedup card — gradient + slide-up */
+.wasl-dedup-card {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  background: var(--background);
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+.wasl-dedup-signal {
+  border-radius: var(--wasl-radius-md);
+  padding: var(--wasl-space-sm);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+  text-align: center;
+}
+.wasl-dedup-signal-primary {
+  border-color: color-mix(in oklab, var(--wasl-green) 40%, transparent);
+  background: color-mix(in oklab, var(--wasl-green) 5%, transparent);
+}
+.wasl-dedup-signal-bar {
+  height: 4px;
+  border-radius: var(--wasl-radius-full);
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.wasl-dedup-signal-bar > div {
+  height: 100%;
+  border-radius: var(--wasl-radius-full);
+  transition: width 0.4s var(--wasl-ease);
+}
+
+/* Big status banner for integrity check */
+.wasl-integrity-banner {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 2px solid;
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+.wasl-integrity-banner-intact {
+  border-color: color-mix(in oklab, var(--wasl-green) 30%, transparent);
+  background: color-mix(in oklab, var(--wasl-green) 5%, transparent);
+}
+.wasl-integrity-banner-tampered {
+  border-color: color-mix(in oklab, #f43f5e 40%, transparent);
+  background: color-mix(in oklab, #f43f5e 5%, transparent);
+}
+
+/* Reduced motion — disable Task 90 animations */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-vault-entry,
+  .wasl-graph-node circle,
+  .wasl-chain-row,
+  .wasl-dedup-card,
+  .wasl-dedup-signal,
+  .wasl-dedup-signal-bar > div,
+  .wasl-vault-strength-bar > div,
+  .wasl-integrity-banner {
+    animation: none !important;
+    transition: none !important;
+  }
+}

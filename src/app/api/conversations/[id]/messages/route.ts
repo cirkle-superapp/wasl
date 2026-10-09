@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { appendChainEntry } from '@/lib/hash-chain'
 
 export const runtime = 'nodejs'
 
@@ -300,6 +301,24 @@ export async function POST(
   await db.conversation.update({
     where: { id },
     data: { updatedAt: new Date() },
+  })
+
+  // ── Hash-chain integrity (Task 90) ─────────────────────────────────
+  // Append a chain entry for this message. The entry records the message's
+  // SHA-256 hash chained off the user's previous entry — forming a
+  // tamper-evident audit log of everything the user has sent or received.
+  // We do this fire-and-forget (not in a transaction) because the chain is
+  // additive: even if it fails, the message itself still sends fine. The
+  // chain can be back-filled later by a separate job.
+  void appendChainEntry({
+    userId: session.id,
+    messageId: message.id,
+    conversationId: id,
+    senderId: message.senderId,
+    content: message.content,
+    createdAt: message.createdAt,
+  }).catch((err) => {
+    console.error('[hash-chain] appendChainEntry failed:', err)
   })
 
   return NextResponse.json({

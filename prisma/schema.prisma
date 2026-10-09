@@ -104,6 +104,26 @@ model User {
   // Multi-message multi-recipient scheduled batches (Task 89). Each batch
   // can fan out N messages × M recipients (specific convs / scope categories).
   scheduledBatches    ScheduledBatch[]
+
+  // ---- Wasl Vault (Task 90) ------------------------------------------------
+  // Zero-knowledge encrypted personal vault. Stores passwords, recovery
+  // codes, ID numbers, secure notes — all encrypted client-side with a
+  // master password via Web Crypto API (PBKDF2 + AES-GCM). The server
+  // never sees the plaintext or the derived key.
+  vaultEntries        VaultEntry[]
+  // Per-user vault master key salt (set once, when the vault is first
+  // initialized). Used to derive the AES key from the master password.
+  vaultSalt           String?
+  // Per-user vault verifier — an encrypted known-plaintext that lets us
+  // verify the master password is correct before trying to decrypt entries.
+  vaultVerifier       String?
+
+  // ---- Hash-chain message integrity (Task 90) -----------------------------
+  // Each user has their own hash chain that records every message they send
+  // or receive. Each entry's chainHash = SHA-256(prevHash + message data).
+  // The chain is tamper-evident — modifying a message's content invalidates
+  // every subsequent hash in the chain.
+  chainEntries        MessageChainEntry[]
 }
 
 /// Contact (address book entry) — a saved contact. `ownerId` is the user who
@@ -1226,4 +1246,86 @@ model ScheduledBatchRecipient {
 
   @@index([batchId])
   @@index([recipientType])
+}
+
+// ============================================================================
+// Task 90 — Wasl Vault + Hash-chain integrity + Relationship Graph
+// ============================================================================
+
+/// Zero-knowledge encrypted personal vault entry. The user stores secrets
+/// (passwords, recovery codes, ID numbers, secure notes) here. Everything
+/// is encrypted CLIENT-SIDE with a master password using Web Crypto API
+/// (PBKDF2 key derivation + AES-GCM encryption). The server only ever
+/// sees the encrypted ciphertext — it cannot decrypt the contents.
+///
+/// The encryption format:
+///   iv (12 bytes, base64) || ciphertext+authTag (base64)
+/// The auth tag is appended by AES-GCM (last 16 bytes of ciphertext).
+///
+/// Self-destruct: when `expiresAt` is set and reached, a scheduled job
+/// deletes the row AND the key derivation for that entry's master is no
+/// longer useful (the entry's ciphertext is unrecoverable). Effectively a
+/// cryptographically-erased secret.
+model VaultEntry {
+  id            String   @id @default(cuid())
+  userId        String
+  // "password" | "note" | "id-document" | "recovery-code" | "card" | "custom"
+  type          String   @default("note")
+  // The title is also encrypted (so the server can't see even the topic).
+  titleCipher   String
+  // The actual secret content, encrypted.
+  contentCipher String
+  // Optional category for sorting — also encrypted.
+  categoryCipher String?
+  // Optional tags (JSON array, encrypted).
+  tagsCipher    String?
+  // Self-destruct timestamp (null = no expiry).
+  expiresAt     DateTime?
+  // Tracking (server-side, not encrypted — just metadata)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  accessedAt    DateTime?
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Hash-chain entry — one row per message per user. Each user has their
+/// own chain, so user A's view of message M has a different chainHash than
+/// user B's view of the same message M.
+///
+/// The chainHash is computed as:
+///   SHA-256(prevChainHash || messageId || conversationId || senderId || content || createdAt)
+///
+/// This is a hash-of-data + hash-of-prev structure (like a blockchain).
+/// To verify, walk the chain in createdAt order and recompute each hash
+/// from the previous one + the message data. If any hash doesn't match
+/// the stored value, the chain is broken at that point.
+///
+/// The chain is read-only (we never edit existing entries). When a message
+/// is edited, a new chain entry is appended that includes the previous
+/// chainHash + the new content. This way the chain remains verifiable and
+/// also serves as an immutable audit log of edits.
+model MessageChainEntry {
+  id            String   @id @default(cuid())
+  // The message this entry corresponds to. (A message may have multiple
+  // entries if it was edited — each edit appends a new chain entry.)
+  messageId     String
+  userId        String
+  // SHA-256 hex (64 chars). Computed from prevChainHash + message data.
+  chainHash     String
+  // The previous entry's chainHash (null for the very first entry in a chain).
+  prevChainHash String?
+  // Snapshot of the message fields at this chain entry (for verification).
+  // We snapshot content + senderId + conversationId so we can detect
+  // tampering even if the message is later edited via a different path.
+  contentHash   String
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([messageId])
 }
