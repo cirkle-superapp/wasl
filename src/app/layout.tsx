@@ -1,39 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Fraunces, Inter, Tajawal } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/wasl/theme-provider";
 import { ColorThemeProvider } from "@/components/wasl/color-theme-provider";
 import { LanguageProvider } from "@/components/wasl/language-provider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// Cirkle brand fonts (from the Cirkle reference repo)
-const fraunces = Fraunces({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const tajawal = Tajawal({
-  variable: "--font-arabic",
-  subsets: ["arabic", "latin"],
-  weight: ["300", "400", "500", "700"],
-});
+// ──────────────────────────────────────────────────────────────────────────
+// Font loading note (Task 90.1 fix)
+// ──────────────────────────────────────────────────────────────────────────
+// Previously we used `next/font/google` to load Geist, Geist_Mono, Fraunces,
+// Inter, and Tajawal at build time. In sandboxed/restricted-network
+// environments (and on some Vercel build configurations), Turbopack cannot
+// reach fonts.gstatic.com and fails with:
+//   Module not found: Can't resolve
+//   '@vercel/turbopack-next/internal/font/google/font'
+//
+// Rather than depend on Google Fonts being reachable, we switched to system
+// fonts entirely. The CSS variables (--font-sans, --font-display,
+// --font-mono, --font-arabic) are defined in globals.css with high-quality
+// system font stacks that preserve the visual design:
+//   • Body sans-serif:    ui-sans-serif, system-ui, Segoe UI, Roboto…
+//   • Display serif:      Iowan Old Style, Baskerville, Georgia…
+//   • Monospace:          ui-monospace, SF Mono, Menlo…
+//   • Arabic:             Geeza Pro, Damascus, Noto Naskh Arabic…
+//
+// This is the "we are the API" approach — Wasl no longer depends on
+// external font CDNs. The fonts ship with the user's OS, so they're
+// always available, never rate-limited, never blocked, and load
+// instantaneously (no network round-trip, no layout shift).
+// ──────────────────────────────────────────────────────────────────────────
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://cirkle-wasl.vercel.app"),
@@ -299,7 +294,12 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${inter.variable} ${tajawal.variable} antialiased bg-background text-foreground`}
+        className="antialiased bg-background text-foreground"
+        style={{
+          // System font stacks (defined here so they apply immediately,
+          // before globals.css loads)
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        }}
       >
         <ThemeProvider
           attribute="class"
