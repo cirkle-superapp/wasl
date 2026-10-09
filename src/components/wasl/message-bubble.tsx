@@ -665,14 +665,18 @@ export function MessageBubble({
           )}
         >
           <div className={cn('relative max-w-[78%] sm:max-w-[65%] md:max-w-[60%]')}>
-        {/* Hover toolbar — appears on hover (desktop) — slides in smoothly */}
+        {/* Hover toolbar — appears on hover (desktop) — fades in smoothly.
+            NOTE: Tailwind v4's arbitrary-value classes (opacity-0,
+            translate-x-[calc(...)]) were not compiling correctly, causing
+            the toolbar to be ALWAYS visible (creating "white empty boxes"
+            in the chat — Task 94 fix). We now use plain CSS classes
+            (.wasl-msg-actions-hidden / .wasl-msg-actions-visible) defined
+            in globals.css for reliable hover behavior. */}
         <div
           ref={toolbarRef}
           className={cn(
-            'wasl-msg-actions absolute top-0 z-20 flex items-center gap-0.5',
-            mine
-              ? 'left-0 -ml-1 -translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:-translate-x-full group-hover/msg:opacity-100 focus-within:-translate-x-full focus-within:opacity-100'
-              : 'right-0 -mr-1 translate-x-[calc(100%_+_8px)] opacity-0 group-hover/msg:translate-x-full group-hover/msg:opacity-100 focus-within:translate-x-full focus-within:opacity-100'
+            'wasl-msg-actions wasl-msg-actions-hidden absolute top-0 z-20 flex items-center gap-0.5',
+            mine ? 'left-0 -ml-1' : 'right-0 -mr-1',
           )}
         >
           <ToolbarButton title="React" onClick={() => setShowReactions((v) => !v)}>

@@ -321,6 +321,40 @@ export async function POST(
     console.error('[hash-chain] appendChainEntry failed:', err)
   })
 
+  // ── Server-side real-time broadcast (Task 94 fix) ──────────────────
+  // The chat-app's send-message flow also emits a 'message:send' socket
+  // event after the API call succeeds — that works for the chat-app UI.
+  // But API-only clients (PWA without socket.io loaded, curl tests, API
+  // token integrations from Task 89, scheduled-batch sends from Task 89,
+  // multi-device Amira test, etc.) don't have a chat-app running — so
+  // their messages would never broadcast in real-time.
+  //
+  // Fix: the API itself emits the socket event via a single server-side
+  // socket.io-client connection to the chat-service (port 3003). The
+  // chat-service then broadcasts 'message:received' to all sockets in
+  // the conversation room (including the sender's other devices for
+  // multi-device sync — Task 93).
+  //
+  // Fire-and-forget: if the chat-service is down, the message is still
+  // saved in DB and recipients will see it on their next conversation fetch.
+  try {
+    const { broadcastMessage } = await import('@/lib/server-socket')
+    broadcastMessage({
+      conversationId: id,
+      message: {
+        id: message.id,
+        conversationId: message.conversationId,
+        senderId: message.senderId,
+        content: message.content,
+        type: message.type,
+        status: message.status,
+        createdAt: message.createdAt,
+      },
+    })
+  } catch {
+    // Silent — never let the broadcast failure fail the API response
+  }
+
   return NextResponse.json({
     id: message.id,
     conversationId: message.conversationId,

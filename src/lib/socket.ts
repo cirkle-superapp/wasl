@@ -7,7 +7,22 @@ let socket: Socket | null = null
 export function getSocket(): Socket {
   if (socket && socket.connected) return socket
   if (!socket) {
-    socket = io('/?XTransformPort=3003', {
+    // Determine the socket.io connection URL based on the environment:
+    //
+    // 1. Development (localhost:3000): connect DIRECTLY to the chat-service
+    //    on port 3003. The page origin (port 3000) is the Next.js dev
+    //    server, which doesn't proxy socket.io.
+    //
+    // 2. Production / Caddy gateway: use the XTransformPort query param
+    //    so Caddy forwards the socket.io connection from the page origin
+    //    to port 3003. This is the correct approach for deployed environments
+    //    where the page and chat-service are behind the same gateway.
+    const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '3000'
+    const socketUrl = isDev
+      ? 'http://localhost:3003'
+      : '/?XTransformPort=3003'
+
+    socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
       forceNew: true,
       reconnection: true,
