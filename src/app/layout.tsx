@@ -289,6 +289,29 @@ export default function RootLayout({
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
+
+        {/* ── PWA / Mobile App meta tags (Task 93) ─────────────────────────
+            * These tags let users install Wasl directly from their phone's
+            * browser — no App Store or Google Play needed. The manifest
+            * defines the installable app shell; the apple-mobile-web-app-*
+            * tags make iOS treat an "Add to Home Screen" install as a
+            * standalone app (no Safari chrome).
+            */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="application-name" content="Wasl" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Wasl" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="apple-touch-fullscreen" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        {/* Apple touch icons (for the iOS home screen) */}
+        <link rel="apple-touch-icon" href="/wasl-favicon.svg" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/wasl-favicon.svg" />
+        <link rel="icon" type="image/svg+xml" href="/wasl-favicon.svg" />
+        <link rel="mask-icon" href="/wasl-favicon.svg" color="#009588" />
+
         <style dangerouslySetInnerHTML={{ __html: criticalCSS }} />
         <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />

@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Loader2, Link2, Users } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
-import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket'
+import { connectSocket, disconnectSocket, getSocket, getDeviceId, getDeviceName, isPWA } from '@/lib/socket'
 import { Sidebar } from './sidebar'
 import { ChatWindow } from './chat-window'
 import { ContactInfoPanel } from './contact-info-panel'
@@ -14,6 +14,8 @@ import { SettingsDialog } from './settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 import { QuickReplyToast } from './quick-reply-toast'
 import { CallOverlay } from './call-overlay'
+import { PwaInstallBanner } from './pwa-install-banner'
+import { DevicesDialog } from './devices-dialog'
 import { MySchoolDialog } from './my-school-dialog'
 import {
   Dialog,
@@ -45,6 +47,7 @@ export function ChatApp({ user }: { user: any }) {
   const [newChatOpen, setNewChatOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mySchoolOpen, setMySchoolOpen] = useState(false)
+  const [devicesOpen, setDevicesOpen] = useState(false)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const beforeUnloadHandler = useRef<(() => void) | null>(null)
 
@@ -106,6 +109,37 @@ export function ChatApp({ user }: { user: any }) {
       .catch((e) => console.error(e))
 
   }, [user.id, setBookmarkedIds, setUser, setDrafts])
+
+  // ── Register this device for multi-device sync (Task 93) ─────────────
+  // Called once on app boot (when we have a user). POSTs to /api/devices
+  // which upserts a DeviceSession row keyed by (userId, deviceId). The
+  // deviceId is a stable UUID stored in localStorage (so the same browser
+  // always registers the same deviceId across sessions).
+  useEffect(() => {
+    if (!user?.id) return
+    const deviceId = getDeviceId()
+    const deviceName = getDeviceName()
+    const pwa = isPWA()
+    // Fire-and-forget — if it fails, no harm done (the socket identify
+    // already handles real-time presence via the chat-service).
+    fetch('/api/devices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-Id': deviceId },
+      body: JSON.stringify({ deviceId, deviceName, isPWA: pwa }),
+    }).catch(() => { /* silent */ })
+    // Re-register every 5 minutes to refresh lastSeenAt (the
+    // chat-service also bumps this on socket activity, but the REST call
+    // is a backup for cases where the socket is offline but the user is
+    // still using the app via REST only — e.g. background polling).
+    const interval = setInterval(() => {
+      fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Device-Id': deviceId },
+        body: JSON.stringify({ deviceId, deviceName, isPWA: pwa }),
+      }).catch(() => { /* silent */ })
+    }, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [user?.id])
 
   // Close contact info panel when conversation changes
   useEffect(() => {
@@ -447,6 +481,35 @@ export function ChatApp({ user }: { user: any }) {
     socket.on('conversation:updated', onConversationUpdated)
     socket.on('conversation:upserted', onConversationUpserted)
 
+    // ── Multi-device sync listeners (Task 93) ──────────────────────────
+    // When the user signs in on a NEW device (or another tab), the
+    // chat-service emits 'device:connected' to our OTHER active sockets.
+    // We forward it as a window event so the DevicesDialog can re-fetch
+    // + show a toast notification.
+    function onDeviceConnected(payload: { deviceId: string; deviceName: string; isPWA?: boolean; at: number }) {
+      if (!payload) return
+      window.dispatchEvent(new CustomEvent('wasl:device-connected', { detail: payload }))
+      // Friendly toast — but only if the deviceName isn't our own (dedup
+      // via localStorage: we track which deviceIds we've seen)
+      try {
+        const seen = JSON.parse(localStorage.getItem('wasl-seen-devices') || '[]')
+        if (!seen.includes(payload.deviceId)) {
+          seen.push(payload.deviceId)
+          localStorage.setItem('wasl-seen-devices', JSON.stringify(seen))
+          const pwaTag = payload.isPWA ? ' (PWA)' : ''
+          toast.info(`New device signed in: ${payload.deviceName}${pwaTag}`, {
+            description: 'Your messages now sync across all your devices.',
+          })
+        }
+      } catch { /* ignore */ }
+    }
+    function onDeviceDisconnected(payload: { socketId: string; at: number }) {
+      if (!payload) return
+      window.dispatchEvent(new CustomEvent('wasl:device-disconnected', { detail: payload }))
+    }
+    socket.on('device:connected', onDeviceConnected)
+    socket.on('device:disconnected', onDeviceDisconnected)
+
     return () => {
       clearReconnectTimer()
       socket.off('connect', onConnect)
@@ -460,6 +523,8 @@ export function ChatApp({ user }: { user: any }) {
       socket.off('typing:update', onTyping)
       socket.off('conversation:updated', onConversationUpdated)
       socket.off('conversation:upserted', onConversationUpserted)
+      socket.off('device:connected', onDeviceConnected)
+      socket.off('device:disconnected', onDeviceDisconnected)
     }
   }, [user?.id, setUserOnline, setOnlineUsers, setTyping, upsertConversation, setSocketStatus])
 
@@ -488,6 +553,7 @@ export function ChatApp({ user }: { user: any }) {
           onNewChat={() => setNewChatOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenMySchool={() => setMySchoolOpen(true)}
+          onOpenDevices={() => setDevicesOpen(true)}
         />
       </aside>
 
@@ -518,6 +584,11 @@ export function ChatApp({ user }: { user: any }) {
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <KeyboardShortcutsDialog />
       <MySchoolDialog open={mySchoolOpen} onOpenChange={setMySchoolOpen} />
+      <DevicesDialog open={devicesOpen} onOpenChange={setDevicesOpen} />
+
+      {/* PWA install banner — shows on Chrome/Edge/Android + iOS Safari
+          to let users install Wasl directly (no app store needed). */}
+      <PwaInstallBanner />
 
       {/* Voice / video call overlay (Cirkle-inspired WebRTC). Mounted once
           globally so incoming-call events arriving on the socket can flip the

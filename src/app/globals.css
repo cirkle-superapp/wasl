@@ -3644,3 +3644,122 @@ kbd {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 93 — PWA Install Banner + Devices Dialog
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── PWA install banner (slides up from bottom of viewport) ─────────────
+ * Premium glassmorphic card with gradient border + spring entrance.
+ * Sits at the bottom-center so it doesn't cover the chat header.
+ */
+.wasl-pwa-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--background) 90%, transparent);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 25%, transparent);
+  box-shadow:
+    0 8px 24px color-mix(in oklab, var(--wasl-green) 15%, transparent),
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 12%, transparent);
+  max-width: 380px;
+  width: calc(100% - 32px);
+  animation: wasl-pwa-slide-up 0.5s var(--wasl-ease-spring) both;
+}
+@keyframes wasl-pwa-slide-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+.wasl-pwa-banner-ios-instructions {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 14px;
+}
+.wasl-pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: var(--wasl-radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--wasl-green), var(--wasl-teal));
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+  flex-shrink: 0;
+}
+.wasl-pwa-install-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--wasl-green) 30%, transparent);
+}
+.wasl-pwa-install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.wasl-pwa-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--wasl-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+}
+.wasl-pwa-dismiss:hover {
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+
+/* ── Devices dialog (mobile-first) ──────────────────────────────────────
+ * Device cards have premium hover + current-device highlight.
+ */
+.wasl-device-card {
+  border-radius: var(--wasl-radius-lg);
+  padding: var(--wasl-space-md);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  background: var(--background);
+  transition: all var(--wasl-duration-fast) var(--wasl-ease);
+  animation: wasl-slide-up var(--wasl-duration-normal) var(--wasl-ease) both;
+}
+.wasl-device-card:hover {
+  border-color: color-mix(in oklab, var(--wasl-green) 25%, transparent);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--wasl-green) 8%, transparent);
+}
+.wasl-device-card-current {
+  border-color: color-mix(in oklab, var(--wasl-green) 40%, transparent);
+  background: color-mix(in oklab, var(--wasl-green) 5%, transparent);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-pwa-banner,
+  .wasl-pwa-install-btn,
+  .wasl-pwa-dismiss,
+  .wasl-device-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+

@@ -27,6 +27,7 @@ import {
   Lock,
   Bell,
   Zap,
+  Smartphone,
 } from 'lucide-react'
 import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -60,10 +61,12 @@ export function Sidebar({
   onNewChat,
   onOpenSettings,
   onOpenMySchool,
+  onOpenDevices,
 }: {
   onNewChat: () => void
   onOpenSettings: () => void
   onOpenMySchool?: () => void
+  onOpenDevices?: () => void
 }) {
   const {
     user,
@@ -395,6 +398,12 @@ export function Sidebar({
                 <DropdownMenuItem onClick={onOpenMySchool}>
                   <GraduationCap className="w-4 h-4 mr-2 text-[var(--wasl-green)]" />
                   My School
+                </DropdownMenuItem>
+              )}
+              {onOpenDevices && (
+                <DropdownMenuItem onClick={onOpenDevices}>
+                  <Smartphone className="w-4 h-4 mr-2 text-[var(--wasl-green)]" />
+                  Your devices
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={onOpenSettings}>

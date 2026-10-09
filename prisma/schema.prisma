@@ -124,6 +124,13 @@ model User {
   // The chain is tamper-evident — modifying a message's content invalidates
   // every subsequent hash in the chain.
   chainEntries        MessageChainEntry[]
+
+  // ---- Multi-device sync (Task 93) --------------------------------------
+  // Every browser/tab/app instance the user is signed in on registers a
+  // DeviceSession. This powers the "Devices" dialog (sign out everywhere),
+  // the "new device signed in" toast, and real-time multi-device sync
+  // (when a message is sent on phone, it appears on web — and vice versa).
+  deviceSessions      DeviceSession[]
 }
 
 /// Contact (address book entry) — a saved contact. `ownerId` is the user who
@@ -1328,4 +1335,52 @@ model MessageChainEntry {
 
   @@index([userId, createdAt])
   @@index([messageId])
+}
+
+// ============================================================================
+// Task 93 — Multi-device sync (PWA + cross-device session tracking)
+// ============================================================================
+
+/// A device session represents one browser tab / PWA install / native app
+/// instance that the user is signed in on. The same user can have many
+/// active device sessions (e.g. phone PWA + desktop browser + tablet).
+///
+/// When a device connects (via the chat-service socket), it registers /
+/// updates its DeviceSession row. When the socket disconnects, we update
+/// `lastSeenAt` + clear `socketId` (the row remains for history).
+///
+/// This powers:
+///   - The "Devices" dialog in settings (list + revoke)
+///   - The "New device signed in" toast notification
+///   - Real-time multi-device sync (messages sent on phone appear on web)
+model DeviceSession {
+  id            String   @id @default(cuid())
+  userId        String
+  // Stable client-side identifier (generated once per browser/app install,
+  // stored in localStorage). Survives across sessions.
+  deviceId      String
+  // Live socket.id (null when offline). Used by the chat-service to route
+  // real-time events to this specific device.
+  socketId      String?
+  // Parsed human-friendly device name (e.g. "iPhone Safari", "Android Chrome",
+  // "Desktop Firefox", "Wasl PWA on Android").
+  deviceName    String
+  // Raw user-agent for debugging
+  userAgent     String?
+  // Last seen IP (for security audit — null if not available)
+  ip            String?
+  // Whether this device is currently connected
+  online        Boolean  @default(false)
+  lastSeenAt    DateTime @default(now())
+  // Tracking
+  createdAt     DateTime @default(now())
+  // For PWA installs specifically — was this registered via beforeinstallprompt?
+  isPWA         Boolean  @default(false)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([socketId])
+  @@index([online])
 }

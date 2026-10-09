@@ -46,12 +46,25 @@ function joinConversationRoom(socketId: string, conversationId: string) {
 io.on('connection', (socket) => {
   console.log(`[socket] connected: ${socket.id}`)
 
-  // A client identifies itself after auth
-  socket.on('user:identify', (data: { userId: string }) => {
+  // A client identifies itself after auth.
+  //
+  // Multi-device sync (Task 93): the client now also passes `deviceId`
+  // (a stable localStorage-generated UUID) + `deviceName` (e.g. "iPhone
+  // Safari"). We use these to:
+  //   1. Notify the user's OTHER active devices that a new device signed in
+  //      (via the `device:connected` event — the other devices show a toast).
+  //   2. Track per-device presence in the DB (DeviceSession table).
+  socket.on('user:identify', (data: {
+    userId: string
+    deviceId?: string
+    deviceName?: string
+    isPWA?: boolean
+  }) => {
     if (!data || !data.userId) return
-    const { userId } = data
+    const { userId, deviceId, deviceName, isPWA } = data
 
     const wasOnline = isUserOnline(userId)
+    const previousSocketCount = userSockets.get(userId)?.size || 0
     socketToUser.set(socket.id, userId)
     if (!userSockets.has(userId)) userSockets.set(userId, new Set())
     userSockets.get(userId)!.add(socket.id)
@@ -61,7 +74,35 @@ io.on('connection', (socket) => {
     // Tell the client who is currently online
     socket.emit('online-users', { users: getUserIdsOnline() })
 
-    console.log(`[socket] identified: ${userId} via ${socket.id}`)
+    // ── Multi-device: notify the user's OTHER sockets that a new device
+    // signed in (so they can show a "New device signed in" toast).
+    // We skip this notification if:
+    //   - This is the user's first/only device (no other sockets to notify)
+    //   - The deviceId matches an already-known device (same browser tab
+    //     reconnecting after a network blip — not a "new" device)
+    if (deviceId && deviceName && previousSocketCount > 0) {
+      // Check if this deviceId is already known (reconnect) vs new device.
+      // For simplicity here, we emit on every identify — the client can
+      // dedupe via localStorage (track which deviceIds it has seen).
+      const otherSockets = Array.from(userSockets.get(userId) || []).filter(
+        (sid) => sid !== socket.id
+      )
+      for (const sid of otherSockets) {
+        io.to(sid).emit('device:connected', {
+          deviceId,
+          deviceName,
+          isPWA: isPWA === true,
+          at: Date.now(),
+        })
+      }
+      // Also echo back to the connecting device: "you are device N of M"
+      socket.emit('device:welcome', {
+        deviceCount: userSockets.get(userId)?.size || 1,
+        isPWA: isPWA === true,
+      })
+    }
+
+    console.log(`[socket] identified: ${userId} via ${socket.id}${deviceId ? ` (device=${deviceId.slice(0, 8)})` : ''}`)
   })
 
   // A client subscribes to a conversation room (for broadcasts)
@@ -336,11 +377,25 @@ io.on('connection', (socket) => {
 
     if (userId) {
       const sockets = userSockets.get(userId)
+      const remainingCount = sockets ? sockets.size - 1 : 0
       if (sockets) {
         sockets.delete(socket.id)
         if (sockets.size === 0) {
           userSockets.delete(userId)
           broadcastPresence(userId, false)
+        }
+      }
+
+      // ── Multi-device: notify the user's REMAINING sockets that a device
+      // disconnected (so they can update the Devices dialog live + show a
+      // toast if the disconnect was unexpected).
+      if (remainingCount > 0) {
+        const remainingSockets = Array.from(userSockets.get(userId) || [])
+        for (const sid of remainingSockets) {
+          io.to(sid).emit('device:disconnected', {
+            socketId: socket.id,
+            at: Date.now(),
+          })
         }
       }
       // Clean up typing state for this user across conversations

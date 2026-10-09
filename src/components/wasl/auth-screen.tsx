@@ -689,6 +689,54 @@ export function AuthScreen() {
                 }}>
                   Download Wasl
                 </div>
+                {/* ── Mobile App install (Task 93) ──────────────────────────
+                    * A standalone call-to-action that lets users install
+                    * Wasl as a PWA directly on their phone — NO App Store
+                    * or Google Play needed. The QR code lets desktop users
+                    * scan to open Wasl on their phone (then tap Install).
+                    */}
+                <button
+                  onClick={() => {
+                    // Detect the user's platform + give appropriate install instructions
+                    const ua = navigator.userAgent
+                    const isIPhone = /iPhone/i.test(ua)
+                    const isIPad = /iPad/i.test(ua)
+                    const isAndroid = /Android/i.test(ua)
+                    if (isIPhone || isIPad) {
+                      toast.info('📱 Install on iPhone: tap Share → "Add to Home Screen"', { duration: 6000 })
+                    } else if (isAndroid) {
+                      toast.info('📱 Install on Android: tap Chrome menu (⋮) → "Install app"', { duration: 6000 })
+                    } else {
+                      toast.info('📱 Scan the QR code with your phone camera to install', { duration: 6000 })
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: `1px solid ${C.gold}66`,
+                    background: `linear-gradient(135deg, ${C.gold}15, transparent)`,
+                    cursor: 'pointer',
+                    marginBottom: '10px',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.background = `linear-gradient(135deg, ${C.gold}25, transparent)` }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C.gold}66`; e.currentTarget.style.background = `linear-gradient(135deg, ${C.gold}15, transparent)` }}
+                >
+                  <Smartphone style={{ width: 20, height: 20, color: C.gold }} />
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>
+                      Install mobile app
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)' }}>
+                      No app store needed · works offline · auto-syncs
+                    </div>
+                  </div>
+                  <Zap style={{ width: 14, height: 14, color: C.gold }} />
+                </button>
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(3, 1fr)',
@@ -698,8 +746,8 @@ export function AuthScreen() {
                     { icon: <Monitor style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'macOS', sub: 'Intel', msg: 'macOS Intel build — coming soon to the App Store' },
                     { icon: <Apple style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'macOS', sub: 'Silicon', msg: 'macOS Apple Silicon build — coming soon to the App Store' },
                     { icon: <Monitor style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Windows', sub: 'x64', msg: 'Windows build — coming soon to the Microsoft Store' },
-                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'iOS', sub: 'App Store', msg: 'iOS app — coming soon to the App Store' },
-                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Android', sub: 'Play Store', msg: 'Android app — coming soon to Google Play' },
+                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'iOS', sub: 'PWA', msg: 'iOS: open Wasl in Safari → tap Share → "Add to Home Screen"' },
+                    { icon: <Smartphone style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Android', sub: 'PWA', msg: 'Android: open Wasl in Chrome → tap menu → "Install app"' },
                     { icon: <Cpu style={{ width: 18, height: 18, color: C.goldLight }} />, label: 'Linux', sub: 'All distros', msg: 'Linux build — coming soon (.deb / .AppImage / .rpm)' },
                   ].map((p, i) => (
                     <button
