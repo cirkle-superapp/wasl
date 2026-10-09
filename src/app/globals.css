@@ -3341,3 +3341,306 @@ kbd {
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 91 — SmartChatMenu (state-of-the-art menu icon)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Glassmorphic button shell ──────────────────────────────────────────
+ * The button itself: glassmorphic background + iridescent border + spring
+ * transform (set inline by useMagneticCursor).
+ * Key insight: we use `backdrop-filter` for the frosted-glass effect and
+ * a subtle box-shadow for depth. The border color is driven by the
+ * `--iridescent-color` CSS var, which the JS sets based on cursor angle. */
+.wasl-smart-menu-button {
+  position: relative;
+  background: color-mix(in oklab, var(--background) 75%, transparent);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  box-shadow:
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 8%, transparent);
+  transition:
+    border-color 0.25s var(--wasl-ease),
+    box-shadow 0.25s var(--wasl-ease),
+    background 0.25s var(--wasl-ease);
+  /* The transform is set inline by useMagneticCursor (translate(x, y))
+   * — but we add a will-change so the browser optimizes compositing */
+  will-change: transform;
+  cursor: pointer;
+}
+
+/* Hover: iridescent border comes alive (the JS computes the color from
+ * cursor angle via atan2). Slight lift + glow. */
+.wasl-smart-menu-button:hover {
+  border-color: var(--iridescent-color, color-mix(in oklab, var(--wasl-green) 40%, transparent));
+  box-shadow:
+    0 4px 12px var(--iridescent-glow, color-mix(in oklab, var(--wasl-green) 20%, transparent)),
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 12%, transparent);
+  background: color-mix(in oklab, var(--background) 85%, transparent);
+}
+
+/* When the dropdown is open (Radix sets aria-expanded="true" on the trigger),
+ * intensify the glow + lock the iridescent border */
+.wasl-smart-menu-button[aria-expanded="true"] {
+  border-color: var(--wasl-green);
+  box-shadow:
+    0 4px 16px color-mix(in oklab, var(--wasl-green) 25%, transparent),
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 15%, transparent);
+  background: color-mix(in oklab, var(--wasl-green) 8%, var(--background));
+}
+
+/* ── Rotating conic-gradient ring ───────────────────────────────────────
+ * A subtle "AI is always processing" glow that rotates 360° every 4s.
+ * The ring is an absolutely-positioned span behind the icon.
+ * Uses the @property API to animate an angle (CSS custom property) so
+ * the conic-gradient rotates smoothly. */
+@property --wasl-ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.wasl-smart-menu-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--wasl-radius-full);
+  background: conic-gradient(
+    from var(--wasl-ring-angle),
+    transparent 0%,
+    color-mix(in oklab, var(--wasl-green) 60%, transparent) 25%,
+    transparent 50%,
+    color-mix(in oklab, var(--wasl-teal) 60%, transparent) 75%,
+    transparent 100%
+  );
+  opacity: 0;
+  mask: radial-gradient(circle, transparent 65%, black 67%);
+  -webkit-mask: radial-gradient(circle, transparent 65%, black 67%);
+  animation: wasl-ring-rotate 4s linear infinite;
+  transition: opacity 0.3s var(--wasl-ease);
+  pointer-events: none;
+  z-index: -1;
+}
+/* Reveal the ring on hover or when open */
+.wasl-smart-menu-button:hover .wasl-smart-menu-ring,
+.wasl-smart-menu-button[aria-expanded="true"] .wasl-smart-menu-ring {
+  opacity: 0.85;
+}
+@keyframes wasl-ring-rotate {
+  to { --wasl-ring-angle: 360deg; }
+}
+
+/* ── Particle burst overlay ──────────────────────────────────────────────
+ * Container: absolutely positioned, centered on the button, doesn't
+ * capture pointer events.
+ * Each particle is a small filled circle that radiates outward (the
+ * transform is set inline by the JS — translate(x, y) scale(1-lifetime)). */
+.wasl-smart-menu-particles {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+.wasl-smart-menu-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--wasl-radius-full);
+  background: var(--wasl-green);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--wasl-green) 60%, transparent);
+  /* The transform + opacity are set inline by JS, but we add a transition
+   * for the initial scale-in */
+}
+
+/* ── Custom triangle-dot SVG icon ────────────────────────────────────────
+ * Three dots arranged in a triangle (top-center, bottom-left, bottom-right).
+ * Each dot has a subtle color + transition.
+ *
+ * Morph states:
+ *   - Closed (default): no rotation
+ *   - Hover (.is-hovering): rotate 30° (subtle "I'm alive" cue)
+ *   - Open (parent button has [aria-expanded=true]): rotate 180°
+ *     (triangle points up — visually communicates "open")
+ *
+ * The dots get a subtle "breathing" pulse to convey life.
+ */
+.wasl-smart-menu-icon {
+  transition: transform 0.45s var(--wasl-ease-spring);
+  z-index: 1;
+  position: relative;
+}
+/* Hover: rotate 30° (handled via the .is-hovering class) */
+.wasl-smart-menu-icon.is-hovering {
+  transform: rotate(30deg);
+}
+/* Open: rotate 180° (when parent button has [aria-expanded=true]).
+ * This overrides the hover rotation because it's more specific
+ * (the parent + child selector). */
+.wasl-smart-menu-button[aria-expanded="true"] .wasl-smart-menu-icon {
+  transform: rotate(180deg) !important;
+}
+.wasl-smart-menu-dot {
+  fill: var(--foreground);
+  /* Add a subtle inner shadow on the dots for contrast against the
+   * glassmorphic background (otherwise they look too faint on white-ish
+   * glass — VLM flagged this). */
+  filter: drop-shadow(0 1px 1px color-mix(in oklab, var(--foreground) 20%, transparent));
+  transition: fill 0.3s var(--wasl-ease);
+}
+/* On hover: dots take on the brand color + glow */
+.wasl-smart-menu-button:hover .wasl-smart-menu-dot {
+  fill: var(--wasl-green);
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--wasl-green) 60%, transparent));
+}
+/* When dropdown is open: keep dots green for state visibility */
+.wasl-smart-menu-button[aria-expanded="true"] .wasl-smart-menu-dot {
+  fill: var(--wasl-green);
+}
+/* Subtle staggered breathing — each dot pulses at a slightly different
+ * phase so the icon looks alive (not a static SVG).
+ * Note: minimum opacity 0.85 (was 0.65) — VLM flagged dots being too faint. */
+.wasl-smart-menu-dot-1 {
+  animation: wasl-dot-breathe 3.2s ease-in-out infinite;
+  animation-delay: 0s;
+}
+.wasl-smart-menu-dot-2 {
+  animation: wasl-dot-breathe 3.2s ease-in-out infinite;
+  animation-delay: 0.4s;
+}
+.wasl-smart-menu-dot-3 {
+  animation: wasl-dot-breathe 3.2s ease-in-out infinite;
+  animation-delay: 0.8s;
+}
+@keyframes wasl-dot-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+/* ── Contextual badge (pending items) ─────────────────────────────────────
+ * A pulsing dot in the top-right showing the count of pending items
+ * (action items, scheduled batches, contact requests, etc.)
+ * The pulse is a soft radial gradient + box-shadow ring. */
+.wasl-smart-menu-badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--wasl-radius-full);
+  background: linear-gradient(135deg, #f43f5e, #f59e0b);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 1.5px solid var(--background);
+  z-index: 5;
+  box-shadow: 0 1px 3px color-mix(in oklab, #f43f5e 40%, transparent);
+  animation: wasl-badge-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes wasl-badge-pulse {
+  0%, 100% {
+    box-shadow:
+      0 1px 3px color-mix(in oklab, #f43f5e 40%, transparent),
+      0 0 0 0 color-mix(in oklab, #f43f5e 30%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 1px 3px color-mix(in oklab, #f43f5e 40%, transparent),
+      0 0 0 6px color-mix(in oklab, #f43f5e 0%, transparent);
+  }
+}
+
+/* ── Long-press radial quick-actions menu ───────────────────────────────
+ * 4 actions arranged in a semicircle on the LEFT side (toward the chat
+ * content area). Each item animates in with a staggered slide-up.
+ * The container is absolutely positioned, anchored to the button's
+ * left edge. */
+.wasl-radial-menu {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  z-index: 50;
+}
+.wasl-radial-menu-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: var(--wasl-radius-full);
+  background: color-mix(in oklab, var(--background) 92%, transparent);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 30%, transparent);
+  box-shadow:
+    0 4px 12px color-mix(in oklab, var(--wasl-green) 15%, transparent),
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent);
+  color: var(--wasl-green);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Staggered slide-in animation */
+  opacity: 0;
+  animation: wasl-radial-pop 0.4s var(--wasl-ease-spring) forwards;
+  transition:
+    transform 0.25s var(--wasl-ease-spring),
+    background 0.25s var(--wasl-ease),
+    border-color 0.25s var(--wasl-ease),
+    box-shadow 0.25s var(--wasl-ease);
+}
+.wasl-radial-menu-item:hover {
+  background: color-mix(in oklab, var(--wasl-green) 12%, var(--background));
+  border-color: var(--wasl-green);
+  box-shadow:
+    0 6px 20px color-mix(in oklab, var(--wasl-green) 25%, transparent),
+    0 1px 3px color-mix(in oklab, var(--foreground) 8%, transparent);
+  /* Slight outward push on hover (toward the cursor) */
+  transform: translate(var(--tx, 0), var(--ty, 0)) scale(1.12) !important;
+}
+@keyframes wasl-radial-pop {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    /* The transform: translate(...) is set inline per-item */
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ── Reduced motion fallbacks ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-smart-menu-button,
+  .wasl-smart-menu-ring,
+  .wasl-smart-menu-icon,
+  .wasl-smart-menu-dot,
+  .wasl-smart-menu-particle,
+  .wasl-smart-menu-badge,
+  .wasl-radial-menu-item {
+    animation: none !important;
+    transition: none !important;
+  }
+  .wasl-smart-menu-ring {
+    display: none; /* The rotating ring is purely decorative */
+  }
+}
+

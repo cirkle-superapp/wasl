@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   ArrowLeft,
-  MoreVertical,
   Phone,
   Video,
   Search,
@@ -35,6 +34,7 @@ import { ChatSearchDialog } from './chat-search-dialog'
 import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ScheduleBatchDialog } from './schedule-batch-dialog'
+import { SmartChatMenu } from './smart-chat-menu'
 import { ChatSummaryDialog } from './chat-summary-dialog'
 import { ChatInsightsDialog } from './chat-insights-dialog'
 import { HealthScoreDialog } from './health-score-dialog'
@@ -53,10 +53,8 @@ import { formatLastSeen, formatDateDivider, formatChatTimestamp } from '@/lib/ti
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { Skeleton, MessageSkeleton } from '@/components/ui/skeleton'
@@ -1415,12 +1413,15 @@ export function ChatWindow({
           <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
             <Search className="w-5 h-5" />
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="w-5 h-5" />
-              </Button>
-            </DropdownMenuTrigger>
+          <SmartChatMenu
+            pendingCount={0}
+            onQuickAction={(action) => {
+              if (action === 'summary') setSummaryOpen(true)
+              else if (action === 'search') setSearchOpen(true)
+              else if (action === 'insights') setInsightsOpen(true)
+              else if (action === 'batch') setBatchDialogOpen(true)
+            }}
+          >
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onOpenInfo}>
                 <Info className="w-4 h-4 mr-2" /> Contact info
@@ -1470,7 +1471,7 @@ export function ChatWindow({
                 <Trash2 className="w-4 h-4 mr-2" /> Delete chat
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </SmartChatMenu>
         </div>
       </div>
 
