@@ -66,7 +66,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ processed: 0, message: 'No due batches' })
   }
 
-  const results = []
+  const results: Array<{
+    id: string
+    name?: string | null
+    status: string
+    sent?: number
+    failed?: number
+    progress?: string
+    error?: string
+  }> = []
   for (const batch of dueBatches) {
     try {
       // Mark as processing
@@ -225,7 +233,7 @@ async function resolveRecipients(userId: string, recipients: any[]): Promise<Set
         }
       } else if (scope === 'work') {
         const workFolders = await db.chatFolder.findMany({
-          where: { userId, name: { contains: 'work', mode: 'insensitive' } },
+          where: { userId, name: { contains: 'work' } },
           select: { id: true },
         })
         if (workFolders.length > 0) {

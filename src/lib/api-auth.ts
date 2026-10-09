@@ -265,7 +265,7 @@ export async function getScopedConversationIds(
   // containing "work" (case-insensitive).
   if (categoryScopes.includes('work')) {
     const workFolders = await db.chatFolder.findMany({
-      where: { userId, name: { contains: 'work', mode: 'insensitive' } },
+      where: { userId, name: { contains: 'work' } },
       select: { id: true },
     })
     if (workFolders.length > 0) {

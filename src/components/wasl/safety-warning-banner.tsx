@@ -42,7 +42,9 @@ export function SafetyWarningBanner({
     }
     let cancelled = false
     // Use an IIFE so we never call setState synchronously inside the effect body.
-    (async () => {
+    // The leading semicolon is REQUIRED — without it, TypeScript/JS parses
+    // "let cancelled = false (async () => ...)" as a function call on `false`.
+    ;(async () => {
       try {
         const res = await fetch('/api/ai/safety-scan', {
           method: 'POST',

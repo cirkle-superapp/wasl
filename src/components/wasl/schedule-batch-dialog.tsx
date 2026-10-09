@@ -204,7 +204,7 @@ export function ScheduleBatchDialog({ open, onOpenChange }: {
             conversationId: id,
           })),
           ...Array.from(recipients.scopes).map((s) => ({
-            recipientType: s as const,
+            recipientType: s,
           })),
           ...Array.from(recipients.folderIds).map((fid) => ({
             recipientType: 'folder' as const,

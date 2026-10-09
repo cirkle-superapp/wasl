@@ -41,7 +41,6 @@ import {
   encryptString,
   decryptString,
   passwordStrength,
-  type CryptoKey as _CK,
 } from '@/lib/vault'
 
 type VaultStatus = {

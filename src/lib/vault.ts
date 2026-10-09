@@ -57,9 +57,11 @@ export async function deriveKey(password: string, saltB64: string): Promise<Cryp
   const passwordBytes = enc.encode(password)
   const salt = base64ToBytes(saltB64)
 
+  // Cast to BufferSource — TS5+ has stricter typing for ArrayBuffer vs
+  // ArrayBufferLike, but the runtime accepts Uint8Array everywhere.
   const baseKey = await subtle.importKey(
     'raw',
-    passwordBytes,
+    passwordBytes as BufferSource,
     { name: 'PBKDF2' },
     false,
     ['deriveKey'],
@@ -68,7 +70,7 @@ export async function deriveKey(password: string, saltB64: string): Promise<Cryp
   return subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt as BufferSource,
       iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },
@@ -91,9 +93,9 @@ export async function encryptString(key: CryptoKey, plaintext: string): Promise<
   crypto.getRandomValues(iv)
   const enc = new TextEncoder()
   const ciphertextBuf = await subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as BufferSource },
     key,
-    enc.encode(plaintext),
+    enc.encode(plaintext) as BufferSource,
   )
   return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(ciphertextBuf))}`
 }
@@ -107,9 +109,9 @@ export async function decryptString(key: CryptoKey, packed: string): Promise<str
   const ciphertext = base64ToBytes(ctB64)
   try {
     const plaintextBuf = await subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv as BufferSource },
       key,
-      ciphertext,
+      ciphertext as BufferSource,
     )
     return new TextDecoder().decode(plaintextBuf)
   } catch {
@@ -154,7 +156,14 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 function base64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64)
-  const bytes = new Uint8Array(binary.length)
+  // Allocate an explicit ArrayBuffer (not ArrayBufferLike) so the result
+  // satisfies TypeScript's strict BufferSource type required by Web Crypto.
+  // Without this, TS5+ complains: "Type 'Uint8Array<ArrayBufferLike>' is
+  // not assignable to type 'BufferSource'" because ArrayBufferLike can be
+  // either ArrayBuffer OR SharedArrayBuffer, and only ArrayBuffer satisfies
+  // the BufferSource contract.
+  const buffer = new ArrayBuffer(binary.length)
+  const bytes = new Uint8Array(buffer)
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i)
   }

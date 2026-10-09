@@ -181,7 +181,6 @@ export function PriorityInboxView({ conversations }: { conversations: Conversati
                 <WaslGroupAvatar
                   name={name}
                   src={avatar}
-                  color={avatarColor}
                   size={40}
                 />
               ) : (
