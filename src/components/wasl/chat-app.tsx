@@ -16,6 +16,7 @@ import { QuickReplyToast } from './quick-reply-toast'
 import { CallOverlay } from './call-overlay'
 import { PwaInstallBanner } from './pwa-install-banner'
 import { DevicesDialog } from './devices-dialog'
+import { DailyBriefingDialog } from './daily-briefing-dialog'
 import { MySchoolDialog } from './my-school-dialog'
 import {
   Dialog,
@@ -48,6 +49,7 @@ export function ChatApp({ user }: { user: any }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mySchoolOpen, setMySchoolOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
+  const [briefingOpen, setBriefingOpen] = useState(false)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const beforeUnloadHandler = useRef<(() => void) | null>(null)
 
@@ -554,6 +556,7 @@ export function ChatApp({ user }: { user: any }) {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenMySchool={() => setMySchoolOpen(true)}
           onOpenDevices={() => setDevicesOpen(true)}
+          onOpenBriefing={() => setBriefingOpen(true)}
         />
       </aside>
 
@@ -585,6 +588,7 @@ export function ChatApp({ user }: { user: any }) {
       <KeyboardShortcutsDialog />
       <MySchoolDialog open={mySchoolOpen} onOpenChange={setMySchoolOpen} />
       <DevicesDialog open={devicesOpen} onOpenChange={setDevicesOpen} />
+      <DailyBriefingDialog open={briefingOpen} onOpenChange={setBriefingOpen} />
 
       {/* PWA install banner — shows on Chrome/Edge/Android + iOS Safari
           to let users install Wasl directly (no app store needed). */}

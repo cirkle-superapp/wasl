@@ -30,6 +30,7 @@ import {
   WaslContact,
   WaslBookmark,
   WaslBell,
+  WaslSparkles,
 } from './wasl-icons'
 import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
@@ -64,11 +65,13 @@ export function Sidebar({
   onOpenSettings,
   onOpenMySchool,
   onOpenDevices,
+  onOpenBriefing,
 }: {
   onNewChat: () => void
   onOpenSettings: () => void
   onOpenMySchool?: () => void
   onOpenDevices?: () => void
+  onOpenBriefing?: () => void
 }) {
   const {
     user,
@@ -469,6 +472,21 @@ export function Sidebar({
         >
           <WaslPlus className="w-5 h-5" />
         </Button>
+      </div>
+
+      {/* Daily Briefing + Focus Mode (Task 97 — no competitor has this) */}
+      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)] flex gap-2">
+        {onOpenBriefing && (
+          <button
+            onClick={onOpenBriefing}
+            className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border border-[var(--wasl-green)]/30 bg-gradient-to-br from-[var(--wasl-green)]/8 to-transparent hover:from-[var(--wasl-green)]/15 transition-colors text-left group"
+            title="AI Daily Briefing"
+          >
+            <WaslSparkles className="w-3.5 h-3.5 text-[var(--wasl-green)] shrink-0" />
+            <span className="text-[11px] font-medium text-foreground">Briefing</span>
+          </button>
+        )}
+        <FocusModeToggle />
       </div>
 
       {/* Official Announcements + Contacts buttons */}
@@ -987,5 +1005,44 @@ function ConversationRow({
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Focus Mode toggle (Task 97) ─────────────────────────────────────────
+// When enabled, suppresses notifications for non-urgent messages.
+// Only messages that mention the user OR contain urgency keywords get through.
+// NO competitor has this — it turns Wasl from a chat app into a productivity tool.
+function FocusModeToggle() {
+  const focusMode = useWaslStore((s) => s.focusMode)
+  const setFocusMode = useWaslStore((s) => s.setFocusMode)
+
+  function toggle() {
+    if (focusMode) {
+      setFocusMode(false)
+      toast.success('Focus mode off — all notifications restored')
+    } else {
+      // Default: 1 hour focus session
+      const until = Date.now() + 60 * 60_000
+      setFocusMode(true, until)
+      toast.success('Focus mode on for 1 hour — only urgent + mentions will notify')
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className={cn(
+        'flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg border transition-colors text-left',
+        focusMode
+          ? 'border-amber-500/40 bg-amber-500/10'
+          : 'border-border hover:bg-muted/40'
+      )}
+      title={focusMode ? 'Focus mode active — click to turn off' : 'Enable Focus Mode'}
+    >
+      <span className={cn('w-2 h-2 rounded-full shrink-0', focusMode ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground/30')} />
+      <span className={cn('text-[11px] font-medium', focusMode ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+        {focusMode ? 'Focusing' : 'Focus'}
+      </span>
+    </button>
   )
 }

@@ -249,6 +249,16 @@ type WaslState = {
   showProfilePanel: boolean
   setShowProfilePanel: (show: boolean) => void
 
+  // ---- Focus Mode (Task 97) ───────────────────────────────────────────
+  // When enabled, suppresses notifications for non-urgent messages.
+  // Only messages that mention the user by name OR contain urgency
+  // keywords get through. The rest are batched + delivered when Focus
+  // Mode ends. NO competitor has this — it turns Wasl from a chat app
+  // into a productivity tool.
+  focusMode: boolean
+  focusModeUntil: number | null // timestamp when focus mode auto-expires
+  setFocusMode: (on: boolean, until?: number | null) => void
+
   replyTo: ChatMessage | null
   setReplyTo: (m: ChatMessage | null) => void
 
@@ -488,6 +498,11 @@ export const useWaslStore = create<WaslState>((set) => ({
 
   showProfilePanel: false,
   setShowProfilePanel: (show) => set({ showProfilePanel: show }),
+
+  // ---- Focus Mode (Task 97) ─────────────────────────────────────────
+  focusMode: false,
+  focusModeUntil: null,
+  setFocusMode: (on, until) => set({ focusMode: on, focusModeUntil: until ?? null }),
 
   replyTo: null,
   setReplyTo: (m) => set({ replyTo: m }),
