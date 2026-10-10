@@ -3798,4 +3798,96 @@ kbd {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 95.1 — Premium global icon hover effects + sidebar polish
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Chat header button hover: scale + glow ────────────────────────────
+ * Makes ALL icons in the chat header scale up 10% + add a teal glow on
+ * hover. Works with both the custom Wasl icons (solid color fills) AND
+ * the remaining lucide-react icons (currentColor strokes). */
+.wasl-chat-header button {
+  transition: all 0.2s var(--wasl-ease);
+}
+.wasl-chat-header button:hover svg {
+  transform: scale(1.12);
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--wasl-green) 35%, transparent));
+  transition: transform 0.2s var(--wasl-ease-spring), filter 0.2s var(--wasl-ease);
+}
+.wasl-chat-header button:active svg {
+  transform: scale(0.95);
+}
+
+/* ── Sidebar button hover: teal tint + scale ───────────────────────────
+ * Applies a subtle teal tint to ALL sidebar icons on hover + scales them
+ * up slightly. Makes the sidebar feel alive + premium. */
+.wasl-sidebar-bg button:hover svg,
+.wasl-tab-bar button:hover svg {
+  transform: scale(1.08);
+  transition: transform 0.2s var(--wasl-ease-spring);
+}
+.wasl-sidebar-bg button:active svg {
+  transform: scale(0.96);
+}
+
+/* ── Sidebar conversation row hover: premium card lift ───────────────── */
+.wasl-conv-card {
+  transition: all 0.2s var(--wasl-ease);
+}
+.wasl-conv-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+/* ── New chat button: premium gradient + glow on hover ──────────────── */
+/* Target the new-chat button by its distinctive green background class.
+ * We use a class selector instead of the escaped Tailwind attribute. */
+.wasl-new-chat-btn:hover {
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--wasl-green) 35%, transparent);
+  transform: translateY(-1px);
+  transition: all 0.2s var(--wasl-ease-spring);
+}
+
+/* ── Message input area: premium focus glow ─────────────────────────── */
+.wasl-composer {
+  transition: box-shadow 0.2s var(--wasl-ease);
+}
+.wasl-composer:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wasl-green) 12%, transparent),
+              0 2px 12px color-mix(in oklab, var(--wasl-green) 8%, transparent);
+}
+
+/* ── Auth screen download tab buttons: premium hover ────────────────── */
+button:hover svg.lucide,
+button:hover svg[class*="wasl-"] {
+  transition: transform 0.2s var(--wasl-ease-spring);
+}
+
+/* ── Dropdown menu items: smooth slide-in on hover ───────────────────── */
+[role="menuitem"] {
+  transition: all 0.15s var(--wasl-ease);
+}
+[role="menuitem"]:hover {
+  transform: translateX(2px);
+}
+
+/* ── Settings dialog rows: premium hover lift ───────────────────────── */
+button.w-full:hover {
+  transition: all 0.2s var(--wasl-ease);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-chat-header button:hover svg,
+  .wasl-sidebar-bg button:hover svg,
+  .wasl-tab-bar button:hover svg,
+  .wasl-conv-card,
+  .wasl-composer,
+  [role="menuitem"] {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+
 

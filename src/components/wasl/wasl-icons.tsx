@@ -379,3 +379,78 @@ export function WaslChevronDown({ size = 16, className, style }: IconProps) {
     </IconShell>
   )
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Sidebar icons
+// ═══════════════════════════════════════════════════════════════════════
+
+/** New chat — modern plus with gradient circle */
+export function WaslPlus({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <circle cx="12" cy="12" r="9" fill={TEAL_GRADIENT} opacity="0.1" />
+      <path d="M12 7v10M7 12h10" stroke={TEAL_GRADIENT} strokeWidth="2.5" strokeLinecap="round" />
+    </IconShell>
+  )
+}
+
+/** Settings — modern gear with gradient */
+export function WaslSettings({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <circle cx="12" cy="12" r="3.5" fill={GOLD_GRADIENT} opacity="0.15" />
+      <circle cx="12" cy="12" r="3.5" stroke={GOLD_GRADIENT} strokeWidth="2" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M5 19l2-2" stroke={GOLD_GRADIENT} strokeWidth="2" strokeLinecap="round" />
+    </IconShell>
+  )
+}
+
+/** Announcements — modern building with gradient */
+export function WaslAnnounce({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <rect x="4" y="8" width="16" height="12" rx="2" fill={TEAL_GRADIENT} opacity="0.1" />
+      <rect x="4" y="8" width="16" height="12" rx="2" stroke={TEAL_GRADIENT} strokeWidth="2" />
+      <path d="M8 8V5c0-1 1-2 2-2h4c1 0 2 1 2 2v3" stroke={TEAL_GRADIENT} strokeWidth="2" strokeLinecap="round" />
+      <path d="M9 14h6" stroke={TEAL_GRADIENT} strokeWidth="1.5" strokeLinecap="round" />
+    </IconShell>
+  )
+}
+
+/** Contacts — modern address book with gradient */
+export function WaslContact({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <rect x="4" y="3" width="16" height="18" rx="3" fill={BLUE_GRADIENT} opacity="0.08" />
+      <rect x="4" y="3" width="16" height="18" rx="3" stroke={BLUE_GRADIENT} strokeWidth="2" />
+      <circle cx="12" cy="10" r="3" fill={BLUE_GRADIENT} opacity="0.15" />
+      <circle cx="12" cy="10" r="3" stroke={BLUE_GRADIENT} strokeWidth="1.5" />
+      <path d="M7 17c0-2.5 2.5-4 5-4s5 1.5 5 4" stroke={BLUE_GRADIENT} strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M7 7h1M7 10h1M7 13h1" stroke={BLUE_GRADIENT} strokeWidth="1.5" strokeLinecap="round" />
+    </IconShell>
+  )
+}
+
+/** Bookmarks — modern bookmark with gradient */
+export function WaslBookmark({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <path d="M6 3h12v18l-6-4-6 4V3z" fill={GOLD_GRADIENT} opacity="0.1" />
+      <path d="M6 3h12v18l-6-4-6 4V3z" stroke={GOLD_GRADIENT} strokeWidth="2" strokeLinejoin="round" />
+      <path d="M10 9h4M10 13h4" stroke={GOLD_GRADIENT} strokeWidth="1.5" strokeLinecap="round" />
+    </IconShell>
+  )
+}
+
+/** Bell — modern notification bell with gradient */
+export function WaslBell({ size = 20, className, style }: IconProps) {
+  return (
+    <IconShell size={size} className={className} style={style}>
+      <path d="M6 16c0-4 2-8 6-8s6 4 6 8v2H6v-2z" fill={TEAL_GRADIENT} opacity="0.1" />
+      <path d="M6 16c0-4 2-8 6-8s6 4 6 8v2H6v-2z" stroke={TEAL_GRADIENT} strokeWidth="2" strokeLinejoin="round" />
+      <path d="M4 18h16" stroke={TEAL_GRADIENT} strokeWidth="2" strokeLinecap="round" />
+      <path d="M10 20c0 1 .9 2 2 2s2-1 2-2" stroke={TEAL_GRADIENT} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="7" r="1.5" fill={TEAL_GRADIENT} opacity="0.5" />
+    </IconShell>
+  )
+}

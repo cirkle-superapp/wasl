@@ -3,8 +3,6 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Search,
-  Plus,
-  Settings,
   Users,
   LogOut,
   Moon,
@@ -14,10 +12,7 @@ import {
   CheckCheck,
   Phone,
   Archive,
-  Landmark,
-  Contact as ContactIcon,
   Star,
-  Bookmark as BookmarkIcon,
   TextSearch,
   PencilLine,
   Pin,
@@ -25,10 +20,17 @@ import {
   MailOpen,
   GraduationCap,
   Lock,
-  Bell,
   Zap,
   Smartphone,
 } from 'lucide-react'
+import {
+  WaslPlus,
+  WaslSettings,
+  WaslAnnounce,
+  WaslContact,
+  WaslBookmark,
+  WaslBell,
+} from './wasl-icons'
 import { useWaslStore, type Conversation, type UserPhoneNumber } from '@/lib/store'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -342,7 +344,7 @@ export function Sidebar({
             title="Notifications"
             aria-label="Notifications"
           >
-            <Bell className="w-5 h-5" />
+            <WaslBell className="w-5 h-5" />
             {notifUnreadCount > 0 && (
               <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
                 {notifUnreadCount > 99 ? '99+' : notifUnreadCount}
@@ -376,7 +378,7 @@ export function Sidebar({
               <DropdownMenuLabel>Menu</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onNewChat}>
-                <Plus className="w-4 h-4 mr-2" /> New chat
+                <WaslPlus className="w-4 h-4 mr-2" /> New chat
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
@@ -407,7 +409,7 @@ export function Sidebar({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={onOpenSettings}>
-                <Settings className="w-4 h-4 mr-2" /> Settings
+                <WaslSettings className="w-4 h-4 mr-2" /> Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
@@ -465,7 +467,7 @@ export function Sidebar({
           onClick={onNewChat}
           title="New chat"
         >
-          <Plus className="w-5 h-5" />
+          <WaslPlus className="w-5 h-5" />
         </Button>
       </div>
 
@@ -475,7 +477,7 @@ export function Sidebar({
           onClick={() => setAnnouncementsOpen(true)}
           className="w-full flex items-center gap-2 p-2 rounded-lg border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/5 hover:bg-[var(--wasl-green)]/10 transition-colors text-left"
         >
-          <Landmark className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
+          <WaslAnnounce className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-foreground">Official Announcements</div>
             <div className="text-[10px] text-muted-foreground">Government · Banks · Utilities</div>
@@ -485,7 +487,7 @@ export function Sidebar({
           onClick={() => setContactsOpen(true)}
           className="w-full flex items-center gap-2 p-2 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors text-left"
         >
-          <ContactIcon className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
+          <WaslContact className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-foreground">Contacts</div>
             <div className="text-[10px] text-muted-foreground">Address book</div>
@@ -495,7 +497,7 @@ export function Sidebar({
           onClick={() => setBookmarksOpen(true)}
           className="w-full flex items-center gap-2 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
         >
-          <BookmarkIcon className="w-4 h-4 text-amber-500 shrink-0" />
+          <WaslBookmark className="w-4 h-4 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium text-foreground">Bookmarks</div>
             <div className="text-[10px] text-muted-foreground">
@@ -689,7 +691,7 @@ export function Sidebar({
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPhoneNumbersOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
+              <WaslPlus className="w-4 h-4 mr-2" />
               Manage portals
             </DropdownMenuItem>
           </DropdownMenuContent>
