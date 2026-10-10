@@ -315,8 +315,17 @@ export default function RootLayout({
         <style dangerouslySetInnerHTML={{ __html: criticalCSS }} />
         <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
-        {/* Wasl gradient defs for custom duotone icons (Task 95) */}
-        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+      </head>
+      <body
+        className="antialiased bg-background text-foreground"
+        style={{
+          fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        }}
+      >
+        {/* SVG gradient defs for custom duotone icons (Task 95) — must be in
+            <body>, not <head>, per HTML spec. This invisible SVG defines
+            gradient fills that are referenced by url(#id) from icon SVGs. */}
+        <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }} aria-hidden>
           <defs>
             <linearGradient id="wasl-icon-grad-teal" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="#009588" />
@@ -336,15 +345,6 @@ export default function RootLayout({
             </linearGradient>
           </defs>
         </svg>
-      </head>
-      <body
-        className="antialiased bg-background text-foreground"
-        style={{
-          // System font stacks (defined here so they apply immediately,
-          // before globals.css loads)
-          fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        }}
-      >
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
