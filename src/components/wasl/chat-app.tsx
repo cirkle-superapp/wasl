@@ -547,8 +547,8 @@ export function ChatApp({ user }: { user: any }) {
     <div className="h-screen w-full flex overflow-hidden bg-[var(--wasl-chat-bg)]">
       {/* Sidebar - hidden on mobile when in chat view */}
       <aside
-        className={`w-full md:w-[360px] lg:w-[400px] xl:w-[420px] shrink-0 border-r border-border h-full ${
-          mobileView === 'chat' ? 'hidden md:flex' : 'flex'
+        className={`shrink-0 border-r border-border h-full wasl-sidebar-responsive ${
+          mobileView === 'chat' ? 'wasl-sidebar-mobile-hidden' : ''
         } flex-col`}
       >
         <Sidebar

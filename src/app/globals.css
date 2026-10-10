@@ -3802,6 +3802,36 @@ kbd {
    Task 95.1 — Premium global icon hover effects + sidebar polish
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* ── Sidebar responsive visibility (Task 97 fix) ───────────────────────
+ * Tailwind v4's `hidden md:flex` wasn't generating the `md:flex` class,
+ * causing the sidebar to be permanently hidden (display: none) even on
+ * desktop. This custom CSS uses a real media query to fix it. */
+.wasl-sidebar-responsive {
+  display: flex;
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .wasl-sidebar-responsive {
+    width: 360px;
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 1024px) {
+  .wasl-sidebar-responsive {
+    width: 400px;
+  }
+}
+@media (min-width: 1280px) {
+  .wasl-sidebar-responsive {
+    width: 420px;
+  }
+}
+@media (max-width: 767px) {
+  .wasl-sidebar-mobile-hidden {
+    display: none !important;
+  }
+}
+
 /* ── Chat header button hover: scale + glow ────────────────────────────
  * Makes ALL icons in the chat header scale up 10% + add a teal glow on
  * hover. Works with both the custom Wasl icons (solid color fills) AND
