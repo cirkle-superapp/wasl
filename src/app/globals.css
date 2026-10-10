@@ -3891,3 +3891,81 @@ button.w-full:hover {
 
 
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Task 96 — Competitor-busting premium features
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Reaction animation (iMessage-style tapback bounce) ───────────────
+ * When a user reacts with an emoji, the reaction pill BOUNCES in with
+ * spring physics: scale 0→1.3→1 with overshoot. Competitors just show
+ * the reaction statically; Wasl makes it feel alive. */
+.wasl-reaction-anim {
+  animation: wasl-reaction-bounce 0.5s var(--wasl-ease-spring) both;
+}
+@keyframes wasl-reaction-bounce {
+  0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+  40%  { transform: scale(1.35) rotate(5deg); opacity: 1; }
+  60%  { transform: scale(0.9) rotate(-2deg); }
+  80%  { transform: scale(1.1) rotate(1deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+/* ── Message effect canvas (confetti/hearts/sparkles) ──────────────────
+ * Positioned absolutely over the message bubble. The Canvas element
+ * renders particle effects that animate for ~3 seconds then fade. */
+.wasl-msg-effect-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  overflow: visible;
+}
+
+/* ── Inline translation pill ───────────────────────────────────────────
+ * Appears below incoming messages in a foreign language. Clicking
+ * translates via the AI router + shows the translation inline. */
+.wasl-translate-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: var(--wasl-radius-full);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--wasl-green);
+  background: color-mix(in oklab, var(--wasl-green) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wasl-green) 20%, transparent);
+  cursor: pointer;
+  transition: all 0.15s var(--wasl-ease);
+}
+.wasl-translate-pill:hover {
+  background: color-mix(in oklab, var(--wasl-green) 15%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-green) 35%, transparent);
+}
+.wasl-translate-result {
+  margin-top: 3px;
+  padding: 4px 8px;
+  border-radius: var(--wasl-radius-md);
+  font-size: 12px;
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--wasl-green) 5%, transparent);
+  border-left: 2px solid var(--wasl-green);
+  animation: wasl-slide-up 0.25s var(--wasl-ease) both;
+}
+
+/* ── Saved Messages special styling ────────────────────────────────────
+ * The self-chat appears at the top of the sidebar with a distinctive
+ * bookmark-style icon + gradient background. */
+.wasl-saved-messages-row {
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--wasl-green) 8%, transparent),
+    color-mix(in oklab, var(--wasl-teal) 4%, transparent));
+  border-left: 3px solid var(--wasl-green);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wasl-reaction-anim { animation: none !important; }
+  .wasl-translate-result { animation: none !important; }
+}

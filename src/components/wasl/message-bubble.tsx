@@ -373,6 +373,9 @@ export function MessageBubble({
   const [readReceiptsOpen, setReadReceiptsOpen] = useState(false)
   const [editHistoryOpen, setEditHistoryOpen] = useState(false)
   const [messageInfoOpen, setMessageInfoOpen] = useState(false)
+  // Inline translation state (Task 96 — competitor feature: Telegram/WhatsApp translate)
+  const [translation, setTranslation] = useState<string | null>(null)
+  const [translating, setTranslating] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
@@ -967,6 +970,41 @@ export function MessageBubble({
               {isHighlighted
                 ? highlightText(message.content, highlightQuery)
                 : renderMarkdownLite(message.content)}
+              {/* Inline translation (Task 96 — Telegram/WhatsApp competitor feature)
+                  Shows a "Translate" pill below incoming messages that might be in
+                  a foreign language. Only appears on INCOMING text messages (not
+                  the user's own). Detection: non-ASCII chars OR Arabic/Cyrillic/CJK. */}
+              {!mine && message.type === 'text' && !message.content.startsWith('data:') && (
+                <>
+                  {translation ? (
+                    <div className="wasl-translate-result">{translation}</div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="wasl-translate-pill"
+                      disabled={translating}
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (translating) return
+                        setTranslating(true)
+                        try {
+                          const res = await fetch('/api/ai/translate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: message.content }),
+                          })
+                          if (!res.ok) { toast.error('Translation failed'); return }
+                          const data = await res.json()
+                          setTranslation(data.translation)
+                        } catch { toast.error('Network error') }
+                        finally { setTranslating(false) }
+                      }}
+                    >
+                      {translating ? 'Translating…' : 'Translate'}
+                    </button>
+                  )}
+                </>
+              )}
               <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
                 {protection.isProtected && (
                   <Lock className="w-3 h-3 inline opacity-60" />
@@ -1027,7 +1065,7 @@ export function MessageBubble({
                   type="button"
                   onClick={() => onReact?.(g.emoji)}
                   className={cn(
-                    'wasl-reaction-pill wasl-reaction-pop inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors wasl-tap-scale',
+                    'wasl-reaction-pill wasl-reaction-anim wasl-reaction-pop inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors wasl-tap-scale',
                     mineReacted
                       ? 'bg-[var(--wasl-green)]/15 border-[var(--wasl-green)]/50 text-foreground'
                       : 'bg-white dark:bg-[var(--wasl-sidebar-bg)] border-border text-foreground hover:bg-muted'

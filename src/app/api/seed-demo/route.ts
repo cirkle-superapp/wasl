@@ -765,6 +765,35 @@ async function buildOneOnOneConversations(
     out.push({ id: convId, name: p.name, folder: 'Friends' })
   }
 
+  // ── Saved Messages self-chat (Task 96 — Telegram competitor feature) ─
+  {
+    // Check if the user already has a Saved Messages chat
+    const existing = await db.conversation.findFirst({
+      where: { name: 'Saved Messages', createdBy: session.id, isGroup: false },
+    })
+    if (!existing) {
+      const savedConv = await db.conversation.create({
+        data: {
+          isGroup: false,
+          name: 'Saved Messages',
+          avatarColor: '#C2A060',
+          createdBy: session.id,
+          participants: { create: { userId: session.id, role: 'admin' } },
+        },
+      })
+      await db.message.create({
+        data: {
+          conversationId: savedConv.id,
+          senderId: session.id,
+          content: 'Your Saved Messages — forward anything here to keep it for later.',
+          type: 'system',
+          status: 'read',
+        },
+      })
+      out.push({ id: savedConv.id, name: 'Saved Messages', folder: 'Saved' })
+    }
+  }
+
   return out
 }
 

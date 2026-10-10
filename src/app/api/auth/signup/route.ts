@@ -170,6 +170,36 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // ── Saved Messages self-chat (Task 96 — Telegram competitor feature) ─
+    // Auto-create a 1-on-1 conversation where the user is the ONLY participant.
+    // This is the "Saved Messages" chat — users forward links, notes, files
+    // here to save them for later. Telegram's most-used feature.
+    try {
+      const savedConv = await db.conversation.create({
+        data: {
+          isGroup: false,
+          name: 'Saved Messages',
+          avatarColor: '#C2A060', // gold — distinct from regular chats
+          createdBy: user.id,
+          participants: {
+            create: { userId: user.id, role: 'admin' },
+          },
+        },
+      })
+      // Add a system message so the chat isn't empty
+      await db.message.create({
+        data: {
+          conversationId: savedConv.id,
+          senderId: user.id,
+          content: 'Your Saved Messages — forward anything here to keep it for later.',
+          type: 'system',
+          status: 'read',
+        },
+      })
+    } catch {
+      // Silent — if this fails, the user can still use Wasl normally
+    }
+
     await setSession(user.id)
     return NextResponse.json({
       id: user.id,
