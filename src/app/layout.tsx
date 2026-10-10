@@ -315,6 +315,27 @@ export default function RootLayout({
         <style dangerouslySetInnerHTML={{ __html: criticalCSS }} />
         <script dangerouslySetInnerHTML={{ __html: colorThemeScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
+        {/* Wasl gradient defs for custom duotone icons (Task 95) */}
+        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+          <defs>
+            <linearGradient id="wasl-icon-grad-teal" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#009588" />
+              <stop offset="100%" stopColor="#00C897" />
+            </linearGradient>
+            <linearGradient id="wasl-icon-grad-gold" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#C2A060" />
+              <stop offset="100%" stopColor="#E5C98A" />
+            </linearGradient>
+            <linearGradient id="wasl-icon-grad-rose" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#E8466E" />
+              <stop offset="100%" stopColor="#F5708C" />
+            </linearGradient>
+            <linearGradient id="wasl-icon-grad-blue" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#3B82F6" />
+              <stop offset="100%" stopColor="#60A5FA" />
+            </linearGradient>
+          </defs>
+        </svg>
       </head>
       <body
         className="antialiased bg-background text-foreground"

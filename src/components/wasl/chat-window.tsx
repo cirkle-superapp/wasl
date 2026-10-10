@@ -35,6 +35,24 @@ import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ScheduleBatchDialog } from './schedule-batch-dialog'
 import { SmartChatMenu } from './smart-chat-menu'
+import {
+  WaslVideoCall,
+  WaslPhoneCall,
+  WaslSearch,
+  WaslArrowLeft,
+  WaslInfo,
+  WaslSparkles,
+  WaslChart,
+  WaslHeart,
+  WaslChecklist,
+  WaslWand,
+  WaslSend,
+  WaslCopy,
+  WaslLock,
+  WaslTrash,
+  WaslUsers,
+  WaslTimer,
+} from './wasl-icons'
 import { ChatSummaryDialog } from './chat-summary-dialog'
 import { ChatInsightsDialog } from './chat-insights-dialog'
 import { HealthScoreDialog } from './health-score-dialog'
@@ -1310,7 +1328,7 @@ export function ChatWindow({
           onClick={onBack}
           className="md:hidden p-2 -ml-1 rounded-full hover:bg-muted text-foreground"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <WaslArrowLeft className="w-5 h-5" />
         </button>
         <button
           onClick={onOpenInfo}
@@ -1395,7 +1413,7 @@ export function ChatWindow({
                 aria-label="Start video call"
                 disabled={!!activeCall}
               >
-                <Video className="w-5 h-5" />
+                <WaslVideoCall className="w-5 h-5" />
               </Button>
               <Button
                 variant="ghost"
@@ -1406,12 +1424,12 @@ export function ChatWindow({
                 aria-label="Start voice call"
                 disabled={!!activeCall}
               >
-                <Phone className="w-5 h-5" />
+                <WaslPhoneCall className="w-5 h-5" />
               </Button>
             </>
           )}
           <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
-            <Search className="w-5 h-5" />
+            <WaslSearch className="w-5 h-5" />
           </Button>
           <SmartChatMenu
             pendingCount={0}
@@ -1424,36 +1442,36 @@ export function ChatWindow({
           >
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onOpenInfo}>
-                <Info className="w-4 h-4 mr-2" /> Contact info
+                <WaslInfo className="w-4 h-4 mr-2" /> Contact info
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSummaryOpen(true)}>
-                <Sparkles className="w-4 h-4 mr-2" /> AI summary
+                <WaslSparkles className="w-4 h-4 mr-2" /> AI summary
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
-                <BarChart3 className="w-4 h-4 mr-2" /> Chat insights
+                <WaslChart className="w-4 h-4 mr-2" /> Chat insights
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setHealthScoreOpen(true)}>
-                <Heart className="w-4 h-4 mr-2" /> Health score
+                <WaslHeart className="w-4 h-4 mr-2" /> Health score
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
-                <ListChecks className="w-4 h-4 mr-2" /> Action items
+                <WaslChecklist className="w-4 h-4 mr-2" /> Action items
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setToneOpen(true)}>
-                <Wand2 className="w-4 h-4 mr-2" /> Tone adjuster
+                <WaslWand className="w-4 h-4 mr-2" /> Tone adjuster
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setBatchDialogOpen(true)}>
-                <Send className="w-4 h-4 mr-2" /> Schedule multi-message blast
+                <WaslSend className="w-4 h-4 mr-2" /> Schedule multi-message blast
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCopyLast}>
-                <Copy className="w-4 h-4 mr-2" /> Copy last message
+                <WaslCopy className="w-4 h-4 mr-2" /> Copy last message
               </DropdownMenuItem>
               {conversation.isGroup && (
                 <DropdownMenuItem onClick={() => toast.info('Group members')}>
-                  <Users className="w-4 h-4 mr-2" /> Group members
+                  <WaslUsers className="w-4 h-4 mr-2" /> Group members
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => setAppLockOpen(true)}>
-                <Lock className="w-4 h-4 mr-2" /> App lock
+                <WaslLock className="w-4 h-4 mr-2" /> App lock
               </DropdownMenuItem>
               <DropdownMenuItem onClick={async () => {
                 const setting = await fetch(`/api/disappearing?conversationId=${activeConversationId}`).then(r => r.json())
@@ -1465,10 +1483,10 @@ export function ChatWindow({
                 })
                 toast.success(enabled ? 'Disappearing messages ON (24h)' : 'Disappearing messages OFF')
               }}>
-                <Timer className="w-4 h-4 mr-2" /> Disappearing messages
+                <WaslTimer className="w-4 h-4 mr-2" /> Disappearing messages
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
-                <Trash2 className="w-4 h-4 mr-2" /> Delete chat
+                <WaslTrash className="w-4 h-4 mr-2" /> Delete chat
               </DropdownMenuItem>
             </DropdownMenuContent>
           </SmartChatMenu>
