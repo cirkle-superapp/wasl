@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 
@@ -1080,10 +1080,19 @@ const ALTER_COLUMNS: Array<[string, string, string]> = [
   ['SchoolStudent', 'userId', 'TEXT'],
 ]
 
-export async function POST() {
-  const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function POST(req: NextRequest) {
+  // Allow unauthenticated access if a SYNC_SCHEMA_TOKEN is provided
+  // and matches the env var. This lets us trigger schema sync on Vercel
+  // without being logged in (chicken-and-egg: need schema to login).
+  const syncToken = process.env.SYNC_SCHEMA_TOKEN
+  const providedToken = new URL(req.url).searchParams.get('token')
+  if (syncToken && providedToken === syncToken) {
+    // Token matches — proceed without auth
+  } else {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const results: Array<{ sql: string; ok: boolean; error?: string }> = []
