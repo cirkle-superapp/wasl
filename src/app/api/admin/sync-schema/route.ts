@@ -1081,12 +1081,12 @@ const ALTER_COLUMNS: Array<[string, string, string]> = [
 ]
 
 export async function POST(req: NextRequest) {
-  // TEMPORARILY no auth required — needed to bootstrap the Turso schema
-  // (chicken-and-egg: login fails because schema is missing, so we can't
-  // auth to push the schema). This route is idempotent (only CREATE TABLE
-  // IF NOT EXISTS + ALTER TABLE ADD COLUMN) so unauthenticated access is
-  // safe for a one-time schema sync.
-  // TODO: restore auth check after schema is synced.
+  // Auth restored after Turso schema bootstrap (Task 97.2).
+  // The route is idempotent (CREATE IF NOT EXISTS) so safe to re-run.
+  const session = await getSession()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const results: Array<{ sql: string; ok: boolean; error?: string }> = []
   let created = 0
