@@ -1,0 +1,1054 @@
+# MASTER PROMPT — FULL PLATFORM FORENSIC AUDIT, BLUEPRINT COMPLIANCE, AND END-TO-END INTEGRATION VERIFICATION
+
+## 1. YOUR ROLE AND MISSION
+
+Act as an independent, multidisciplinary enterprise technology audit team combining the responsibilities of:
+
+- Chief Operating Officer (COO)
+- Chief Technology Officer (CTO)
+- Chief Product Officer (CPO)
+- Principal software and solution architect
+- Senior frontend and backend engineers
+- Database and data-architecture engineer
+- API and systems-integration architect
+- QA director and test-automation engineer
+- UI/UX architecture and design auditor
+- Cybersecurity and access-control auditor
+- DevOps, deployment, and reliability engineer
+- Business-domain, financial, banking, trading, and settlement specialist where required by the authoritative project blueprint
+- Enterprise implementation and delivery manager
+
+Your mission is to conduct a comprehensive, independent, evidence-based audit of the **entire existing platform**, comparing the actual implementation against every applicable requirement in the authoritative blueprint and associated approved specifications.
+
+You are not being asked to create a new concept, redesign the platform from scratch, or provide a superficial code review.
+
+You must investigate what actually exists, establish what is genuinely functional, identify all discrepancies, and return a complete, traceable audit report explaining:
+
+1. What has been implemented correctly.
+2. What has been implemented only partially.
+3. What is present visually but is not functionally connected.
+4. What exists in the code but cannot be reached or used.
+5. What is missing entirely.
+6. What is implemented incorrectly or conflicts with the blueprint.
+7. What is broken, insecure, duplicated, inconsistent, or technically incomplete.
+8. What cannot be verified because of environmental, credential, infrastructure, or testing limitations.
+9. Exactly what must be modified to achieve complete, production-ready implementation.
+10. How each identified gap will be verified after it is corrected.
+
+**Your objective is to establish verified implementation completeness, not to produce a reassuring assessment.**
+
+---
+
+## 2. NON-NEGOTIABLE AUDIT RULES
+
+Follow these rules throughout the entire audit.
+
+### Rule 1 — Audit the actual project
+
+Inspect the real workspace, repository, available files, application runtime, database configuration, and other accessible resources.
+
+Do not base the audit exclusively on:
+
+- The homepage.
+- A screenshot or visual demonstration.
+- A list of features in the project description.
+- The developer's previous claims.
+- The filenames or folder names.
+- A high-level architecture document.
+- A limited sample of the source code.
+
+You must investigate the actual implementation.
+
+### Rule 2 — Use the authoritative blueprint as the specification
+
+Find and inspect every relevant blueprint, specification, change request, architecture document, workflow definition, and approved implementation requirement available in the project.
+
+Identify the authoritative version and explain how you determined which document takes precedence.
+
+If multiple versions conflict, do not silently choose whichever is easiest to implement. Record the conflicting requirements, identify their sources, assess their implications, and explain the decision that requires clarification.
+
+If different projects or product names appear in the workspace, do not merge their requirements by assumption. Establish the exact project being audited and document any unresolved naming or scope conflicts.
+
+### Rule 3 — Map every requirement to implementation evidence
+
+Every relevant blueprint requirement must have a traceable record connecting it to the implementation.
+
+For each requirement, identify, wherever applicable:
+
+- Its unique audit ID.
+- The source blueprint and exact section, page, heading, or requirement reference.
+- The relevant application page, screen, dashboard, portal, tab, or workflow.
+- The relevant frontend components and source files.
+- The relevant backend services, API endpoints, and business logic.
+- The relevant database tables, models, schemas, and migrations.
+- The relevant roles and permissions.
+- The relevant integrations and external dependencies.
+- The tests executed and their results.
+- The resulting implementation status.
+
+If you cannot establish the connection, mark it as unverified or not implemented. Do not invent a mapping.
+
+### Rule 4 — Visual presence does not equal implementation
+
+A button that does not perform its intended action is not implemented.
+
+A chart displaying hardcoded data is not a verified live dashboard.
+
+A form that accepts input but does not persist, validate, route, or process it correctly is not a complete workflow.
+
+A page that exists but is inaccessible from the correct navigation is not fully integrated.
+
+An endpoint that exists but is never called by its intended interface is not fully wired.
+
+A service that uses mock data where real processing is required is not complete.
+
+A successful build does not prove the business workflows function correctly.
+
+Distinguish explicitly between visual completeness, code presence, functional operation, integration correctness, and production readiness.
+
+### Rule 5 — No fabricated verification
+
+Never claim a test passed unless it was actually executed and its outcome observed.
+
+Never claim database persistence, external integration, permissions, deployment, or end-to-end functionality is verified when only static source code was reviewed.
+
+Clearly distinguish:
+
+- **Verified:** Direct evidence confirms the requirement works within the tested conditions.
+- **Partially verified:** Some aspects work, but important conditions remain untested or incomplete.
+- **Code-confirmed only:** The implementation exists, but runtime behavior has not been established.
+- **Failed:** Testing or inspection demonstrates a defect.
+- **Missing:** The required implementation does not exist in the inspected scope.
+- **Blocked:** Verification cannot proceed because of a documented limitation.
+- **Not applicable:** The requirement genuinely does not apply, with a written justification.
+
+### Rule 6 — Audit first; do not silently change the application
+
+This is an audit-only assignment.
+
+Do not rewrite source files, change architecture, alter database schemas, modify business rules, install new production dependencies, change permissions, migrate databases, or deploy changes during the initial audit.
+
+You may execute safe, non-destructive diagnostic commands and tests.
+
+You may create separate audit artifacts and test reports if the environment permits, without modifying application behavior.
+
+Prepare a prioritized correction plan for approval after the audit. Preserve the existing implementation and record any tests that may affect data or require a controlled environment.
+
+---
+
+## 3. PHASE ONE — DISCOVER THE ENTIRE PROJECT AND ITS SOURCE MATERIAL
+
+Before judging implementation quality, establish the actual scope.
+
+### 3.1 Inspect the project structure
+
+Inventory the entire accessible project, including relevant:
+
+- Root-level files and folders.
+- Frontend applications.
+- Backend applications and services.
+- Shared components and libraries.
+- Application routes and layouts.
+- API routes, controllers, handlers, and service layers.
+- Authentication and authorization modules.
+- Database schemas, models, migrations, seed data, and relationships.
+- Background jobs, queues, workers, schedulers, and event handlers.
+- Integration adapters and webhook handlers.
+- Configuration files and environment-variable templates.
+- Static assets, images, icons, fonts, and design tokens.
+- State-management modules and data-fetching logic.
+- Validation schemas and business-rule modules.
+- Unit, integration, API, and end-to-end tests.
+- CI/CD pipelines and deployment configuration.
+- Logging, error reporting, observability, and audit trails.
+- Documentation and architecture diagrams.
+- Feature flags, placeholders, mocks, demo data, and temporary implementations.
+
+Inspect hidden project configuration and relevant dependency manifests where accessible.
+
+Do not waste time exhaustively reading generated build artifacts, vendor packages, caches, or dependency directories. Nevertheless, record important exclusions and investigate generated or vendored files when they affect actual runtime behavior, security, or configuration.
+
+### 3.2 Discover the complete blueprint set
+
+Search the workspace and available project resources for all relevant documents and specifications.
+
+Create a document register containing:
+
+| Field | Required information |
+|---|---|
+| Document ID | Unique reference |
+| Filename | Exact filename and location |
+| Version | Explicit version, if available |
+| Date | Document date, if available |
+| Purpose | What it specifies |
+| Authority | Approved, draft, historical, or uncertain |
+| Conflicts | Related conflicting or superseded requirements |
+| Audit use | Requirements or modules covered |
+
+Read the full relevant content of the authoritative blueprint. Do not rely only on summaries, search snippets, or document introductions.
+
+If a document is too large for a single inspection, process it systematically in sections and preserve a coverage register so no sections are inadvertently skipped.
+
+### 3.3 Establish the implementation baseline
+
+Record:
+
+- Current branch and commit, when available.
+- Project version and build identifier, when available.
+- Frameworks, languages, and dependency versions.
+- Available runtime environments.
+- Application entry points.
+- Available databases and connection modes.
+- Authentication providers.
+- External integration dependencies.
+- Existing automated test coverage.
+- Whether a running application can be accessed.
+- Any environment limitations that affect audit scope.
+
+Never expose passwords, API keys, private keys, access tokens, or other secrets in the report. Identify their file or configuration location safely, redact their values, and flag inappropriate secret handling.
+
+**Deliverable A:** Complete project inventory, authoritative-document register, and audit-scope statement.
+
+---
+
+## 4. PHASE TWO — CONVERT THE BLUEPRINT INTO A REQUIREMENTS REGISTER
+
+Extract every functional and non-functional requirement from the authoritative blueprint.
+
+Do not restrict this extraction to major features. Include the details required to make each feature usable and complete.
+
+Capture, where applicable:
+
+- Business objectives and operating principles.
+- User types, stakeholders, and organizational roles.
+- Functional modules.
+- Page and screen requirements.
+- Navigation, tabs, forms, dialogs, and interactions.
+- User journeys and workflow states.
+- Business rules and calculations.
+- Field definitions and validation rules.
+- Data entities, relationships, and lifecycle events.
+- Dashboards, metrics, charts, and reports.
+- Permissions, approvals, and segregation of duties.
+- API contracts and service responsibilities.
+- External integrations.
+- Notifications and background processing.
+- Financial, trading, settlement, or governance calculations where specified.
+- Compliance, recordkeeping, and audit requirements.
+- Error states, recovery behavior, and exception handling.
+- Performance and scalability requirements.
+- Availability, backup, and disaster-recovery requirements.
+- Privacy and security requirements.
+- Deployment and operational requirements.
+- Acceptance criteria explicitly stated in the blueprint.
+
+Assign each requirement a unique, stable identifier, such as:
+
+- BR-001 — Business requirement.
+- UI-001 — Interface requirement.
+- WF-001 — Workflow requirement.
+- API-001 — API requirement.
+- DB-001 — Data requirement.
+- SEC-001 — Security requirement.
+- INT-001 — Integration requirement.
+- OPS-001 — Operational requirement.
+
+Use meaningful categories suited to the project. Keep each ID unique and use the same ID throughout the report.
+
+For every requirement, define an observable acceptance criterion. Where the blueprint is ambiguous, record the ambiguity rather than inventing an authoritative rule.
+
+**Deliverable B:** Complete blueprint requirements register and acceptance-criteria catalog.
+
+---
+
+## 5. PHASE THREE — BUILD A COMPLETE SCREEN, ROUTE, AND NAVIGATION INVENTORY
+
+You must inspect every discovered page and screen, including pages that do not appear in the primary navigation.
+
+### 5.1 Route inventory
+
+Identify every:
+
+- Public route.
+- Landing page.
+- Authentication route.
+- Registration and onboarding route.
+- Main application page.
+- Dashboard.
+- Admin portal.
+- Operational portal.
+- User or customer portal.
+- Institutional or partner portal, if required by the blueprint.
+- Settings page.
+- Reporting page.
+- Detail and record-view page.
+- Create and edit page.
+- Search and filtering page.
+- Error page.
+- Empty state.
+- Unauthorized and forbidden page.
+- Not-found page.
+- Callback and integration route.
+- Deep link.
+- Modal, drawer, or nested route where applicable.
+
+Compare declared routes with navigation links and rendered runtime screens.
+
+For each route, record:
+
+| Field | Required verification |
+|---|---|
+| Route ID | Unique identifier |
+| URL/path | Actual route |
+| Page title | Actual rendered title |
+| Blueprint reference | Relevant requirement IDs |
+| Entry point | Where the user accesses it |
+| Intended roles | Who should access it |
+| Guard | Authentication and permission checks |
+| Components | Main frontend components |
+| Data source | API, service, or local state |
+| Actions | Available interactions |
+| Status | Actual audit result |
+| Evidence | File paths, test results, or screenshots |
+
+### 5.2 Navigation and interaction audit
+
+Inspect every navigation group, sidebar, menu, tab, breadcrumb, card, dropdown, button, link, tooltip, modal, drawer, table action, and other interactive element.
+
+Verify that:
+
+- The interaction performs its intended action.
+- The destination exists and is correct.
+- Required parameters and contextual state are preserved.
+- Active and selected states are correct.
+- Browser refresh and direct URL access behave appropriately.
+- Back and forward navigation behave correctly where relevant.
+- Unauthorized access is rejected.
+- Disabled states reflect real business conditions.
+- Dead links, broken destinations, duplicate menu items, misleading labels, and orphaned screens are identified.
+- Tabs change actual content or state rather than merely changing their visual appearance.
+- Modal submission, dismissal, keyboard operation, and validation are correct where applicable.
+
+Inspect both the visible interface and the underlying implementation.
+
+### 5.3 Orphan and duplication analysis
+
+Identify:
+
+- Pages without a valid navigation path.
+- Dead components and unused routes.
+- Components duplicated unnecessarily.
+- Multiple pages implementing conflicting versions of the same feature.
+- Features exposed to the wrong user roles.
+- Routes that are accessible directly but should be protected.
+- Blueprint-required pages that do not exist.
+
+Do not mark a hidden administrative or callback route as orphaned merely because it is not intended for ordinary users. Verify its purpose first.
+
+**Deliverable C:** Complete route registry, navigation map, screen inventory, and orphan/duplication report.
+
+---
+
+## 6. PHASE FOUR — AUDIT EVERY PORTAL, DASHBOARD, TAB, AND MODULE
+
+Create a separate audit entry for every portal, major module, dashboard, and tab defined by the blueprint.
+
+Do not assume that a dashboard is complete because it renders successfully.
+
+For each screen or module, verify:
+
+1. The screen exists and is accessible to the intended role.
+2. Its layout corresponds to the blueprint.
+3. All required fields, controls, sections, and actions exist.
+4. Displayed data has the correct source.
+5. Loading, empty, error, and success states behave correctly.
+6. Search, filtering, sorting, pagination, export, and refresh work where applicable.
+7. Charts use the intended data and correct aggregation.
+8. Totals, counters, status badges, and calculated values are correct.
+9. Links to related records lead to the correct destinations.
+10. Forms validate the intended rules and give actionable error messages.
+11. Successful operations produce the correct state changes.
+12. Failed operations do not falsely indicate success.
+13. Required permissions are enforced by the backend as well as reflected in the interface.
+14. Refreshing the browser does not unexpectedly destroy persisted state.
+15. The screen works at its intended supported viewport sizes.
+16. All relevant blueprint requirements are traceable to evidence.
+
+### Dashboard-specific tests
+
+Where appropriate, verify:
+
+- Metric definitions and formulas.
+- Date ranges and timezone handling.
+- Currency and unit display.
+- Status and lifecycle calculations.
+- Data freshness.
+- Aggregation and rounding.
+- Consistency between dashboard numbers and underlying records.
+- Filters and drill-down behavior.
+- Exported reports against displayed figures.
+
+Hardcoded numbers, static charts, placeholder records, and simulated status updates must be explicitly identified.
+
+**Deliverable D:** Screen-by-screen and dashboard-by-dashboard compliance report.
+
+---
+
+## 7. PHASE FIVE — VERIFY EVERY END-TO-END BUSINESS WORKFLOW
+
+This phase is mandatory and is one of the most important parts of the audit.
+
+Derive the workflow inventory from the blueprint. Do not assume that the presence of individual pages proves that the workflows connecting them are complete.
+
+For each business workflow, create a lifecycle map showing:
+
+**Initiation → Input → Validation → Authorization → Processing → Data persistence → Status transition → Notification → Downstream integration → Final outcome**
+
+Only include stages that the actual business process requires, and identify any additional stages specified by the blueprint.
+
+For every workflow, record:
+
+- Workflow ID.
+- Business objective.
+- Initiating user role.
+- Starting page or event.
+- Required input.
+- Validation rules.
+- Permissions and approval gates.
+- Frontend components.
+- API calls and backend services.
+- Database entities and records affected.
+- Status and state transitions.
+- Background jobs or event handlers.
+- Notifications.
+- External systems involved.
+- Expected successful outcome.
+- Failure behavior.
+- Recovery, cancellation, reversal, or retry behavior where required.
+- Relevant blueprint requirements.
+- Test evidence and final status.
+
+### Required workflow test scenarios
+
+For every applicable workflow, test the following scenarios:
+
+**A. Normal operation**
+
+Execute the entire workflow using the intended user interface and the available backend. Verify the actual final outcome.
+
+**B. Invalid inputs**
+
+Submit missing fields, malformed data, invalid combinations, and out-of-range values where applicable.
+
+**C. Authorization failures**
+
+Attempt prohibited actions using the wrong role or an insufficiently privileged account. Use controlled test accounts and test data.
+
+**D. Processing failures**
+
+Where safely testable, simulate failed requests, unavailable services, rejected transactions, and other relevant failure modes.
+
+**E. Data consistency**
+
+Verify that records, statuses, balances, counters, event histories, and related entities agree after the operation.
+
+**F. Persistence**
+
+Refresh the application, revisit the affected record, and use the permitted data-access layer to establish whether the expected state was actually persisted.
+
+**G. Duplicate submissions and retries**
+
+Check idempotency, duplicate record creation, and retry behavior where relevant.
+
+**H. Lifecycle correctness**
+
+Verify permitted and prohibited status transitions, cancellation, reversal, resubmission, and approval sequences wherever specified.
+
+**I. Multi-user operations**
+
+Where the blueprint involves different users or departments, verify handoffs, assignments, notifications, approvals, and visibility between the appropriate roles.
+
+**J. Downstream processing**
+
+Verify that downstream records, integrations, reports, or events are updated correctly.
+
+Do not mark the complete workflow as passed if only one component has been tested.
+
+For workflows involving money, settlement, ownership, permissions, or other sensitive state, use a safe test environment and explicitly verify the applicable invariants.
+
+**Deliverable E:** End-to-end workflow registry, lifecycle diagrams, scenario results, and workflow-gap report.
+
+---
+
+## 8. PHASE SIX — AUDIT FRONTEND-TO-BACKEND WIRING
+
+Trace each important user interaction through the full technical stack.
+
+For every significant feature, establish the actual connection:
+
+**UI component → Event handler → State management → API client → Network request → Backend route → Authentication and authorization → Validation → Business service → Database transaction or persistence → Event/notification → API response → UI update**
+
+Verify that the relevant links actually exist and that the request and response contracts agree.
+
+Look specifically for:
+
+- Buttons with empty or incorrect handlers.
+- Forms that never call their intended API.
+- API clients that point to the wrong endpoint.
+- Incorrect HTTP methods or request payloads.
+- Missing headers or authentication credentials.
+- Mismatched field names and response structures.
+- Incorrect error-handling assumptions.
+- Stale or incorrectly cached frontend state.
+- Failed data invalidation and refresh behavior.
+- Database updates that are not transactional when consistency requires it.
+- Missing authorization at service or endpoint level.
+- APIs that return success before required processing is complete.
+- Unhandled asynchronous operations.
+- Race conditions and duplicate event handling.
+- Timeouts, retry loops, and inadequate retry policies.
+- Unused or unreachable backend endpoints.
+- Backend features with no corresponding UI entry point.
+- Mock services still connected to live user flows.
+- Hardcoded IDs, URLs, amounts, statuses, or placeholder results.
+- Environment-specific endpoints accidentally used in other environments.
+- Fake notification delivery or simulated integration status.
+
+For each finding, record the source and destination of the connection, the specific break or uncertainty, and the test needed to establish correctness.
+
+**Deliverable F:** Frontend-to-backend wiring matrix and disconnected-component report.
+
+---
+
+## 9. PHASE SEVEN — DATABASE, DATA MODEL, AND BUSINESS-INVARIANT AUDIT
+
+Compare the actual data architecture against the blueprint.
+
+Inspect:
+
+- Tables and collections.
+- Entities and model definitions.
+- Field types and constraints.
+- Primary and foreign keys.
+- Relationships and cardinality.
+- Unique constraints and indexes.
+- Nullable and required fields.
+- Database migrations and migration history.
+- Transaction boundaries.
+- Referential integrity.
+- Tenant and organizational boundaries.
+- Data ownership.
+- Audit logs and record history.
+- Soft deletion and retention behavior.
+- Seed and demo records.
+- Data-access permissions.
+- Backup and recovery configuration.
+
+Verify that each important screen and workflow reads and writes the correct records.
+
+Check that the application's data model supports every required business process without missing essential fields, disconnected entities, contradictory state representations, or conflicting sources of truth.
+
+Where the blueprint defines specific calculations, invariants, ownership rules, or transaction constraints, derive tests for those exact requirements.
+
+Examples, only where relevant to the blueprint, include:
+
+- Totals reconciling with their underlying entries.
+- Records not being approved before prerequisites are satisfied.
+- Status changes following the permitted transition rules.
+- An entity not being assigned to an unauthorized tenant.
+- Financial or quantity values maintaining the required precision.
+- Reversal operations preserving the original audit trail.
+- Concurrent operations not producing inconsistent records.
+
+Do not invent financial, accounting, or business rules. Test the rules actually specified by the authoritative blueprint and identify unresolved rules as specification gaps.
+
+Never execute destructive database operations against production data during an audit.
+
+**Deliverable G:** Data-model map, persistence verification results, invariant tests, and database-gap report.
+
+---
+
+## 10. PHASE EIGHT — AUTHENTICATION, ROLES, PERMISSIONS, AND PORTAL ISOLATION
+
+Extract all roles, permissions, organizations, tenancy boundaries, and approval responsibilities defined in the blueprint.
+
+Build a permissions matrix.
+
+| Resource/action | Role | Required permission | UI behavior | Backend enforcement | Test result |
+|---|---|---|---|---|---|
+
+Verify:
+
+- Login and logout.
+- Session expiration and renewal.
+- Password reset or recovery, if applicable.
+- Registration and onboarding.
+- Role assignment and modification.
+- Protected routes and API endpoints.
+- Record-level authorization.
+- Organization and tenant isolation.
+- Administrative access.
+- Approval authority.
+- Sensitive data visibility.
+- Revocation of access.
+- Server-side enforcement independent of the UI.
+- Correct handling of unauthorized and forbidden requests.
+
+Test that users cannot gain access merely by changing a URL, submitting a modified API request, editing client-side state, or modifying a record identifier.
+
+Do not assume that hiding an interface element enforces security.
+
+Use only authorized accounts and controlled environments. Do not attempt destructive exploitation or unauthorized access to external systems.
+
+**Deliverable H:** Role-permission matrix, access-control test report, and authorization findings.
+
+---
+
+## 11. PHASE NINE — EXTERNAL INTEGRATIONS AND EVENT PROCESSING
+
+Inventory every integration identified by the blueprint or implementation.
+
+For each integration, document:
+
+- Integration ID and business purpose.
+- External system.
+- Consuming or providing service.
+- API or event contract.
+- Endpoint configuration, with secret values redacted.
+- Authentication method.
+- Request and response schemas.
+- Timeout and retry behavior.
+- Idempotency requirements.
+- Webhook handling and verification.
+- Event processing.
+- Error handling and recovery.
+- Logging and monitoring.
+- Test environment availability.
+- Actual verification status.
+
+Distinguish carefully between:
+
+1. A real, tested integration.
+2. A configured integration that has not been exercised.
+3. A sandbox integration.
+4. A mocked or simulated integration.
+5. A partially wired integration.
+6. A missing integration.
+7. An integration blocked by unavailable credentials or external access.
+
+Inspect whether relevant workflows actually invoke their intended integrations and whether returned results are processed correctly.
+
+If external connectivity is unavailable, examine the contracts and local implementation, run safe mock or contract tests if possible, and mark actual external execution as unverified.
+
+Do not claim an external service works merely because an API client or configuration file exists.
+
+**Deliverable I:** Integration catalog, dependency map, contract-test results, and blocked-integration list.
+
+---
+
+## 12. PHASE TEN — UI/UX QUALITY AND RESPONSIVE IMPLEMENTATION
+
+Compare each applicable screen against the approved blueprint, available designs, and established design system.
+
+Inspect:
+
+- Layout and visual hierarchy.
+- Typography.
+- Color and design tokens.
+- Spacing and alignment.
+- Navigation consistency.
+- Component consistency.
+- Form layout and validation feedback.
+- Data tables and chart readability.
+- Modal and drawer behavior.
+- Loading, empty, error, and success states.
+- Responsive behavior.
+- Accessible labels and keyboard navigation.
+- Focus indicators.
+- Contrast and readability.
+- Screen-reader semantics where testable.
+- Broken or missing assets.
+- Console errors and runtime warnings.
+- Layout overflow and overlapping elements.
+- Unnecessary duplicate components.
+- Placeholder UI and unfinished design elements.
+
+Test the viewports appropriate to the product's supported devices.
+
+Where the blueprint includes a reference design, compare against it. Where no approved visual reference exists, assess usability and consistency without inventing a claim that the implementation violates an unspecified pixel-perfect design.
+
+Do not let a polished interface conceal missing business functionality.
+
+**Deliverable J:** Screen-level UI/UX findings, responsive test results, and reference-design discrepancies.
+
+---
+
+## 13. PHASE ELEVEN — SECURITY, PRIVACY, AND DEPENDENCY REVIEW
+
+Conduct a safe, non-destructive security review consistent with the available environment.
+
+Inspect for relevant risks including:
+
+- Exposed credentials and secrets.
+- Insecure authentication.
+- Broken authorization.
+- Cross-tenant data leakage.
+- Injection vulnerabilities.
+- Cross-site scripting.
+- Cross-site request forgery where applicable.
+- Unsafe file uploads.
+- Insecure deserialization.
+- Excessively permissive CORS or security policies.
+- Sensitive information in logs.
+- Weak webhook verification.
+- Missing rate limits on sensitive endpoints.
+- Unsafe error messages.
+- Insecure environment configuration.
+- Unprotected administrative functions.
+- Vulnerable or outdated dependencies.
+- Inadequate input validation.
+- Missing security audit trails.
+- Inappropriate storage or exposure of personal or financial information.
+
+Use available dependency and security scanners where appropriate.
+
+Record the evidence and scope of each check. Distinguish confirmed vulnerabilities from potential issues that need validation.
+
+Never publish secrets in the audit report. Do not run destructive exploits, access unrelated environments, or conduct unauthorized external penetration tests.
+
+**Deliverable K:** Security findings, dependency review, and prioritized remediation recommendations.
+
+---
+
+## 14. PHASE TWELVE — QUALITY ASSURANCE, TEST EXECUTION, AND PRODUCTION READINESS
+
+Use the available development environment to run safe, relevant tests against the actual implementation.
+
+Inspect and execute, where supported:
+
+- Dependency and configuration checks.
+- Formatting and linting.
+- Static analysis.
+- Type checks.
+- Unit tests.
+- Integration tests.
+- API and contract tests.
+- Database tests and migration validation.
+- Authentication and authorization tests.
+- End-to-end browser tests.
+- Regression tests.
+- Responsive tests.
+- Accessibility tests.
+- Build and bundle checks.
+- Production-build checks.
+- Dependency security scans.
+- Relevant performance and reliability tests.
+
+Record the actual command, environment, result, and any limitations for each test suite.
+
+For the running application, inspect browser console errors, failed network requests, backend logs, server errors, and unexpected UI behavior wherever those diagnostic tools are available.
+
+Do not change the application just to make tests pass. Do not delete, weaken, skip, or rewrite failing tests to obtain a green test report.
+
+Investigate whether existing tests adequately cover the most important blueprint requirements. A large test count is not evidence of adequate coverage if important workflows are untested.
+
+### Production-readiness checklist
+
+Evaluate, where required:
+
+- Environment separation.
+- Secure configuration.
+- Database migration readiness.
+- Observability and operational alerts.
+- Error tracking.
+- Logging and auditability.
+- Backup and recovery.
+- Data retention.
+- Dependency and build reproducibility.
+- Deployment and rollback procedures.
+- Health checks.
+- Background job reliability.
+- Capacity and performance requirements.
+- External-service failure handling.
+- Incident recovery.
+
+A feature can be functionally complete while the platform remains unready for production. Report these assessments separately.
+
+**Deliverable L:** Test execution report, uncovered-risk register, and production-readiness assessment.
+
+---
+
+## 15. PHASE THIRTEEN — CREATE THE COMPLETE BLUEPRINT-TO-IMPLEMENTATION TRACEABILITY MATRIX
+
+This is the central audit artifact.
+
+Produce a single master matrix connecting every relevant blueprint requirement to the actual implementation and verification evidence.
+
+Use this structure:
+
+| Field | Description |
+|---|---|
+| Requirement ID | Unique requirement identifier |
+| Blueprint reference | Exact section, page, or heading |
+| Requirement | Clear summary of expected behavior |
+| Screen/module | Associated page or module |
+| Route | Actual route, if applicable |
+| Frontend evidence | File paths and relevant symbols |
+| Backend evidence | Route, service, or handler |
+| Data evidence | Models, tables, or collections |
+| Integration evidence | API, event, or external dependency |
+| Permission evidence | Applicable roles and access rules |
+| Test case | Test identifier and scenario |
+| Test result | Actual observed outcome |
+| Status | Verified, partial, code-confirmed, failed, missing, blocked, or N/A |
+| Gap | Exact discrepancy |
+| Priority | P0, P1, P2, or P3 |
+| Correction | Required modification |
+| Acceptance test | Evidence required to close the finding |
+
+Every requirement must have a final disposition.
+
+If a requirement maps to multiple screens or services, include all relevant references. If one component serves several requirements, record each requirement separately.
+
+Never mark a requirement as complete merely because a component with a similar name exists.
+
+Maintain a separate list of requirements that cannot be resolved because the blueprint is ambiguous, contradictory, or incomplete.
+
+**Deliverable M:** Master requirements traceability matrix, with no silently omitted requirements.
+
+---
+
+## 16. PHASE FOURTEEN — FINDINGS, SEVERITY, AND RISK ASSESSMENT
+
+Assign each finding a unique ID such as AUD-001, AUD-002, and so forth.
+
+Classify severity consistently:
+
+### P0 — Critical
+
+Issues that create an immediate, severe threat to the integrity, security, or safe operation of the platform. Examples may include a confirmed critical authorization bypass, materially incorrect high-impact transaction processing, or severe loss-of-data risk.
+
+### P1 — High
+
+Major blueprint gaps, broken core workflows, significant data-integrity issues, critical integrations that do not work, or other blockers to safe operation or the intended business purpose.
+
+### P2 — Medium
+
+Material functionality gaps, incomplete secondary workflows, significant usability defects, or integration and reliability issues that do not meet P0/P1 criteria.
+
+### P3 — Low
+
+Minor inconsistencies, cosmetic defects, small documentation gaps, or lower-impact improvements.
+
+Severity must be based on actual impact, exploitability where relevant, affected users, business importance, and likelihood—not simply on the number of files affected.
+
+For every finding, provide:
+
+1. Finding ID.
+2. Title.
+3. Severity and rationale.
+4. Affected blueprint requirement IDs.
+5. Affected screens, roles, workflows, and integrations.
+6. Actual observed behavior.
+7. Expected behavior.
+8. Evidence, including file paths, function names, relevant lines, logs, or test results.
+9. Root cause, if established.
+10. Business, technical, security, and operational impact.
+11. Recommended correction.
+12. Dependencies and prerequisites.
+13. Acceptance criteria.
+14. Exact retest needed to close the finding.
+
+Separate confirmed defects from suspected issues, specification ambiguities, and findings blocked by unavailable resources.
+
+Do not inflate severity to make the report appear more comprehensive.
+
+---
+
+## 17. PHASE FIFTEEN — GENERATE THE FINAL AUDIT REPORT
+
+Deliver the report in the following structure.
+
+### Section 1 — Executive verdict
+
+State plainly whether the platform is:
+
+- Not yet assessable due to insufficient access.
+- Fundamentally incomplete.
+- Partially implemented.
+- Functionally implemented but insufficiently verified.
+- Substantially implemented with material gaps.
+- Verified against the available blueprint and test scope, subject to explicitly stated limitations.
+
+Do not use the final category unless the evidence genuinely supports it.
+
+Summarize the biggest risks, most important missing requirements, broken end-to-end workflows, and principal blockers.
+
+### Section 2 — Audit scope and limitations
+
+State precisely which repositories, documents, environments, databases, portals, routes, tests, and integrations were inspected.
+
+List anything unavailable, inaccessible, excluded, or unverified, with reasons.
+
+### Section 3 — Blueprint and project inventory
+
+List authoritative documents, discovered modules, portal types, roles, environments, integrations, and major architectural components.
+
+### Section 4 — Requirement coverage summary
+
+Provide actual counts:
+
+- Total blueprint requirements identified.
+- Verified requirements.
+- Partially implemented requirements.
+- Code-confirmed but unverified requirements.
+- Failed requirements.
+- Missing requirements.
+- Blocked requirements.
+- Requirements classified as not applicable.
+- Unresolved specification conflicts.
+
+Check that the counts reconcile with the complete master matrix.
+
+Report the percentage of requirements verified against clearly stated denominators. Do not combine untested, missing, or blocked items into the verified category.
+
+### Section 5 — Complete screen and route audit
+
+Report the coverage of pages, screens, dashboards, portals, tabs, routes, dialogs, and navigation elements.
+
+Identify missing pages, broken navigation, inaccessible features, and disconnected UI components.
+
+### Section 6 — Complete end-to-end workflow audit
+
+For each important workflow, report the actual lifecycle, tested scenarios, pass/fail outcomes, persistence checks, permission checks, and outstanding gaps.
+
+### Section 7 — Integration and architecture audit
+
+Report frontend-to-backend wiring, data models, API contracts, background tasks, events, external dependencies, and integration limitations.
+
+### Section 8 — Security, privacy, and access-control audit
+
+Report confirmed risks, potential risks, permission gaps, tenancy issues, secret-handling problems, and test coverage.
+
+### Section 9 — Quality and production-readiness audit
+
+Report automated test outcomes, failed builds, code-quality issues, dependency risks, deployment gaps, observability gaps, and remaining unverified conditions.
+
+### Section 10 — Prioritized defect register
+
+List all identified findings with their IDs, severities, evidence, consequences, and recommended fixes.
+
+### Section 11 — Missing and incorrectly implemented blueprint requirements
+
+Provide a requirement-by-requirement account of what is absent, incomplete, contradicted, unreachable, or functionally incorrect.
+
+### Section 12 — Recommended correction plan
+
+Group the required changes into an implementation sequence:
+
+- Stage A: Critical security and data-integrity issues.
+- Stage B: Foundational architecture, data model, and integration issues.
+- Stage C: Missing or broken core functionality and workflows.
+- Stage D: Secondary functions, dashboards, reports, and operational tools.
+- Stage E: UI/UX, responsive behavior, and accessibility.
+- Stage F: Final regression, integration, security, and production-readiness verification.
+
+Reorder stages if dependencies demand it.
+
+For each proposed change, identify the affected files or components, associated requirement IDs, dependencies, likely scope, acceptance criteria, and regression tests.
+
+Do not modify these files during the audit phase.
+
+### Section 13 — Final go/no-go assessment
+
+Give separate verdicts for:
+
+- Blueprint compliance.
+- Functional completeness.
+- End-to-end integration.
+- Data integrity.
+- Security and permissions.
+- Test coverage.
+- Production readiness.
+
+For each verdict, explain the evidence and outstanding blockers.
+
+A platform must not be described as fully verified merely because it builds successfully or most screens are present.
+
+### Section 14 — Evidence appendix
+
+Include relevant source locations, route and API inventories, executed commands, test logs, browser-test evidence, diagrams, and the full master traceability matrix.
+
+Ensure confidential information is redacted.
+
+---
+
+## 18. REQUIRED AUDIT ARTIFACTS
+
+Where file creation is supported, generate these separate, clearly organized audit artifacts without changing application source code:
+
+1. `AUDIT_REPORT.md` — complete executive and technical audit.
+2. `BLUEPRINT_REQUIREMENTS_MATRIX.csv` — all requirements and implementation statuses.
+3. `SCREEN_ROUTE_INVENTORY.csv` — complete routes, portals, screens, and navigation.
+4. `WORKFLOW_AUDIT.csv` — lifecycle mapping and end-to-end test results.
+5. `FRONTEND_BACKEND_WIRING.csv` — UI/API/service/data connections.
+6. `INTEGRATION_REGISTER.csv` — external integrations and verification status.
+7. `ROLE_PERMISSION_MATRIX.csv` — roles, resources, permissions, and tests.
+8. `AUDIT_FINDINGS.csv` — prioritized defects and gaps.
+9. `TEST_EXECUTION_REPORT.md` — commands, results, and evidence.
+10. `IMPLEMENTATION_REMEDIATION_PLAN.md` — ordered corrections and acceptance criteria.
+11. `AUDIT_COVERAGE_REGISTER.md` — inspected documents, folders, routes, requirements, tests, exclusions, and limitations.
+
+Create these files only if the environment permits. Verify that each artifact actually exists before claiming it was generated.
+
+If the environment cannot create files, deliver the same information through the available interface and clearly state the limitation.
+
+---
+
+## 19. COVERAGE COMPLETENESS CHECK BEFORE FINALIZING
+
+Before delivering the report, perform a final reconciliation.
+
+Confirm that:
+
+- Every discovered authoritative blueprint section has been processed.
+- Every relevant requirement has an ID and a final status.
+- Every discovered application route has an audit record.
+- Every required portal and dashboard has been examined.
+- Every required tab and significant interaction has been evaluated.
+- Every important user workflow has an end-to-end verification status.
+- Every critical UI-to-backend connection has been traced or explicitly marked unverified.
+- Every relevant data entity and major business invariant has been assessed.
+- Every declared integration has a verification status.
+- Every required user role has an access-control assessment.
+- Relevant automated tests have been executed where possible.
+- Test failures and environmental blockers are documented.
+- Every finding has evidence, a priority, and a corrective recommendation.
+- No missing requirements have been omitted merely because they are difficult to implement.
+- Counts in the report agree with the master traceability matrix.
+- No unverified functionality is described as working.
+- No corrective source-code changes were made during the audit.
+
+If any category is incomplete, state why and what access or evidence is needed to finish it.
+
+Do not report 100% blueprint compliance unless every applicable requirement has been accounted for and the evidence supports the claim. A requirement that has not been tested must not be counted as fully verified.
+
+---
+
+## 20. EXECUTION INSTRUCTIONS
+
+Begin immediately by discovering the project and authoritative specifications. Do not start fixing defects, rewriting code, redesigning screens, or proposing an entirely new architecture before establishing what is actually implemented.
+
+Use the tools available in your environment to inspect the source code, explore the running platform, access the permitted test environment, run diagnostics, and examine relevant data and logs.
+
+Do not stop after inspecting the first few screens. Work through the entire accessible scope systematically, maintaining a checklist of completed and outstanding audit tasks.
+
+Do not ask me to manually provide information that is already available in the workspace. If access is genuinely missing, record the precise blocker and continue auditing every other accessible component.
+
+If your tools cannot access a required resource, clearly distinguish what you were able to inspect from what you could not inspect. Never simulate a successful test or invent a file, route, database record, API response, or screenshot.
+
+**Your final response must be an actual audit report based on the inspected implementation—not a plan for how someone else could perform the audit.**
+
+Complete the audit, present the evidence-backed findings, identify all material gaps and required modifications, and provide the prioritized implementation and retesting plan.
+
+**Do not implement the proposed fixes until I explicitly approve the remediation phase.**

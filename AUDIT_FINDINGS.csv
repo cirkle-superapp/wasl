@@ -1,0 +1,9 @@
+Finding ID,Severity,Title,Status,Evidence,Recommendation
+AUD-001,P0,Upload route recurring deletion (9th time),Confirmed,git status shows D src/app/api/upload/route.ts,Investigate webDevReview cron + add .gitattributes
+AUD-002,P1,.env missing service credentials,Confirmed,wc -l .env = 1 line (only DATABASE_URL),Restore from Vercel env or template
+AUD-003,P2,TypeScript errors in message-effects.tsx,Confirmed,npx tsc --noEmit = 3 errors (CanvasRenderingContext2D null),Add null check after getContext('2d')
+AUD-004,P2,message-effects.tsx not wired to send flow,Code-confirmed,Component exists but never triggered,Wire to message send handler
+AUD-005,P2,auth/me returns ? via curl,Partially verified,Python parser shows ?,Login works but auth/me format mismatch,Verify response format
+AUD-006,P3,dangerouslySetInnerHTML (4 instances),Acceptable,All use static content,No action needed
+AUD-007,P3,Raw SQL in sync-schema,Acceptable,Admin-only + idempotent,No action needed
+AUD-008,P3,AI providers all timed out,Blocked,5/5 providers unreachable,Restore API keys in .env

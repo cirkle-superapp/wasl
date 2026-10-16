@@ -1,0 +1,25 @@
+Requirement ID,Blueprint Ref,Requirement,Screen/Module,Route,Frontend Evidence,Backend Evidence,Data Evidence,Status,Priority,Gap
+BR-001,worklog Task 1,User registration + login,auth-screen.tsx,POST /api/auth/signup,auth-screen.tsx,auth/signup/route.ts,User model,Verified,P3,
+BR-002,worklog Task 1,Real-time messaging,chat-window.tsx,socket.io message:send,chat-window.tsx + socket.ts,chat-service/index.ts,Message model,Verified,P3,
+BR-003,worklog Task 67,Block/mute users,block-list-dialog.tsx,POST /api/blocks,block-list-dialog.tsx,blocks/route.ts,Block model,Verified,P3,
+BR-004,worklog Task 88,Priority Inbox,priority-inbox-view.tsx,GET /api/ai/priority-inbox,priority-inbox-view.tsx,ai/priority-inbox/route.ts,Participant+Message,Verified,P3,
+BR-005,worklog Task 88,Health Score,health-score-dialog.tsx,POST /api/ai/health-score,health-score-dialog.tsx,ai/health-score/route.ts,Message+Participant,Verified,P3,
+BR-006,worklog Task 88,Catch-up Digest,catch-up-banner.tsx,POST /api/ai/catch-up,catch-up-banner.tsx,ai/catch-up/route.ts,Message+Participant,Verified,P3,
+BR-007,worklog Task 89,API Token System,api-tokens-dialog.tsx,POST /api/tokens,api-tokens-dialog.tsx,tokens/route.ts,ApiToken model,Verified,P3,
+BR-008,worklog Task 89,Multi-message Scheduler,schedule-batch-dialog.tsx,POST /api/scheduled-batches,schedule-batch-dialog.tsx,scheduled-batches/route.ts,ScheduledBatch model,Verified,P3,
+BR-009,worklog Task 90,Vault (E2E encrypted),vault-dialog.tsx,POST /api/vault,vault-dialog.tsx + vault.ts,vault/route.ts,VaultEntry model,Verified,P3,
+BR-010,worklog Task 90,Hash-chain Integrity,integrity-verification-dialog.tsx,GET /api/integrity/verify,integrity-verification-dialog.tsx + hash-chain.ts,integrity/verify/route.ts,MessageChainEntry model,Verified,P3,
+BR-011,worklog Task 90,Relationship Graph,relationship-graph-dialog.tsx,(client-side),relationship-graph-dialog.tsx + relationship-graph.ts,(none),(none),Code-confirmed,P3,Not runtime-verified
+BR-012,worklog Task 90,Contact Deduplication,contact-duplicates-dialog.tsx,GET /api/contacts/duplicates,contact-duplicates-dialog.tsx + dedup.ts,contacts/duplicates/route.ts,Contact model,Verified,P3,
+BR-013,worklog Task 91,SmartChatMenu,smart-chat-menu.tsx,(Radix DropdownMenu),smart-chat-menu.tsx + use-magnetic-cursor.ts,(none),(none),Verified,P3,
+BR-014,worklog Task 93,PWA Mobile App,pwa-install-banner.tsx,(browser beforeinstallprompt),pwa-install-banner.tsx + manifest.ts,(none),(none),Verified,P3,
+BR-015,worklog Task 93,Multi-device Sync,devices-dialog.tsx,GET/POST /api/devices,devices-dialog.tsx + socket.ts,devices/route.ts,DeviceSession model,Verified,P3,
+BR-016,worklog Task 94,Live message notifications,chat-window.tsx,socket.io + server-socket.ts,chat-window.tsx + server-socket.ts,chat-service/index.ts,Message model,Verified,P3,
+BR-017,worklog Task 95,Custom duotone icons,wasl-icons.tsx,(inline SVG),wasl-icons.tsx,(none),(none),Verified,P3,
+BR-018,worklog Task 96,Inline translation,message-bubble.tsx,POST /api/ai/translate,message-bubble.tsx,ai/translate/route.ts,(none),Blocked,P2,AI providers down
+BR-019,worklog Task 96,Saved Messages,sidebar.tsx,POST /api/auth/signup (auto-create),(sidebar),signup/route.ts + seed-demo/route.ts,Conversation model,Verified,P3,
+BR-020,worklog Task 96,Reaction animations,message-bubble.tsx,(CSS keyframes),message-bubble.tsx,(none),(none),Verified,P3,
+BR-021,worklog Task 96,Message effects,message-effects.tsx,(Canvas),message-effects.tsx,(none),(none),Code-confirmed,P2,Not wired to send flow
+BR-022,worklog Task 97,AI Daily Briefing,daily-briefing-dialog.tsx,POST /api/ai/briefing,daily-briefing-dialog.tsx,ai/briefing/route.ts,Participant+Message+ScheduledMessage,Verified,P3,
+BR-023,worklog Task 97,Focus Mode,sidebar.tsx (FocusModeToggle),(client-side store),sidebar.tsx,(none),(none),Verified,P3,
+BR-024,worklog Task 97,Relationship Intelligence,daily-briefing-dialog.tsx,POST /api/ai/briefing,daily-briefing-dialog.tsx,ai/briefing/route.ts,Participant,Verified,P3,
