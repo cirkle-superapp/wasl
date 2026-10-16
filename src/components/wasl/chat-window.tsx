@@ -35,6 +35,7 @@ import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ScheduleBatchDialog } from './schedule-batch-dialog'
 import { SmartChatMenu } from './smart-chat-menu'
+import { MessageEffect, type EffectType } from './message-effects'
 import {
   WaslVideoCall,
   WaslPhoneCall,
@@ -120,6 +121,9 @@ export function ChatWindow({
   const [searchOpen, setSearchOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [scheduleContent, setScheduleContent] = useState('')
+  // Message effect state (Task 96 — iMessage-style particle effects)
+  const [activeEffect, setActiveEffect] = useState<{ type: EffectType; messageId: string } | null>(null)
+  const [showEffectPicker, setShowEffectPicker] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [appLockOpen, setAppLockOpen] = useState(false)
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
@@ -576,6 +580,14 @@ export function ChatWindow({
       messageIdsRef.current.add(msg.id)
       addMessage(activeConversationId, msg)
       setReplyTo(null)
+      // Trigger message effect if the content starts with an effect prefix
+      // (Task 96 — iMessage-style particle effects)
+      const effectMatch = content.match(/^\/(confetti|hearts|sparkles|fireworks|balloons|stars)\s/i)
+      if (effectMatch) {
+        setActiveEffect({ type: effectMatch[1].toLowerCase() as EffectType, messageId: msg.id })
+        // Clear the effect after 3s (the Canvas animation duration)
+        setTimeout(() => setActiveEffect(null), 3500)
+      }
       // Broadcast via socket
       const socket = getSocket()
       socket.emit('message:send', {
@@ -1616,7 +1628,7 @@ export function ChatWindow({
                       </span>
                     </div>
                   )}
-                  <div className="group mb-1.5">
+                  <div className="group mb-1.5 relative">
                     <MessageBubble
                       message={m}
                       senderName={senderName}
@@ -1637,10 +1649,15 @@ export function ChatWindow({
                       bookmarked={bookmarkedMessageIds.has(m.id)}
                       reactions={m.reactions}
                       currentUserId={user?.id}
-                      // The sender can always pin/unpin their own message; in a
-                      // group, admins can also pin/unpin anyone's message.
                       canPin={m.senderId === user?.id || isGroupAdmin}
                     />
+                    {/* Message effect overlay (Task 96 — iMessage-style) */}
+                    {activeEffect && activeEffect.messageId === m.id && (
+                      <MessageEffect
+                        effect={activeEffect.type}
+                        onComplete={() => setActiveEffect(null)}
+                      />
+                    )}
                   </div>
                 </div>
               )
@@ -1719,6 +1736,43 @@ export function ChatWindow({
         businesses={businesses}
         onOpenTone={() => setToneOpen(true)}
       />
+      {/* Effect picker (Task 96 — iMessage-style message effects) */}
+      {showEffectPicker && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 wasl-glass-strong rounded-2xl p-2 flex gap-1.5 border border-border shadow-lg wasl-anim-scale-in">
+          {(['confetti', 'hearts', 'sparkles', 'fireworks', 'balloons', 'stars'] as EffectType[]).map((eff) => (
+            <button
+              key={eff}
+              onClick={() => {
+                // Prepend the effect prefix to the input
+                const input = document.querySelector('textarea') as HTMLTextAreaElement
+                if (input) {
+                  input.value = `/${eff} ${input.value}`
+                  input.dispatchEvent(new Event('input', { bubbles: true }))
+                  input.focus()
+                }
+                setShowEffectPicker(false)
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[var(--wasl-green)]/10 transition-colors text-foreground"
+              title={`Send with ${eff} effect`}
+            >
+              {eff === 'confetti' && '🎉'}
+              {eff === 'hearts' && '💕'}
+              {eff === 'sparkles' && '✨'}
+              {eff === 'fireworks' && '🎆'}
+              {eff === 'balloons' && '🎈'}
+              {eff === 'stars' && '⭐'}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Effect trigger button */}
+      <button
+        onClick={() => setShowEffectPicker(!showEffectPicker)}
+        className="absolute bottom-3 right-3 z-40 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted/50 transition-colors"
+        title="Message effects"
+      >
+        <Sparkles className="w-4 h-4" />
+      </button>
 
       {/* New Commit dialog (Cirkle-inspired) */}
       <NewCommitDialog

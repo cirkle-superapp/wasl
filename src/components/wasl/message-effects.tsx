@@ -19,7 +19,7 @@ import { useEffect, useRef } from 'react'
 //
 // Each effect runs for ~3 seconds, then the component self-removes.
 
-type EffectType = 'confetti' | 'hearts' | 'sparkles' | 'fireworks' | 'balloons' | 'stars'
+export type EffectType = 'confetti' | 'hearts' | 'sparkles' | 'fireworks' | 'balloons' | 'stars'
 
 type Particle = {
   x: number
