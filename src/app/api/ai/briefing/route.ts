@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
 
     // Other party's name (for 1-on-1)
     const otherUser = conv.participants.find((pp) => pp.userId !== session.id)?.user
-    const convName = conv.isGroup ? conv.name : (otherUser?.name || conv.name || 'Unknown')
+    const convName = conv.isGroup ? (conv.name || 'Group') : (otherUser?.name || conv.name || 'Unknown')
 
     // ── Stale relationship: last message > 7 days ago ──
     const lastMsgTime = msgs.length > 0 ? new Date(msgs[0].createdAt) : conv.updatedAt
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
             conversationName: convName,
             senderName: otherUser?.name || 'Someone',
             content: m.content.slice(0, 100),
-            sentAt: m.createdAt,
+            sentAt: new Date(m.createdAt).toISOString(),
             hoursAgo: Math.round(hoursAgo * 10) / 10,
           })
         }
@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
       scheduledToday: scheduledToday.map((s) => ({
         id: s.id,
         content: s.content.slice(0, 80),
-        scheduledFor: s.scheduledFor,
+        scheduledFor: new Date(s.scheduledFor).toISOString(),
       })),
       stats: {
         totalConversations: participations.length,

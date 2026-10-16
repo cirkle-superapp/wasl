@@ -1155,5 +1155,5 @@ export async function POST(req: NextRequest) {
 
 // GET — same effect as POST but easier to trigger from a browser URL bar.
 export async function GET() {
-  return POST()
+  return POST(new NextRequest("http://localhost/api/admin/sync-schema"))
 }

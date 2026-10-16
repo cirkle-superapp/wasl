@@ -43,8 +43,11 @@ export function MessageEffect({ effect, onComplete }: { effect: EffectType; onCo
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext("2d")
     if (!ctx) return
+    // Use a non-null typed reference for use inside the rAF closure
+    // (TypeScript can't narrow through async callbacks)
+    const c: CanvasRenderingContext2D = ctx
 
     const parent = canvas.parentElement
     if (!parent) return
@@ -160,7 +163,7 @@ export function MessageEffect({ effect, onComplete }: { effect: EffectType; onCo
     function draw(now: number) {
       const elapsed = now - startTime
       const progress = elapsed / EFFECT_DURATIONS
-      ctx.clearRect(0, 0, w, h)
+      c.clearRect(0, 0, w, h)
 
       for (const p of particles) {
         // Apply physics
@@ -188,29 +191,29 @@ export function MessageEffect({ effect, onComplete }: { effect: EffectType; onCo
 
         if (p.alpha <= 0) continue
 
-        ctx.save()
-        ctx.globalAlpha = Math.max(0, p.alpha)
-        ctx.translate(p.x, p.y)
-        ctx.rotate(p.rotation)
-        ctx.fillStyle = p.color
+        c.save()
+        c.globalAlpha = Math.max(0, p.alpha)
+        c.translate(p.x, p.y)
+        c.rotate(p.rotation)
+        c.fillStyle = p.color
 
         switch (p.shape) {
           case 'rect':
-            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5)
+            c.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5)
             break
           case 'circle':
-            ctx.beginPath()
-            ctx.arc(0, 0, p.size, 0, Math.PI * 2)
-            ctx.fill()
+            c.beginPath()
+            c.arc(0, 0, p.size, 0, Math.PI * 2)
+            c.fill()
             break
           case 'star':
-            drawStar(ctx, p.size)
+            drawStar(c, p.size)
             break
           case 'heart':
-            drawHeart(ctx, p.size)
+            drawHeart(c, p.size)
             break
         }
-        ctx.restore()
+        c.restore()
       }
 
       if (progress < 1) {
