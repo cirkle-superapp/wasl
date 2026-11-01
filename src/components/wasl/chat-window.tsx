@@ -128,6 +128,9 @@ export function ChatWindow({
   const [appLockOpen, setAppLockOpen] = useState(false)
   const [actionItemsOpen, setActionItemsOpen] = useState(false)
   const [toneOpen, setToneOpen] = useState(false)
+  // Draft captured when the Tone Adjuster opens, so the dialog works on the
+  // user's real composer content (not an empty string).
+  const [toneDraft, setToneDraft] = useState('')
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
@@ -1764,7 +1767,7 @@ export function ChatWindow({
         onOpenPoll={() => setPollOpen(true)}
         onSchedule={(content) => { setScheduleContent(content); setScheduleOpen(true) }}
         businesses={businesses}
-        onOpenTone={() => setToneOpen(true)}
+        onOpenTone={(draft) => { setToneDraft(draft); setToneOpen(true) }}
       />
       {/* Effect picker (Task 96 — iMessage-style message effects) */}
       {showEffectPicker && (
@@ -1884,8 +1887,14 @@ export function ChatWindow({
       <ToneAdjusterDialog
         open={toneOpen}
         onOpenChange={setToneOpen}
-        initialContent=""
-        onApply={() => {}}
+        initialContent={toneDraft}
+        onApply={(adjusted) => {
+          // Push the adjusted text back into the composer via the same
+          // event pattern used by smart-reply chips.
+          window.dispatchEvent(
+            new CustomEvent('wasl:tone-apply', { detail: { text: adjusted } })
+          )
+        }}
       />
 
       {/* Command palette (Ctrl+K) */}

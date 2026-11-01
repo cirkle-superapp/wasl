@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { groqTranscribe } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -9,14 +10,15 @@ export const runtime = 'nodejs'
 //
 // Body: { messageId: string }
 //
-// REAL ASR: uses the platform SDK (`z-ai-web-dev-sdk`) speech-to-text
-// (`zai.audio.asr.create`) to decode the voice note's base64 audio. If the
-// SDK fails or returns nothing, falls back to a clearly-labelled
-// placeholder instead of fabricating text. The result is persisted on the
-// `Message.transcription` column so the UI doesn't re-prompt.
+// REAL ASR: uses Groq's Whisper (`whisper-large-v3-turbo` then
+// `whisper-large-v3`) via the consensus AI engine's ASR helper to decode
+// the voice note's base64 audio. If ASR fails or returns nothing, falls
+// back to a clearly-labelled placeholder instead of fabricating text. The
+// result is persisted on the `Message.transcription` column so the UI
+// doesn't re-prompt.
 //
 // Returns:
-//   200 → { transcription: string, cached: boolean, engine?: 'asr' }
+//   200 → { transcription: string, cached: boolean, engine?: 'whisper' }
 //   400 → missing/invalid messageId
 //   403 → user is not a member of the message's conversation
 //   404 → message not found / not a voice message
@@ -95,27 +97,20 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ---- Real ASR via z-ai-web-dev-sdk ---------------------------------------
-  // The platform SDK (`z-ai-web-dev-sdk`) provides genuine speech-to-text
-  // via `zai.audio.asr.create({ file_base64 })`. The voice note's content is
-  // a `data:audio/...;base64,XXX` data URL, so the base64 payload is already
-  // inline. If the SDK fails (or the audio is undecodable), we fall back to
-  // a clearly-labelled placeholder rather than fabricating transcript text.
+  // ---- Real ASR via Groq Whisper --------------------------------------------
+  // The consensus AI engine exposes `groqTranscribe`, which posts the voice
+  // note (a `data:audio/...;base64,XXX` data URL) to Groq's
+  // whisper-large-v3-turbo / whisper-large-v3 transcription endpoint. If
+  // ASR fails (key not provisioned, undecodable audio), we fall back to a
+  // clearly-labelled placeholder rather than fabricating transcript text.
   const base64Match = /^data:audio\/[a-z0-9.+-]+;base64,(.+)$/i.exec(
     message.content
   )
   if (base64Match) {
+    const mimeMatch = /^data:(audio\/[a-z0-9.+-]+)[;,]/i.exec(message.content)
+    const mimeType = mimeMatch ? mimeMatch[1] : 'audio/webm'
     try {
-      const mod = await import('z-ai-web-dev-sdk')
-      const ZAI = mod.default ?? mod
-      const zai = await ZAI.create()
-      const response = await zai.audio.asr.create({
-        file_base64: base64Match[1],
-      })
-      const text =
-        response?.text && String(response.text).trim().length > 0
-          ? String(response.text).trim()
-          : null
+      const text = await groqTranscribe(base64Match[1], mimeType)
       if (text) {
         await db.message.update({
           where: { id: message.id },
@@ -124,11 +119,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           transcription: text,
           cached: false,
-          engine: 'asr',
+          engine: 'whisper',
         })
       }
     } catch (e) {
-      console.error('[transcribe] ASR failed, using placeholder:', e)
+      console.error('[transcribe] Whisper ASR failed:', e)
     }
   }
 

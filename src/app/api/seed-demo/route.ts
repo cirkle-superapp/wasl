@@ -323,6 +323,22 @@ async function ensurePersonas(currentUserId: string): Promise<Persona[]> {
         },
       })
     }
+    // Also link the persona as a CONTACT of the current user. Without this,
+    // the demo showed 13 conversations but an empty Contacts tab — a
+    // confusing, disconnected experience. Idempotent via the compound
+    // unique (ownerId, userId).
+    await db.contact.upsert({
+      where: {
+        ownerId_userId: { ownerId: currentUserId, userId: user.id },
+      },
+      create: {
+        ownerId: currentUserId,
+        userId: user.id,
+        nickname: def.name,
+        phone: def.phone,
+      },
+      update: {},
+    })
     out.push({ ...def, id: user.id })
   }
   return out

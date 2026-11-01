@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -24,6 +24,16 @@ export function ToneAdjusterDialog({ open, onOpenChange, initialContent, onApply
   const [adjusted, setAdjusted] = useState('')
   const [tone, setTone] = useState('professional')
   const [loading, setLoading] = useState(false)
+
+  // Sync the draft + reset previous results each time the dialog opens.
+  // (useState captures initialContent only on first mount — without this,
+  // the dialog would keep showing the draft from its very first open.)
+  useEffect(() => {
+    if (open) {
+      setOriginal(initialContent)
+      setAdjusted('')
+    }
+  }, [open, initialContent])
 
   async function adjust() {
     if (!original.trim()) return

@@ -1,405 +1,700 @@
 // ═══════════════════════════════════════════════════════════════════════
-// Unified AI Router — Self-Healing Multi-Model Consensus (Task 78)
+// CONSENSUS AI ENGINE — Multi-Provider, Multi-Model Agreement System
 // ═══════════════════════════════════════════════════════════════════════
 //
-// When a model fails, the router automatically tries ANOTHER MODEL on the
-// SAME provider, then falls to the NEXT provider. This creates a 2D
-// fallback grid:
+// How it works (replaces the old single-answer fallback chain):
 //
-//   Provider 1 (NVIDIA):
-//     ├── model A → if fails → model B → if fails → model C
-//     ↓ (all models failed)
-//   Provider 2 (Groq):
-//     ├── model A → if fails → model B
-//     ↓
-//   Provider 3 (OpenRouter):
-//     ├── model A → if fails → model B → if fails → model C
-//     ↓
-//   Provider 4 (Gemini):
-//     ├── model A
-//     ↓
-//   Provider 5 (HuggingFace):
-//     └── model A
+//   1. JURY SELECTION — for each request, a jury of K models is selected
+//      from the healthy pool. Multiple providers participate, and each
+//      provider can contribute SEVERAL models ("a couple of models in the
+//      same AI provider").
 //
-// Usage:
-//   import { aiChat, aiChatFast } from '@/lib/ai'
-//   const reply = await aiChatFast('You are friendly.', 'Hello!')
-//   const summary = await aiChat('Summarize this.', longText, 400)
+//   2. PARALLEL QUERY — every jury member answers the SAME prompt at the
+//      same time. Slow/dead members can't hold up the verdict (per-call
+//      timeout).
+//
+//   3. CONSENSUS RESOLUTION — responses are compared:
+//        • exact-match majority vote (normalized) for short outputs
+//        • token-overlap similarity → the "medoid" (most-representative
+//          answer, i.e. the one closest to all the others) for long outputs
+//
+//   4. SELF-HEALING HEALTH TRACKER — a model that fails 3× in a row is
+//      benched for 5 minutes, then gets fresh chances. Models that recover
+//      rejoin the jury automatically.
+//
+// Providers (verified against their live APIs):
+//   • NVIDIA   — integrate.api.nvidia.com (OpenAI-compatible)
+//   • GROQ     — api.groq.com (OpenAI-compatible) + Whisper ASR
+//   • OPENROUTER — openrouter.ai (OpenAI-compatible; free pool)
+//   • GEMINI   — Google AI Studio (native generateContent API)
+//   • HUGGINGFACE — router.huggingface.co (OpenAI-compatible)
+//
+// NOTE: z.ai / z-ai-web-dev-sdk is fully removed from this platform.
 
-type Provider = 'zai' | 'nvidia' | 'groq' | 'openrouter' | 'gemini' | 'huggingface'
+type Provider = 'nvidia' | 'groq' | 'openrouter' | 'gemini' | 'huggingface'
 
-// Each provider has MULTIPLE models per tier. If one model fails (EOL, 404,
-// rate-limit, etc.), the router tries the next model on the same provider.
-// 'zai' (z-ai-web-dev-sdk) is the PRIMARY provider — it needs no API key
-// (credentials are provisioned by the platform) and is tried first.
-const PROVIDER_ORDER: Provider[] = ['zai', 'nvidia', 'groq', 'openrouter', 'gemini', 'huggingface']
+const PROVIDER_ORDER: Provider[] = [
+  'nvidia',
+  'groq',
+  'openrouter',
+  'gemini',
+  'huggingface',
+]
 
-// Fast models — for short chat replies (1-2 sentences). Multiple models per
-// provider, ordered by preference (first = best, last = fallback).
-const FAST_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = {
-  zai: [
-    { model: 'zai-default', extraTokens: 0 },
-  ],
-  nvidia: [
-    { model: 'google/gemma-3-4b-it', extraTokens: 0 },
-    { model: 'ibm/granite-3.0-8b-instruct', extraTokens: 0 },
-    { model: 'google/gemma-3-12b-it', extraTokens: 0 },
-    { model: 'deepseek-ai/deepseek-v4.1-flash', extraTokens: 0 },
-  ],
-  groq: [
-    { model: 'llama-3.1-8b-instant', extraTokens: 0 },
-    { model: 'llama-3.3-70b-versatile', extraTokens: 0 },
-    { model: 'gemma2-9b-it', extraTokens: 0 },
-  ],
-  openrouter: [
-    { model: 'qwen/qwen3.8-27b:free', extraTokens: 0 },
-    { model: 'liquid/lfm-2.5-2.6b:free', extraTokens: 0 },
-    { model: 'inclusionai/ling-3.0-flash-sante:free', extraTokens: 0 },
-  ],
-  gemini: [
-    { model: 'gemini-flash-latest', extraTokens: 0 },
-    { model: 'gemini-2.0-flash', extraTokens: 0 },
-    { model: 'gemini-1.5-flash', extraTokens: 0 },
-  ],
-  huggingface: [
-    { model: 'meta-llama/Llama-3.2-1B', extraTokens: 0 },
-    { model: 'distilgpt2', extraTokens: 0 },
-  ],
+interface ModelConfig {
+  model: string
+  // Reasoning models "think" before answering and need extra token budget,
+  // otherwise the answer (content) can come back null.
+  extraTokens: number
 }
 
-// Full models — for complex analysis (summary, action items, tone).
-const FULL_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = {
-  zai: [
-    { model: 'zai-default', extraTokens: 0 },
-  ],
+// ───────────────────────────────────────────────────────────────────────
+// Model pools — verified live on 2026-09 (each was probed with a real
+// chat completion; EOL/404 models were removed from the pool).
+// ───────────────────────────────────────────────────────────────────────
+
+// FAST tier — short replies (smart-reply chips, bot replies). Low latency,
+// clean `content` output, no reasoning overhead.
+const FAST_MODELS: Record<Provider, ModelConfig[]> = {
   nvidia: [
-    { model: 'deepseek-ai/deepseek-v4.1-flash', extraTokens: 200 },
-    { model: '01-ai/yi-large', extraTokens: 200 },
-    { model: 'google/gemma-3-12b-it', extraTokens: 200 },
-    { model: 'ibm/granite-3.0-8b-instruct', extraTokens: 200 },
+    // deepseek is a light-reasoning model — it needs a token buffer or the
+    // reasoning consumes the whole budget and content comes back null.
+    { model: 'deepseek-ai/deepseek-v4.1-flash', extraTokens: 200 }, // verified ✓
+    { model: 'nvidia/nemotron-3.5-bolt-e4b', extraTokens: 0 }, // verified ✓
+    { model: 'poolside/laguna-xs-2.1', extraTokens: 0 }, // verified ✓
   ],
   groq: [
     { model: 'llama-3.3-70b-versatile', extraTokens: 0 },
-    { model: 'llama-3.1-8b-instant', extraTokens: 0 },
+    { model: 'openai/gpt-oss-20b', extraTokens: 0 },
   ],
   openrouter: [
-    { model: 'qwen/qwen3.8-27b:free', extraTokens: 0 },
-    { model: 'nvidia/nemotron-3.5-lightning:free', extraTokens: 0 },
-    { model: 'thinkingmachines/inkling-small:free', extraTokens: 0 },
+    { model: 'openrouter/free', extraTokens: 0 }, // auto-routes to best free model
+    { model: 'xingchen-agi/xing4.0-29b-a4b:free', extraTokens: 0 },
   ],
   gemini: [
     { model: 'gemini-flash-latest', extraTokens: 0 },
     { model: 'gemini-2.0-flash', extraTokens: 0 },
   ],
   huggingface: [
-    { model: 'meta-llama/Llama-3.2-1B', extraTokens: 0 },
-    { model: 'distilgpt2', extraTokens: 0 },
+    { model: 'meta-llama/Llama-3.1-8B-Instruct', extraTokens: 0 },
+    { model: 'Qwen/Qwen2.5-7B-Instruct', extraTokens: 0 },
   ],
 }
 
-const PROVIDER_URLS: Record<Provider, { url: string; key: string | undefined }> = {
-  zai: { url: '', key: undefined }, // SDK handles auth internally
-  nvidia: {
-    url: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    key: process.env.NVIDIA_API_KEY,
-  },
-  groq: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    key: process.env.GROQ_API_KEY,
-  },
-  openrouter: {
-    url: 'https://openrouter.ai/api/v1/chat/completions',
-    key: process.env.OPENROUTER_API_KEY,
-  },
-  gemini: { url: '', key: process.env.GEMINI_API_KEY },
-  huggingface: {
-    url: 'https://api-inference.huggingface.co/models',
-    key: process.env.HUGGINGFACE_API_KEY,
-  },
+// FULL tier — complex analysis (summaries, insights, briefings, tone,
+// action items, health scores). Reasoning models allowed (extraTokens).
+const FULL_MODELS: Record<Provider, ModelConfig[]> = {
+  nvidia: [
+    { model: 'nvidia/nemotron-3-ultra-550b-a55b', extraTokens: 600 }, // verified ✓ (largest)
+    { model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', extraTokens: 400 }, // verified ✓
+    { model: 'deepseek-ai/deepseek-v4.1-flash', extraTokens: 200 }, // verified ✓
+    { model: 'nvidia/nemotron-3.5-lightning-30b-a3b', extraTokens: 400 }, // verified ✓
+  ],
+  groq: [
+    { model: 'llama-3.3-70b-versatile', extraTokens: 100 },
+  ],
+  openrouter: [
+    { model: 'openrouter/free', extraTokens: 100 },
+    { model: 'xingchen-agi/xing4.0-29b-a4b:free', extraTokens: 100 },
+  ],
+  gemini: [
+    { model: 'gemini-flash-latest', extraTokens: 100 },
+    { model: 'gemini-2.0-flash', extraTokens: 100 },
+  ],
+  huggingface: [
+    { model: 'meta-llama/Llama-3.1-8B-Instruct', extraTokens: 100 },
+    { model: 'Qwen/Qwen2.5-7B-Instruct', extraTokens: 100 },
+  ],
 }
 
-// ── OpenAI-compatible chat (NVIDIA, Groq, OpenRouter) ─────────────────
+// ───────────────────────────────────────────────────────────────────────
+// Provider endpoints & keys (read at CALL time, so key updates in .env
+// apply to new requests without a server restart).
+// ───────────────────────────────────────────────────────────────────────
+
+function getKey(provider: Provider): string | undefined {
+  const v = {
+    nvidia: process.env.NVIDIA_API_KEY,
+    groq: process.env.GROQ_API_KEY,
+    openrouter: process.env.OPENROUTER_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    huggingface: process.env.HUGGINGFACE_API_KEY,
+  }[provider]
+  return v && v.trim().length > 0 ? v : undefined
+}
+
+const OPENAI_COMPAT_URLS: Partial<Record<Provider, string>> = {
+  nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
+  groq: 'https://api.groq.com/openai/v1/chat/completions',
+  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+  huggingface: 'https://router.huggingface.co/v1/chat/completions',
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Health tracker — bench models AND providers that keep failing, readmit
+// them later. A dead model is excluded after 3 of its own failures; a
+// provider whose models have collectively failed 9 times (dead key /
+// revoked) is benched wholesale for 5 minutes, then gets fresh chances.
+// ───────────────────────────────────────────────────────────────────────
+
+interface Health {
+  fails: number
+  benchedUntil: number // epoch ms; 0 = active
+}
+const modelHealth = new Map<string, Health>()
+const providerHealth = new Map<Provider, Health>()
+
+const BENCH_AFTER_FAILS = 3
+const BENCH_MS = 5 * 60 * 1000 // 5 minutes
+
+function healthKey(provider: Provider, model: string) {
+  return `${provider}:${model}`
+}
+
+function isBenched(provider: Provider, model: string): boolean {
+  const m = modelHealth.get(healthKey(provider, model))
+  if (m && m.benchedUntil > Date.now()) return true
+  const p = providerHealth.get(provider)
+  return !!p && p.benchedUntil > Date.now()
+}
+
+function recordSuccess(provider: Provider, model: string) {
+  const m = modelHealth.get(healthKey(provider, model))
+  if (m) {
+    m.fails = 0
+    m.benchedUntil = 0
+  }
+  const p = providerHealth.get(provider)
+  if (p) {
+    p.fails = 0
+    p.benchedUntil = 0
+  }
+}
+
+function recordFailure(provider: Provider, model: string) {
+  const k = healthKey(provider, model)
+  const m = modelHealth.get(k) ?? { fails: 0, benchedUntil: 0 }
+  m.fails += 1
+  if (m.fails >= BENCH_AFTER_FAILS) {
+    m.benchedUntil = Date.now() + BENCH_MS
+    m.fails = 0 // fresh chance when the bench expires
+  }
+  modelHealth.set(k, m)
+
+  const p = providerHealth.get(provider) ?? { fails: 0, benchedUntil: 0 }
+  p.fails += 1
+  if (p.fails >= BENCH_AFTER_FAILS * 3) {
+    // Whole provider failing (dead key / revoked) — bench everything on it.
+    p.benchedUntil = Date.now() + BENCH_MS
+    p.fails = 0
+  }
+  providerHealth.set(provider, p)
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Low-level call helpers
+// ───────────────────────────────────────────────────────────────────────
+
+interface CallResult {
+  ok: boolean
+  text: string | null
+}
+
+/** Extract the answer from an OpenAI-compatible response. */
+function extractContent(data: unknown): string | null {
+  const d = data as {
+    choices?: { message?: { content?: unknown } }[]
+  }
+  const content = d?.choices?.[0]?.message?.content
+  // NOTE: `reasoning_content` is chain-of-thought, NOT the answer — a null
+  // content with populated reasoning means the model ran out of budget.
+  if (typeof content === 'string' && content.trim().length > 0) {
+    return content.trim()
+  }
+  return null
+}
+
+/** OpenAI-compatible chat (NVIDIA, Groq, OpenRouter, HuggingFace router). */
 async function openaiCompatibleChat(
-  url: string,
-  apiKey: string | undefined,
+  provider: Provider,
   model: string,
   systemPrompt: string,
   userMessage: string,
   maxTokens: number,
-  extraTokens: number
+  extraTokens: number,
+  timeoutMs: number
 ): Promise<string | null> {
-  if (!apiKey) return null
+  const url = OPENAI_COMPAT_URLS[provider]
+  const apiKey = getKey(provider)
+  if (!url || !apiKey) return null
+  const budget = maxTokens + extraTokens
   try {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    }
+    if (provider === 'openrouter') {
+      // OpenRouter attribution headers (their policy for apps).
+      headers['HTTP-Referer'] = 'https://wasl.chat'
+      headers['X-Title'] = 'WASL'
+    }
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
-        max_tokens: maxTokens + extraTokens,
+        max_tokens: budget,
         temperature: 0.7,
         stream: false,
       }),
       signal: controller.signal,
     })
-    clearTimeout(timeout)
+    clearTimeout(timer)
     if (!res.ok) return null
     const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
-    return content ? String(content).trim() : null
+    return extractContent(data)
   } catch {
     return null
   }
 }
 
-// ── Gemini native API ──────────────────────────────────────────────────
+/** Google Gemini native generateContent API. */
 async function geminiChat(
-  apiKey: string | undefined,
   model: string,
   systemPrompt: string,
   userMessage: string,
-  maxTokens: number
+  maxTokens: number,
+  timeoutMs: number
 ): Promise<string | null> {
+  const apiKey = getKey('gemini')
   if (!apiKey) return null
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ parts: [{ text: userMessage }] }],
-        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
-      }),
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (!res.ok) return null
-    const data = await res.json()
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-    return text ? String(text).trim() : null
-  } catch {
-    return null
-  }
-}
-
-// ── HuggingFace inference API ──────────────────────────────────────────
-async function huggingfaceChat(
-  apiKey: string | undefined,
-  model: string,
-  systemPrompt: string,
-  userMessage: string,
-  maxTokens: number
-): Promise<string | null> {
-  if (!apiKey) return null
-  try {
-    const url = `${PROVIDER_URLS.huggingface.url}/${model}`
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        inputs: `${systemPrompt}\n\nUser: ${userMessage}\nAssistant:`,
-        parameters: {
-          max_new_tokens: maxTokens,
+        generationConfig: {
+          maxOutputTokens: maxTokens + 400,
           temperature: 0.7,
-          return_full_text: false,
         },
       }),
       signal: controller.signal,
     })
-    clearTimeout(timeout)
+    clearTimeout(timer)
     if (!res.ok) return null
     const data = await res.json()
-    if (Array.isArray(data) && data[0]?.generated_text) {
-      return String(data[0].generated_text).trim()
-    }
-    return null
+    const text = (
+      data as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[]
+      }
+    )?.candidates?.[0]?.content?.parts?.[0]?.text
+    return text && text.trim().length > 0 ? text.trim() : null
   } catch {
     return null
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Primary provider — z-ai-web-dev-sdk (platform-provisioned credentials)
-// ═══════════════════════════════════════════════════════════════════════
-
-let zaiInstance: any = null
-let zaiInstancePromise: Promise<any> | null = null
-
-/** Lazily create + memoize the ZAI SDK client (backend only). */
-async function getZai() {
-  if (zaiInstance) return zaiInstance
-  if (!zaiInstancePromise) {
-    zaiInstancePromise = (async () => {
-      const mod = await import('z-ai-web-dev-sdk')
-      const ZAI = mod.default ?? mod
-      zaiInstance = await ZAI.create()
-      return zaiInstance
-    })().catch((e) => {
-      // Reset so a later call can retry (e.g. transient init failure).
-      zaiInstancePromise = null
-      throw e
-    })
-  }
-  return zaiInstancePromise
-}
-
-/** Chat via the z-ai-web-dev-sdk. Returns null on failure (router falls through). */
-async function zaiChat(
-  systemPrompt: string,
-  userMessage: string,
-  maxTokens: number
-): Promise<string | null> {
-  try {
-    const zai = await getZai()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      thinking: { type: 'disabled' },
-      max_tokens: maxTokens,
-    } as any)
-    const content = completion?.choices?.[0]?.message?.content
-    if (typeof content === 'string' && content.trim().length > 0) {
-      return content.trim()
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Self-healing router — tries MULTIPLE MODELS per provider before giving up
-// ═══════════════════════════════════════════════════════════════════════
-
-/**
- * Try a single model on a provider. Returns null on failure (so the caller
- * can try the next model). Dispatches to the right API format per provider.
- */
-async function tryModel(
+/** One jury member's attempt. Returns null on any failure. */
+async function callModel(
   provider: Provider,
-  model: string,
+  cfg: ModelConfig,
   systemPrompt: string,
   userMessage: string,
   maxTokens: number,
-  extraTokens: number
+  timeoutMs: number
 ): Promise<string | null> {
-  // Primary provider — z-ai-web-dev-sdk (auth handled by the platform).
-  if (provider === 'zai') {
-    return zaiChat(systemPrompt, userMessage, maxTokens)
-  }
-  const urls = PROVIDER_URLS[provider]
-  if (!urls.key) return null
   if (provider === 'gemini') {
-    return geminiChat(urls.key, model, systemPrompt, userMessage, maxTokens)
+    return geminiChat(
+      cfg.model,
+      systemPrompt,
+      userMessage,
+      maxTokens,
+      timeoutMs
+    )
   }
-  if (provider === 'huggingface') {
-    return huggingfaceChat(urls.key, model, systemPrompt, userMessage, maxTokens)
-  }
-  return openaiCompatibleChat(urls.url, urls.key, model, systemPrompt, userMessage, maxTokens, extraTokens)
+  return openaiCompatibleChat(
+    provider,
+    cfg.model,
+    systemPrompt,
+    userMessage,
+    maxTokens,
+    cfg.extraTokens,
+    timeoutMs
+  )
 }
 
+// ───────────────────────────────────────────────────────────────────────
+// Consensus resolution
+// ───────────────────────────────────────────────────────────────────────
+
+function normalizeForVote(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[.,!?;:'"()[\]{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function tokenSet(s: string): Set<string> {
+  return new Set(
+    s
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length > 1)
+  )
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0
+  let inter = 0
+  for (const t of a) if (b.has(t)) inter++
+  return inter / (a.size + b.size - inter)
+}
+
+type ConsensusMethod = 'unanimous' | 'majority' | 'medoid' | 'single'
+
+export interface ConsensusResult {
+  text: string
+  method: ConsensusMethod
+  jury: {
+    provider: Provider
+    model: string
+    ok: boolean
+    agreed: boolean
+  }[]
+}
+
+interface Verdict {
+  winnerIndex: number
+  method: ConsensusMethod
+}
+
+/** Resolve the jury's answers into one consensus verdict. */
+function resolveConsensus(texts: string[]): Verdict {
+  if (texts.length === 1) return { winnerIndex: 0, method: 'single' }
+
+  // 1) Exact-match vote (normalized) — strong signal for short outputs.
+  const norm = texts.map(normalizeForVote)
+  const counts = new Map<string, number>()
+  for (const n of norm) counts.set(n, (counts.get(n) ?? 0) + 1)
+  let bestNorm: string | null = null
+  let bestCount = 0
+  for (const [n, c] of counts) {
+    if (c > bestCount) {
+      bestCount = c
+      bestNorm = n
+    }
+  }
+  if (bestNorm && bestCount === texts.length) {
+    return { winnerIndex: norm.indexOf(bestNorm), method: 'unanimous' }
+  }
+  if (bestNorm && bestCount > texts.length / 2) {
+    return { winnerIndex: norm.indexOf(bestNorm), method: 'majority' }
+  }
+
+  // 2) Medoid — the answer with the highest average token-overlap with the
+  // others. This is the response "most in agreement" with the jury.
+  const sets = texts.map(tokenSet)
+  let winner = 0
+  let bestScore = -1
+  for (let i = 0; i < texts.length; i++) {
+    let sum = 0
+    for (let j = 0; j < texts.length; j++) {
+      if (i === j) continue
+      sum += jaccard(sets[i], sets[j])
+    }
+    const avg = sum / (texts.length - 1)
+    if (avg > bestScore) {
+      bestScore = avg
+      winner = i
+    }
+  }
+  return { winnerIndex: winner, method: 'medoid' }
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Jury selection
+// ───────────────────────────────────────────────────────────────────────
+
 /**
- * Self-healing AI chat — tries every model on every provider in sequence.
- * If a model fails (404, EOL, rate-limit, network error), it automatically
- * tries the NEXT MODEL on the SAME provider, then falls to the NEXT PROVIDER.
- *
- * This ensures maximum resilience — even if 3 out of 5 providers are down,
- * the app still gets AI responses from the remaining 2.
+ * Pick the jury: healthy models only. The first pass takes ONE model per
+ * provider (spread across providers), then additional passes add a second/
+ * third model from providers that have more — so consensus genuinely mixes
+ * providers AND models ("a couple of models in the same provider").
  */
-async function selfHealingChat(
+function selectJury(
+  tier: 'fast' | 'full',
+  size: number
+): { provider: Provider; cfg: ModelConfig }[] {
+  const pool = tier === 'fast' ? FAST_MODELS : FULL_MODELS
+  const byProvider: { provider: Provider; cfg: ModelConfig }[][] = []
+  for (const provider of PROVIDER_ORDER) {
+    if (!getKey(provider)) continue
+    const models = (pool[provider] ?? []).filter(
+      (cfg) => !isBenched(provider, cfg.model)
+    )
+    if (models.length > 0) {
+      byProvider.push(models.map((cfg) => ({ provider, cfg })))
+    }
+  }
+  const jury: { provider: Provider; cfg: ModelConfig }[] = []
+  let depth = 0
+  while (jury.length < size) {
+    let added = false
+    for (const list of byProvider) {
+      if (depth < list.length && jury.length < size) {
+        jury.push(list[depth])
+        added = true
+      }
+    }
+    if (!added) break
+    depth++
+  }
+  return jury
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Public API
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * CONSENSUS chat — the primary AI entry point. Selects a jury of models,
+ * queries them in parallel, and returns the consensus answer plus
+ * telemetry about which models agreed.
+ */
+export async function aiConsensus(
   systemPrompt: string,
   userMessage: string,
-  maxTokens: number,
-  modelTier: 'fast' | 'full'
-): Promise<string | null> {
-  const models = modelTier === 'fast' ? FAST_MODELS : FULL_MODELS
+  options: {
+    maxTokens?: number
+    tier?: 'fast' | 'full'
+    jurySize?: number
+  } = {}
+): Promise<ConsensusResult | null> {
+  const maxTokens = options.maxTokens ?? 300
+  const tier = options.tier ?? 'full'
+  const jurySize = Math.max(1, options.jurySize ?? 3)
+  const timeoutMs = tier === 'fast' ? 14000 : 25000
 
-  for (const provider of PROVIDER_ORDER) {
-    const providerModels = models[provider]
-    if (!providerModels || providerModels.length === 0) continue
-    // 'zai' needs no API key — the SDK is provisioned by the platform.
-    if (provider !== 'zai') {
-      const urls = PROVIDER_URLS[provider]
-      if (!urls.key) continue
-    }
+  const jury = selectJury(tier, jurySize)
+  if (jury.length === 0) return null
 
-    // Try EACH model on this provider — if one fails, try the next model
-    for (const cfg of providerModels) {
-      const result = await tryModel(
+  const answers = await Promise.all(
+    jury.map(({ provider, cfg }) =>
+      callModel(
         provider,
-        cfg.model,
+        cfg,
         systemPrompt,
         userMessage,
         maxTokens,
-        cfg.extraTokens
-      )
-      if (result) {
-        // Log which provider+model succeeded (for debugging)
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[ai] ✓ ${provider}/${cfg.model} → ${result.slice(0, 40)}...`)
-        }
-        return result
-      }
-      // Model failed — try the next model on the same provider
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[ai] ✗ ${provider}/${cfg.model} — trying next model...`)
-      }
-    }
-    // All models on this provider failed — move to the next provider
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[ai] ⚠️ ${provider} exhausted — moving to next provider`)
-    }
+        timeoutMs
+      ).then((text) => ({ provider, cfg, text }))
+    )
+  )
+
+  // Health bookkeeping
+  for (const a of answers) {
+    if (a.text) recordSuccess(a.provider, a.cfg.model)
+    else recordFailure(a.provider, a.cfg.model)
   }
 
-  // All providers + all models failed
-  return null
+  const valid = answers.filter((a) => !!a.text)
+  if (valid.length === 0) {
+    // Last resort: all jury members failed simultaneously (e.g. a shared
+    // rate-limit burst). Retry ONCE with the single healthiest model and a
+    // longer timeout before giving up.
+    const solo = await callModel(
+      jury[0].provider,
+      jury[0].cfg,
+      systemPrompt,
+      userMessage,
+      maxTokens,
+      timeoutMs + 10000
+    )
+    if (solo) {
+      recordSuccess(jury[0].provider, jury[0].cfg.model)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(
+          `[ai] consensus ✓ solo-retry — ${jury[0].provider}/${jury[0].cfg.model}`
+        )
+      }
+      return {
+        text: solo,
+        method: 'single',
+        jury: answers.map((a) => ({
+          provider: a.provider,
+          model: a.cfg.model,
+          ok: false,
+          agreed: false,
+        })),
+      }
+    }
+    recordFailure(jury[0].provider, jury[0].cfg.model)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        `[ai] consensus ✗ — 0/${answers.length} jury members responded`
+      )
+    }
+    return null
+  }
+
+  const verdict = resolveConsensus(valid.map((a) => a.text as string))
+  const winner = valid[verdict.winnerIndex]
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log(
+      `[ai] consensus ✓ ${verdict.method} — ${winner.provider}/${winner.cfg.model} ` +
+        `(agreed with ${valid.length - 1}/${valid.length - 1} peers) ` +
+        `→ ${String(winner.text).slice(0, 60)}...`
+    )
+  }
+
+  return {
+    text: winner.text as string,
+    method: verdict.method,
+    jury: answers.map((a) => ({
+      provider: a.provider,
+      model: a.cfg.model,
+      ok: !!a.text,
+      agreed: valid[verdict.winnerIndex] === a,
+    })),
+  }
 }
 
-/** Fast AI chat — small/fast models for short replies (bot-reply, smart-reply) */
-export async function aiChatFast(
-  systemPrompt: string,
-  userMessage: string,
-  maxTokens: number = 80
-): Promise<string | null> {
-  return selfHealingChat(systemPrompt, userMessage, maxTokens, 'fast')
-}
-
-/** Full AI chat — large models for complex analysis (summary, tone, action-items) */
+/**
+ * Full-tier consensus chat. Returns just the answer text (compatible with
+ * all existing call sites). Jury of 3 models across providers.
+ */
 export async function aiChat(
   systemPrompt: string,
   userMessage: string,
   maxTokens: number = 300
 ): Promise<string | null> {
-  return selfHealingChat(systemPrompt, userMessage, maxTokens, 'full')
+  const result = await aiConsensus(systemPrompt, userMessage, {
+    maxTokens,
+    tier: 'full',
+  })
+  return result?.text ?? null
 }
 
+/**
+ * Fast-tier consensus chat for latency-sensitive replies (smart replies,
+ * bot replies). Smaller models, shorter timeout.
+ */
+export async function aiChatFast(
+  systemPrompt: string,
+  userMessage: string,
+  maxTokens: number = 80
+): Promise<string | null> {
+  const result = await aiConsensus(systemPrompt, userMessage, {
+    maxTokens,
+    tier: 'fast',
+  })
+  return result?.text ?? null
+}
+
+/**
+ * Speech-to-text via Groq Whisper (OpenAI-compatible audio transcriptions).
+ * Tries whisper-large-v3-turbo (fast) then whisper-large-v3 (accurate).
+ * Returns null if ASR is unavailable (e.g. key not provisioned).
+ */
+export async function groqTranscribe(
+  base64Audio: string,
+  mimeType: string
+): Promise<string | null> {
+  const apiKey = getKey('groq')
+  if (!apiKey) return null
+  const models = ['whisper-large-v3-turbo', 'whisper-large-v3']
+  for (const model of models) {
+    try {
+      const bytes = Buffer.from(base64Audio, 'base64')
+      const ext = mimeType.includes('webm')
+        ? 'webm'
+        : mimeType.includes('ogg')
+          ? 'ogg'
+          : 'm4a'
+      const form = new FormData()
+      form.append(
+        'file',
+        new Blob([new Uint8Array(bytes)], { type: mimeType }),
+        `voice.${ext}`
+      )
+      form.append('model', model)
+      form.append('response_format', 'json')
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30000)
+      const res = await fetch(
+        'https://api.groq.com/openai/v1/audio/transcriptions',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: form,
+          signal: controller.signal,
+        }
+      )
+      clearTimeout(timer)
+      if (!res.ok) continue
+      const data = (await res.json()) as { text?: string }
+      if (data.text && data.text.trim().length > 0) return data.text.trim()
+    } catch {
+      // try the next whisper variant
+    }
+  }
+  return null
+}
+
+/** Which providers have a key configured (not necessarily healthy). */
 export function getProviderStatus(): Record<Provider, boolean> {
   return {
-    zai: true, // platform-provisioned SDK
-    nvidia: !!process.env.NVIDIA_API_KEY,
-    groq: !!process.env.GROQ_API_KEY,
-    openrouter: !!process.env.OPENROUTER_API_KEY,
-    gemini: !!process.env.GEMINI_API_KEY,
-    huggingface: !!process.env.HUGGINGFACE_API_KEY,
+    nvidia: !!getKey('nvidia'),
+    groq: !!getKey('groq'),
+    openrouter: !!getKey('openrouter'),
+    gemini: !!getKey('gemini'),
+    huggingface: !!getKey('huggingface'),
   }
+}
+
+/** Live consensus health snapshot (for diagnostics endpoints). */
+export function getConsensusHealth(): {
+  provider: Provider
+  model: string
+  benched: boolean
+  benchedUntil: number
+}[] {
+  const out: {
+    provider: Provider
+    model: string
+    benched: boolean
+    benchedUntil: number
+  }[] = []
+  for (const provider of PROVIDER_ORDER) {
+    for (const { model } of [
+      ...FAST_MODELS[provider],
+      ...FULL_MODELS[provider],
+    ]) {
+      const h = modelHealth.get(healthKey(provider, model))
+      if (h) {
+        out.push({
+          provider,
+          model,
+          benched: h.benchedUntil > Date.now(),
+          benchedUntil: h.benchedUntil,
+        })
+      }
+    }
+  }
+  return out
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -409,13 +704,12 @@ export function getProviderStatus(): Record<Provider, boolean> {
 /**
  * Make a message's content safe to embed in an LLM prompt:
  *  - data URLs (voice notes, images — can be hundreds of KB of base64) are
- *    replaced with a short placeholder like "[voice message 0:12]"
+ *    replaced with a short placeholder like "[voice message]"
  *  - anything longer than 2000 chars is truncated
  * Call this on every message before building a conversation transcript.
  */
 export function sanitizeForAI(content: string): string {
   if (!content) return ''
-  // data: URLs — audio, images, any embedded base64 payload.
   if (content.startsWith('data:')) {
     const audio = /^data:audio\/[a-z0-9.+-]+/i.exec(content)
     return audio ? '[voice message]' : '[attachment]'

@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 
 // POST /api/ai/translate — translate a message to the user's language
 // Body: { text, targetLang? }
-// Uses our self-healing AI router (28 models × 5 providers) — no external
+// Uses the consensus AI engine (multi-provider jury) — no external
 // translation API like Google Translate. The AI does the translation.
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const target = targetLang || 'English'
 
   try {
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000))
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000))
     const result = await Promise.race([
       aiChat(
         `You are a translator. Translate the following text to ${target}. Reply with ONLY the translation, nothing else. Preserve formatting, names, and URLs.`,

@@ -20,6 +20,7 @@ import {
   Languages,
   Timer,
   Sparkles,
+  Wand2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmojiPicker } from './emoji-picker'
@@ -49,7 +50,7 @@ export function MessageInput({
   onOpenPoll?: () => void
   onSchedule?: (content: string) => void
   businesses?: Array<{ id: string; name: string; avatarColor?: string | null }>
-  onOpenTone?: () => void
+  onOpenTone?: (draft: string) => void
 }) {
   const [value, setValue] = useState('')
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -377,6 +378,28 @@ export function MessageInput({
     }
     window.addEventListener('wasl:smart-reply', onSmartReply)
     return () => window.removeEventListener('wasl:smart-reply', onSmartReply)
+  }, [])
+
+  // Tone Adjuster (tone-adjuster-dialog.tsx) dispatches `wasl:tone-apply`
+  // when the user taps "Apply" — replace the composer draft with the
+  // AI-adjusted text and focus it for review before sending.
+  useEffect(() => {
+    function onToneApply(e: Event) {
+      const detail = (e as CustomEvent<{ text: string }>).detail
+      if (typeof detail?.text !== 'string' || !detail.text) return
+      typingSinceRestoreRef.current = true
+      setValue(detail.text)
+      setEmojiOpen(false)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+        const len = detail.text.length
+        try {
+          textareaRef.current?.setSelectionRange(len, len)
+        } catch { /* ignore */ }
+      })
+    }
+    window.addEventListener('wasl:tone-apply', onToneApply)
+    return () => window.removeEventListener('wasl:tone-apply', onToneApply)
   }, [])
 
   function emitTyping(typing: boolean) {
@@ -731,6 +754,20 @@ export function MessageInput({
           )}
         </button>
 
+        {/* AI Tone Adjuster button — opens the tone dialog with the current
+            draft pre-filled (discoverable alternative to the /ai command). */}
+        {onOpenTone && (
+          <button
+            type="button"
+            onClick={() => onOpenTone(value.replace(/^\/\S*\s?/, '').trim())}
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-[var(--wasl-green)]/10 transition-colors"
+            title="AI tone adjuster — rewrite your draft"
+            aria-label="Adjust message tone with AI"
+          >
+            <Wand2 className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Inline translate button (from Cirkle blueprint) */}
         {value.trim() && !translatePreview && (
           <button
@@ -739,17 +776,19 @@ export function MessageInput({
               if (!value.trim()) return
               setTranslating(true)
               try {
-                const res = await fetch('/api/ai/summary', {
+                // REAL translation via the dedicated consensus AI endpoint
+                // (previously this wrongly called /api/ai/summary).
+                const res = await fetch('/api/ai/translate', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    messages: [{ role: 'user', content: value.trim() }],
-                    conversationId: 'translate',
+                    text: value.trim(),
+                    targetLang,
                   }),
                 })
                 if (res.ok) {
                   const data = await res.json()
-                  setTranslatePreview(data.summary || `[${targetLang}] ${value.trim()}`)
+                  setTranslatePreview(data.translation || `[${targetLang}] ${value.trim()}`)
                 } else {
                   setTranslatePreview(`[${targetLang}] ${value.trim()}`)
                 }
@@ -854,7 +893,9 @@ export function MessageInput({
                       toast.info('Type a message, then tap the Languages icon to translate')
                     }
                   } else if (c.cmd === '/ai' && onOpenTone) {
-                    onOpenTone()
+                    // Pass the current draft so the tone adjuster works on
+                    // real content (and can apply the result back).
+                    onOpenTone(value.replace(/^\/\S*\s?/, '').trim())
                   } else if (c.cmd === '/event' && onSchedule) {
                     // Pre-fill with the schedule dialog
                     onSchedule(value.replace(/^\/\S*\s?/, '').trim() || '')
