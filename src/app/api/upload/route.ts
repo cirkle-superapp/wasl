@@ -5,8 +5,9 @@ import { getSession } from '@/lib/auth'
 
 export const runtime = 'nodejs'
 
-// Allowed image MIME types for uploads. We're strict so the endpoint can't
-// be abused as a generic file-dump.
+// Allowed upload MIME types. We're strict so the endpoint can't be abused
+// as a generic file-dump. Images (avatars), PDFs and audio (documents,
+// verification files) match what the UI uploaders accept.
 const ALLOWED_MIME: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -15,6 +16,14 @@ const ALLOWED_MIME: Record<string, string> = {
   'image/gif': 'gif',
   'image/heic': 'heic',
   'image/heif': 'heif',
+  'application/pdf': 'pdf',
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/wav': 'wav',
+  'text/plain': 'txt',
 }
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB upload cap
@@ -65,7 +74,7 @@ export async function POST(req: NextRequest) {
   const ext = ALLOWED_MIME[mime]
   if (!ext) {
     return NextResponse.json(
-      { error: 'Unsupported file type — only images are allowed' },
+      { error: 'Unsupported file type — only images, PDFs, audio and text are allowed' },
       { status: 415 }
     )
   }
