@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChatFast } from '@/lib/ai'
+import { aiChatFast, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   // Build conversation context
   const context = recentMsgs
     .reverse()
-    .map((m) => `${m.senderId === session.id ? 'Me' : 'Them'}: ${m.content}`)
+    .map((m) => `${m.senderId === session.id ? 'Me' : 'Them'}: ${sanitizeForAI(m.content)}`)
     .join('\n')
 
   const systemPrompt = `You are a helpful assistant generating 3 short, natural chat reply suggestions. Each reply should be concise (under 50 characters), friendly, and conversational. Return exactly 3 replies, one per line, no numbering or bullets. Keep it casual like a chat app.`

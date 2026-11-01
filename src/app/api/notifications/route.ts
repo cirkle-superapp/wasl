@@ -130,10 +130,10 @@ export async function GET() {
       id: `sched-${sm.id}`,
       type: 'scheduled_due',
       at: sm.scheduledFor,
-      title: 'Scheduled message due',
+      title: 'Upcoming scheduled message',
       subtitle: previewText(sm.content, sm.type),
       conversationId: sm.conversationId,
-      whenLabel: formatRelative(sm.scheduledFor, now),
+      whenLabel: `sends ${formatRelative(sm.scheduledFor, now)}`,
     })
   }
 

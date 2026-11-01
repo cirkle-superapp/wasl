@@ -305,6 +305,7 @@ export function BusinessDashboardDialog({
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
+          <DialogTitle className="sr-only">Business dashboard</DialogTitle>
           <div className="flex items-center justify-center py-12 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading…
           </div>

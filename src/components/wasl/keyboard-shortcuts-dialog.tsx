@@ -54,6 +54,16 @@ export function KeyboardShortcutsDialog() {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('wasl:settings'))
       }
+      // Ctrl+L to toggle the app lock (handled by chat-window)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('wasl:app-lock'))
+      }
+      // Ctrl+F to search messages in the open chat (handled by chat-window)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('wasl:chat-search'))
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

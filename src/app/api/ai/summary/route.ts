@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChat, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       const senderName = m.senderId === session.id
         ? 'Me'
         : p?.user?.name || 'Them'
-      return `${senderName}: ${m.content}`
+      return `${senderName}: ${sanitizeForAI(m.content)}`
     })
     .join('\n')
 
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     const stopwords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'this', 'that', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'can', 'could', 'should', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'me', 'him', 'us', 'them', 'about', 'if', 'so', 'no', 'yes', 'just', 'like', 'get', 'got', 'go', 'going', 'really', 'very', 'more', 'some', 'any', 'all', 'what', 'when', 'where', 'who', 'how', 'why'])
     const wordFreq: Record<string, number> = {}
     for (const m of messages) {
-      for (const word of m.content.toLowerCase().split(/\s+/)) {
+      for (const word of sanitizeForAI(m.content).toLowerCase().split(/\s+/)) {
         const clean = word.replace(/[^a-z0-9]/g, '')
         if (clean.length > 3 && !stopwords.has(clean)) {
           wordFreq[clean] = (wordFreq[clean] || 0) + 1
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
       `• Average message length: ${avgLength} characters\n` +
       `• Key topics: ${topWords.join(', ') || 'general conversation'}\n` +
       `• Last activity: ${lastTime}\n` +
-      `• Recent context: "${messages.slice(-3).map((m) => m.content.slice(0, 50)).join('... ')}"`
+      `• Recent context: "${messages.slice(-3).map((m) => sanitizeForAI(m.content).slice(0, 50)).join('... ')}"`
   }
 
   // Send email if requested

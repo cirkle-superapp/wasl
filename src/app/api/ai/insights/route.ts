@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChat, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       .slice(-100) // Last 100 messages for AI
       .map((m) => {
         const name = m.senderId === session.id ? 'Me' : 'Them'
-        return `${name}: ${m.content.slice(0, 100)}`
+        return `${name}: ${sanitizeForAI(m.content).slice(0, 100)}`
       })
       .join('\n')
 

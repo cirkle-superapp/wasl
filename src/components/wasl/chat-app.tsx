@@ -53,6 +53,20 @@ export function ChatApp({ user }: { user: any }) {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const beforeUnloadHandler = useRef<(() => void) | null>(null)
 
+  // Cross-component dialog triggers. The command palette (Ctrl/Cmd+K) and
+  // the keyboard-shortcuts dialog dispatch these window events; without
+  // listeners here those actions were dead buttons.
+  useEffect(() => {
+    const openNewChat = () => setNewChatOpen(true)
+    const openSettings = () => setSettingsOpen(true)
+    window.addEventListener('wasl:new-chat', openNewChat)
+    window.addEventListener('wasl:settings', openSettings)
+    return () => {
+      window.removeEventListener('wasl:new-chat', openNewChat)
+      window.removeEventListener('wasl:settings', openSettings)
+    }
+  }, [])
+
   // Derive mobile view from active conversation selection
   const mobileView: 'list' | 'chat' = activeConversationId ? 'chat' : 'list'
 

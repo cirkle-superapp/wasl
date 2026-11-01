@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChat, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     .reverse()
     .map((m) => {
       const sender = m.senderId === session.id ? 'Me' : 'Them'
-      return `${sender}: ${m.content}`
+      return `${sender}: ${sanitizeForAI(m.content)}`
     })
     .join('\n')
 
@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
 
   for (const m of messages.reverse()) {
     for (const { pattern, type } of actionPatterns) {
-      if (pattern.test(m.content)) {
+      if (pattern.test(sanitizeForAI(m.content))) {
         const sender = m.senderId === session.id ? 'Me' : 'Them'
-        items.push({ text: m.content.slice(0, 150), type, sender })
+        items.push({ text: sanitizeForAI(m.content).slice(0, 150), type, sender })
         break
       }
     }

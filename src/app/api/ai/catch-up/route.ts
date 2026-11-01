@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChat, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
   for (const m of messages) {
     if (m.type !== 'text' && m.type !== 'commit') continue
-    const text = m.content || ''
+    const text = sanitizeForAI(m.content) || ''
     const senderName = nameFor(m.senderId)
 
     const linkMatches = text.match(LINK_RE)
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     .slice(-120)
     .map((m) => {
       const who = nameFor(m.senderId)
-      const txt = m.content.slice(0, 160)
+      const txt = sanitizeForAI(m.content).slice(0, 160)
       return `${who}: ${txt}`
     })
     .join('\n')

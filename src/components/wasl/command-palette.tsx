@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Search, MessageCircle, Moon, Sun, Settings, Lock, Users } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -57,6 +57,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md p-0 gap-0 wasl-command-palette">
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Search className="w-4 h-4 text-muted-foreground" />
           <input autoFocus value={query} onChange={e => { setQuery(e.target.value); setSelectedIndex(0) }}

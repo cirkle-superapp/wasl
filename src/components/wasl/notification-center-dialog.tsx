@@ -8,7 +8,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { Loader2, Bell, Users, Megaphone, Clock, GraduationCap, MessageSquare, CheckCheck } from 'lucide-react'
 import { useWaslStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -139,7 +138,12 @@ export function NotificationCenterDialog({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate flex-1 min-w-0">{item.title}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{formatRelative(item.at)}</span>
+                        {/* For future-dated items (scheduled messages) the whenLabel
+                            badge below carries the countdown — rendering a relative
+                            "now" timestamp for a future date was contradictory. */}
+                        {!item.whenLabel && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">{formatRelative(item.at)}</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.subtitle}</div>
                       {item.unreadCount && item.unreadCount > 0 && (
@@ -163,9 +167,9 @@ export function NotificationCenterDialog({
 
         {!loading && items.length > 0 && (
           <div className="border-t border-border px-4 py-2 text-center">
-            <Button variant="ghost" size="sm" className="text-xs w-full" onClick={() => onOpenChange(false)}>
-              Mark all as read by visiting each conversation
-            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              Badges clear automatically as you visit each conversation.
+            </p>
           </div>
         )}
       </DialogContent>

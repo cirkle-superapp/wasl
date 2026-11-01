@@ -9,18 +9,14 @@ export const runtime = 'nodejs'
 //
 // Body: { messageId: string }
 //
-// The available AI providers in `src/lib/ai.ts` (Nvidia DeepSeek, Groq,
-// OpenRouter, Gemini) are all *text* chat-completion LLMs — none of them
-// accept audio input. Real speech-to-text would require a dedicated ASR
-// provider (Whisper, Deepgram, etc.) which isn't configured here. So this
-// endpoint implements a transparent, honest placeholder: it tells the user
-// that automatic transcription isn't available and asks them to play the
-// audio. The result is persisted on the `Message.transcription` column so
-// the UI doesn't keep re-prompting — and if a real ASR provider is wired in
-// later, only this route needs to change.
+// REAL ASR: uses the platform SDK (`z-ai-web-dev-sdk`) speech-to-text
+// (`zai.audio.asr.create`) to decode the voice note's base64 audio. If the
+// SDK fails or returns nothing, falls back to a clearly-labelled
+// placeholder instead of fabricating text. The result is persisted on the
+// `Message.transcription` column so the UI doesn't re-prompt.
 //
 // Returns:
-//   200 → { transcription: string, cached: boolean }
+//   200 → { transcription: string, cached: boolean, engine?: 'asr' }
 //   400 → missing/invalid messageId
 //   403 → user is not a member of the message's conversation
 //   404 → message not found / not a voice message
@@ -99,14 +95,49 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // ---- Placeholder transcription -------------------------------------------
-  // The AI providers wired up in `src/lib/ai.ts` are text-only LLMs and
-  // cannot decode audio. Rather than silently fabricate fake transcript
-  // text (which would mislead users into thinking the audio was actually
-  // decoded), we return a clearly-labelled placeholder and persist it so
-  // the bubble stops showing the "Transcribe" CTA. When a real ASR
-  // provider is available, this block should be replaced with a call to
-  // that provider using the base64 audio payload (`message.content`).
+  // ---- Real ASR via z-ai-web-dev-sdk ---------------------------------------
+  // The platform SDK (`z-ai-web-dev-sdk`) provides genuine speech-to-text
+  // via `zai.audio.asr.create({ file_base64 })`. The voice note's content is
+  // a `data:audio/...;base64,XXX` data URL, so the base64 payload is already
+  // inline. If the SDK fails (or the audio is undecodable), we fall back to
+  // a clearly-labelled placeholder rather than fabricating transcript text.
+  const base64Match = /^data:audio\/[a-z0-9.+-]+;base64,(.+)$/i.exec(
+    message.content
+  )
+  if (base64Match) {
+    try {
+      const mod = await import('z-ai-web-dev-sdk')
+      const ZAI = mod.default ?? mod
+      const zai = await ZAI.create()
+      const response = await zai.audio.asr.create({
+        file_base64: base64Match[1],
+      })
+      const text =
+        response?.text && String(response.text).trim().length > 0
+          ? String(response.text).trim()
+          : null
+      if (text) {
+        await db.message.update({
+          where: { id: message.id },
+          data: { transcription: text },
+        })
+        return NextResponse.json({
+          transcription: text,
+          cached: false,
+          engine: 'asr',
+        })
+      }
+    } catch (e) {
+      console.error('[transcribe] ASR failed, using placeholder:', e)
+    }
+  }
+
+  // ---- Honest fallback placeholder ------------------------------------------
+  // ASR unavailable or returned nothing useful. Rather than silently
+  // fabricate fake transcript text (which would mislead users into thinking
+  // the audio was actually decoded), we return a clearly-labelled
+  // placeholder and persist it so the bubble stops showing the "Transcribe"
+  // CTA.
   const placeholder =
     '🎤 Voice message — automatic transcription is not available. Play to listen.'
 

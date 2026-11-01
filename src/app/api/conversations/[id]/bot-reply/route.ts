@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChatFast } from '@/lib/ai'
+import { aiChatFast, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -71,7 +71,7 @@ export async function POST(
   // Try AI-generated reply first
   const contextMessages = recent
     .reverse()
-    .map((m) => `${m.senderId === session.id ? 'User' : other.user.name}: ${m.content}`)
+    .map((m) => `${m.senderId === session.id ? 'User' : other.user.name}: ${sanitizeForAI(m.content)}`)
     .join('\n')
 
   const systemPrompt = `You are ${other.user.name}, a friendly person chatting on Wasl (a messaging app). Keep replies short (1-2 sentences), casual, and natural. Be warm and conversational. Don't use markdown formatting.`

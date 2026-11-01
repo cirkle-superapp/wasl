@@ -356,6 +356,29 @@ export function MessageInput({
     textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
   }, [value])
 
+  // Smart-reply chips (smart-reply-chips.tsx) dispatch a `wasl:smart-reply`
+  // window event when tapped. Fill the composer with the chosen reply and
+  // focus it so the user can review + hit send (or just press Enter).
+  useEffect(() => {
+    function onSmartReply(e: Event) {
+      const detail = (e as CustomEvent<{ reply: string }>).detail
+      if (!detail?.reply) return
+      typingSinceRestoreRef.current = true
+      setValue(detail.reply)
+      setEmojiOpen(false)
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+        // Put the caret at the end of the inserted text.
+        const len = detail.reply.length
+        try {
+          textareaRef.current?.setSelectionRange(len, len)
+        } catch { /* ignore */ }
+      })
+    }
+    window.addEventListener('wasl:smart-reply', onSmartReply)
+    return () => window.removeEventListener('wasl:smart-reply', onSmartReply)
+  }, [])
+
   function emitTyping(typing: boolean) {
     if (typing === lastTypingChange.current) return
     lastTypingChange.current = typing

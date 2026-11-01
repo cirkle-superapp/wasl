@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { aiChat } from '@/lib/ai'
+import { aiChat, sanitizeForAI } from '@/lib/ai'
 
 export const runtime = 'nodejs'
 
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
       .slice(-100)
       .map((m) => {
         const who = m.senderId === session.id ? 'Me' : (convo.participants.find((p) => p.userId === m.senderId)?.user.name || 'Them')
-        return `${who}: ${m.content.slice(0, 100)}`
+        return `${who}: ${sanitizeForAI(m.content).slice(0, 100)}`
       })
       .join('\n')
 

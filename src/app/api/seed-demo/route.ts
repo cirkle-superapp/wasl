@@ -932,6 +932,9 @@ async function buildGroupConversations(
       senderId: personas[1].id,
       content: 'Vote on the launch demo order 👇',
       type: 'poll',
+      // The poll card renderer reads the poll id from commitId (the message
+      // model overloads commitId for both commits and polls).
+      commitId: poll.id,
       createdAt: hoursAgo(6),
     })
     // Add some votes.

@@ -48,6 +48,30 @@ import {
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
+// ---- Foreign-language detection (for the inline Translate pill) ---------
+// True when the text contains non-Latin script (Arabic, Cyrillic, CJK,
+// Devanagari, Hebrew, Thai…) or enough accented Latin characters to suggest
+// a non-English language. Plain English/emoji-only messages return false so
+// the Translate pill only appears where it's genuinely useful.
+function looksForeign(text: string): boolean {
+  if (!text) return false
+  const trimmed = text.trim()
+  if (trimmed.length < 2) return false
+  // Strip emoji / whitespace / punctuation / digits for analysis.
+  const letters = trimmed.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}\p{N}]/gu, '')
+  if (letters.length === 0) return false
+  // Non-Latin script blocks → definitely foreign (relative to an English UI).
+  const nonLatin = letters.match(/[\u0600-\u06FF\u0750-\u077F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0900-\u097F\u0590-\u05FF\u0E00-\u0E7F]/g)
+  if (nonLatin && nonLatin.length >= 2) return true
+  // Accented Latin (French/Spanish/German/Portuguese…) — accents are sparse
+  // in French (≈1 per 20 letters), so a percentage gate misses real French.
+  // Instead: show whenever ≥2 accented letters appear (English almost never
+  // uses 2+ diacritics; a stray "café" alone stays unprompted).
+  const accented = letters.match(/[À-ÖØ-öø-ÿĀ-žĂ-şŢ-ţ]/g)
+  if (accented && accented.length >= 2) return true
+  return false
+}
+
 // ---- Search highlight helper ---------------------------------------------
 // Splits `text` on case-insensitive occurrences of `query` and wraps each
 // match in a <mark> with a visible yellow background so the user can see why
@@ -973,8 +997,9 @@ export function MessageBubble({
               {/* Inline translation (Task 96 — Telegram/WhatsApp competitor feature)
                   Shows a "Translate" pill below incoming messages that might be in
                   a foreign language. Only appears on INCOMING text messages (not
-                  the user's own). Detection: non-ASCII chars OR Arabic/Cyrillic/CJK. */}
-              {!mine && message.type === 'text' && !message.content.startsWith('data:') && (
+                  the user's own) whose content looks non-English: non-ASCII
+                  script (Arabic/Cyrillic/CJK/etc.) or accented Latin letters. */}
+              {!mine && message.type === 'text' && !message.content.startsWith('data:') && looksForeign(message.content) && (
                 <>
                   {translation ? (
                     <div className="wasl-translate-result">{translation}</div>

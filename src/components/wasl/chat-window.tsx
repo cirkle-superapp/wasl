@@ -132,6 +132,23 @@ export function ChatWindow({
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // Command palette "App lock" action dispatches this window event —
+  // wire it to the same dialog the chat menu opens. Also covers Ctrl+L
+  // (registered in keyboard-shortcuts-dialog).
+  useEffect(() => {
+    const openAppLock = () => setAppLockOpen(true)
+    window.addEventListener('wasl:app-lock', openAppLock)
+    return () => window.removeEventListener('wasl:app-lock', openAppLock)
+  }, [])
+
+  // Ctrl+F (registered in keyboard-shortcuts-dialog) opens the in-chat
+  // message search — same dialog the header search button opens.
+  useEffect(() => {
+    const openChatSearch = () => setSearchOpen(true)
+    window.addEventListener('wasl:chat-search', openChatSearch)
+    return () => window.removeEventListener('wasl:chat-search', openChatSearch)
+  }, [])
   // Chat wallpaper — user-selectable from contact info panel (stored in localStorage)
   const [wallpaperClass, setWallpaperClass] = useState<string>(() => {
     try { return localStorage.getItem('wasl-chat-wallpaper') || 'wasl-chat-pattern' } catch { return 'wasl-chat-pattern' }
@@ -1176,6 +1193,7 @@ export function ChatWindow({
     const groupCount = conversations.filter(c => c.isGroup).length
     const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
     return (
+      <>
       <div className={cn('flex-1 flex flex-col items-center justify-center text-center px-6 overflow-y-auto wasl-scroll', wallpaperClass)}>
         <div className="wasl-anim-spring-in bg-white/90 dark:bg-[var(--wasl-sidebar-bg)]/90 rounded-2xl px-8 py-8 shadow-lg max-w-md flex flex-col items-center gap-4 my-auto">
           <div className="wasl-empty-orb" style={{ isolation: 'isolate' }}>
@@ -1244,6 +1262,18 @@ export function ChatWindow({
           </div>
         </div>
       </div>
+      {/* Global dialogs must also be mounted in the no-conversation state —
+          otherwise Ctrl+K / app-lock / shortcut actions advertised above are
+          dead until a conversation is opened. */}
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+      />
+      <AppLockDialog
+        open={appLockOpen}
+        onOpenChange={setAppLockOpen}
+      />
+      </>
     )
   }
 

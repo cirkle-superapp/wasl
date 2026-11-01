@@ -26,15 +26,20 @@
 //   const reply = await aiChatFast('You are friendly.', 'Hello!')
 //   const summary = await aiChat('Summarize this.', longText, 400)
 
-type Provider = 'nvidia' | 'groq' | 'openrouter' | 'gemini' | 'huggingface'
+type Provider = 'zai' | 'nvidia' | 'groq' | 'openrouter' | 'gemini' | 'huggingface'
 
 // Each provider has MULTIPLE models per tier. If one model fails (EOL, 404,
 // rate-limit, etc.), the router tries the next model on the same provider.
-const PROVIDER_ORDER: Provider[] = ['nvidia', 'groq', 'openrouter', 'gemini', 'huggingface']
+// 'zai' (z-ai-web-dev-sdk) is the PRIMARY provider — it needs no API key
+// (credentials are provisioned by the platform) and is tried first.
+const PROVIDER_ORDER: Provider[] = ['zai', 'nvidia', 'groq', 'openrouter', 'gemini', 'huggingface']
 
 // Fast models — for short chat replies (1-2 sentences). Multiple models per
 // provider, ordered by preference (first = best, last = fallback).
 const FAST_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = {
+  zai: [
+    { model: 'zai-default', extraTokens: 0 },
+  ],
   nvidia: [
     { model: 'google/gemma-3-4b-it', extraTokens: 0 },
     { model: 'ibm/granite-3.0-8b-instruct', extraTokens: 0 },
@@ -64,6 +69,9 @@ const FAST_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = 
 
 // Full models — for complex analysis (summary, action items, tone).
 const FULL_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = {
+  zai: [
+    { model: 'zai-default', extraTokens: 0 },
+  ],
   nvidia: [
     { model: 'deepseek-ai/deepseek-v4.1-flash', extraTokens: 200 },
     { model: '01-ai/yi-large', extraTokens: 200 },
@@ -90,6 +98,7 @@ const FULL_MODELS: Record<Provider, { model: string; extraTokens: number }[]> = 
 }
 
 const PROVIDER_URLS: Record<Provider, { url: string; key: string | undefined }> = {
+  zai: { url: '', key: undefined }, // SDK handles auth internally
   nvidia: {
     url: 'https://integrate.api.nvidia.com/v1/chat/completions',
     key: process.env.NVIDIA_API_KEY,
@@ -226,6 +235,57 @@ async function huggingfaceChat(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Primary provider — z-ai-web-dev-sdk (platform-provisioned credentials)
+// ═══════════════════════════════════════════════════════════════════════
+
+let zaiInstance: any = null
+let zaiInstancePromise: Promise<any> | null = null
+
+/** Lazily create + memoize the ZAI SDK client (backend only). */
+async function getZai() {
+  if (zaiInstance) return zaiInstance
+  if (!zaiInstancePromise) {
+    zaiInstancePromise = (async () => {
+      const mod = await import('z-ai-web-dev-sdk')
+      const ZAI = mod.default ?? mod
+      zaiInstance = await ZAI.create()
+      return zaiInstance
+    })().catch((e) => {
+      // Reset so a later call can retry (e.g. transient init failure).
+      zaiInstancePromise = null
+      throw e
+    })
+  }
+  return zaiInstancePromise
+}
+
+/** Chat via the z-ai-web-dev-sdk. Returns null on failure (router falls through). */
+async function zaiChat(
+  systemPrompt: string,
+  userMessage: string,
+  maxTokens: number
+): Promise<string | null> {
+  try {
+    const zai = await getZai()
+    const completion = await zai.chat.completions.create({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      thinking: { type: 'disabled' },
+      max_tokens: maxTokens,
+    } as any)
+    const content = completion?.choices?.[0]?.message?.content
+    if (typeof content === 'string' && content.trim().length > 0) {
+      return content.trim()
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Self-healing router — tries MULTIPLE MODELS per provider before giving up
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -241,6 +301,10 @@ async function tryModel(
   maxTokens: number,
   extraTokens: number
 ): Promise<string | null> {
+  // Primary provider — z-ai-web-dev-sdk (auth handled by the platform).
+  if (provider === 'zai') {
+    return zaiChat(systemPrompt, userMessage, maxTokens)
+  }
   const urls = PROVIDER_URLS[provider]
   if (!urls.key) return null
   if (provider === 'gemini') {
@@ -271,8 +335,11 @@ async function selfHealingChat(
   for (const provider of PROVIDER_ORDER) {
     const providerModels = models[provider]
     if (!providerModels || providerModels.length === 0) continue
-    const urls = PROVIDER_URLS[provider]
-    if (!urls.key) continue
+    // 'zai' needs no API key — the SDK is provisioned by the platform.
+    if (provider !== 'zai') {
+      const urls = PROVIDER_URLS[provider]
+      if (!urls.key) continue
+    }
 
     // Try EACH model on this provider — if one fails, try the next model
     for (const cfg of providerModels) {
@@ -326,10 +393,35 @@ export async function aiChat(
 
 export function getProviderStatus(): Record<Provider, boolean> {
   return {
+    zai: true, // platform-provisioned SDK
     nvidia: !!process.env.NVIDIA_API_KEY,
     groq: !!process.env.GROQ_API_KEY,
     openrouter: !!process.env.OPENROUTER_API_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
     huggingface: !!process.env.HUGGINGFACE_API_KEY,
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Prompt sanitization — keep AI prompts inside model context limits
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Make a message's content safe to embed in an LLM prompt:
+ *  - data URLs (voice notes, images — can be hundreds of KB of base64) are
+ *    replaced with a short placeholder like "[voice message 0:12]"
+ *  - anything longer than 2000 chars is truncated
+ * Call this on every message before building a conversation transcript.
+ */
+export function sanitizeForAI(content: string): string {
+  if (!content) return ''
+  // data: URLs — audio, images, any embedded base64 payload.
+  if (content.startsWith('data:')) {
+    const audio = /^data:audio\/[a-z0-9.+-]+/i.exec(content)
+    return audio ? '[voice message]' : '[attachment]'
+  }
+  if (content.length > 2000) {
+    return content.slice(0, 2000) + '…[truncated]'
+  }
+  return content
 }

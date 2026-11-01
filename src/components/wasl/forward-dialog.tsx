@@ -55,6 +55,7 @@ export function ForwardDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
+        <DialogTitle className="sr-only">Forward message</DialogTitle>
         {open && (
           <ForwardDialogInner
             key={messageId || 'new'}

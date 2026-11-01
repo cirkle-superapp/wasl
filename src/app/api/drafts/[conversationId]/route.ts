@@ -49,14 +49,13 @@ export async function DELETE(
   }
   const { conversationId } = await params
 
-  try {
-    await db.draft.delete({
-      where: {
-        userId_conversationId: { userId: session.id, conversationId },
-      },
-    })
-  } catch {
-    // P2025 = record not found — already gone, treat as success.
-  }
+  // deleteMany never throws when nothing matches — silent idempotency
+  // (db.draft.delete would log a prisma:error for the common no-draft case).
+  await db.draft.deleteMany({
+    where: {
+      userId: session.id,
+      conversationId,
+    },
+  })
   return NextResponse.json({ ok: true })
 }
