@@ -164,7 +164,6 @@ const criticalCSS = `
   .justify-center{justify-content:center}
   .items-center{align-items:center}
   .flex-1{flex:1}
-  footer{padding:0.75rem 1.5rem;text-align:center;font-size:0.75rem;background:#1a4a5a;color:rgba(255,255,255,0.8)}
   svg{display:inline-block;vertical-align:middle}
   .lucide{width:1rem;height:1rem;display:inline-block;vertical-align:middle}
   .w-3{width:0.75rem}.h-3{height:0.75rem}
