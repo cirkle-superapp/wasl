@@ -73,7 +73,7 @@ export function renderMarkdownLite(text: string): React.ReactNode[] {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] underline decoration-dotted hover:decoration-solid break-all"
+          className="wasl-md-link text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] underline decoration-dotted hover:decoration-solid break-all"
           onClick={(e) => e.stopPropagation()}
         >
           {display}

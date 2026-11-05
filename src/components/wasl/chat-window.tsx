@@ -1285,7 +1285,7 @@ export function ChatWindow({
 
   return (
     <div
-      className={cn('flex-1 flex flex-col min-w-0 relative', wallpaperClass)}
+      className={cn('flex-1 flex flex-col min-w-0 min-h-0 relative', wallpaperClass)}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -1579,7 +1579,7 @@ export function ChatWindow({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="flex-1 overflow-y-auto wasl-scroll px-2 sm:px-4 py-4 max-w-4xl w-full mx-auto"
+        className="flex-1 overflow-y-auto wasl-scroll px-3 sm:px-6 pt-5 pb-8 max-w-4xl w-full mx-auto"
       >
         {loading && messages.length === 0 ? (
           // Skeleton placeholders while the first batch of messages loads.
@@ -1648,7 +1648,7 @@ export function ChatWindow({
                   title={new Date(m.createdAt).toLocaleString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 >
                   {showDate && (
-                    <div className="flex justify-center my-3 sticky top-2 z-10">
+                    <div className="flex justify-center my-4 sticky top-3 z-10">
                       <div className="wasl-date-pill">
                         {date}
                       </div>
@@ -1656,12 +1656,27 @@ export function ChatWindow({
                   )}
                   {showUnreadSeparator && (
                     <div className="wasl-unread-separator flex justify-center my-3 select-none">
-                      <span className="wasl-glass-soft border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-semibold uppercase tracking-wide px-3 py-1 rounded-full">
+                      <span className="wasl-glass-soft inline-flex items-center gap-1.5 border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-semibold uppercase tracking-[0.08em] px-3.5 py-1 rounded-full shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                         Unread messages
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                       </span>
                     </div>
                   )}
-                  <div className="group mb-1.5 relative">
+                  <div
+                    className={cn(
+                      'group relative',
+                      // Aurora v2 grouping rhythm: 2px inside a sender group,
+                      // 10px between groups / solo messages (WhatsApp feel)
+                      idx > 0 &&
+                      messages[idx - 1].senderId === m.senderId &&
+                      messages[idx - 1].type !== 'system' &&
+                      m.type !== 'system' &&
+                      !showDate
+                        ? 'mb-[2px]'
+                        : 'mb-2.5'
+                    )}
+                  >
                     <MessageBubble
                       message={m}
                       senderName={senderName}
@@ -1713,7 +1728,7 @@ export function ChatWindow({
                       </div>
                     ) : null
                   })()}
-                  <div className="wasl-bubble-in px-3 py-2 shadow-sm flex items-center gap-1.5">
+                  <div className="wasl-typing-bubble flex items-center gap-1.5">
                     <span className="text-xs text-muted-foreground mr-1">
                       {conversation.isGroup
                         ? typingUsers.length === 1
@@ -1738,7 +1753,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="wasl-scroll-bottom-btn wasl-anim-scale-in sticky bottom-4 ml-auto mr-2 w-10 h-10 rounded-full flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] hover:bg-muted transition-colors z-10 relative"
+            className="wasl-scroll-bottom-btn wasl-anim-scale-in sticky bottom-4 ml-auto mr-3 sm:mr-4 w-11 h-11 rounded-full flex items-center justify-center text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] transition-colors z-10 relative"
             title="Scroll to latest"
             aria-label={`Scroll to latest${unreadSinceScrollUp > 0 ? ` (${unreadSinceScrollUp} new)` : ''}`}
           >
@@ -1771,7 +1786,7 @@ export function ChatWindow({
       />
       {/* Effect picker (Task 96 — iMessage-style message effects) */}
       {showEffectPicker && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 wasl-glass-strong rounded-2xl p-2 flex gap-1.5 border border-border shadow-lg wasl-anim-scale-in">
+        <div className="absolute bottom-[132px] right-3 sm:right-5 z-50 wasl-glass-strong rounded-2xl p-2 flex gap-1 border border-border shadow-xl wasl-anim-scale-in">
           {(['confetti', 'hearts', 'sparkles', 'fireworks', 'balloons', 'stars'] as EffectType[]).map((eff) => (
             <button
               key={eff}
@@ -1785,7 +1800,7 @@ export function ChatWindow({
                 }
                 setShowEffectPicker(false)
               }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[var(--wasl-green)]/10 transition-colors text-foreground"
+              className="px-3 py-1.5 rounded-xl text-lg hover:bg-[var(--wasl-green)]/15 hover:scale-110 transition-all"
               title={`Send with ${eff} effect`}
             >
               {eff === 'confetti' && '🎉'}
@@ -1798,13 +1813,19 @@ export function ChatWindow({
           ))}
         </div>
       )}
-      {/* Effect trigger button */}
+      {/* Effect trigger button — Aurora v2 glass chip floating above the composer */}
       <button
         onClick={() => setShowEffectPicker(!showEffectPicker)}
-        className="absolute bottom-3 right-3 z-40 w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted/50 transition-colors"
+        className={cn(
+          'absolute bottom-[92px] right-3 sm:right-5 z-40 w-9 h-9 rounded-full hidden sm:flex items-center justify-center transition-all wasl-scroll-bottom-btn',
+          showEffectPicker
+            ? 'text-[var(--wasl-green)]'
+            : 'text-muted-foreground hover:text-[var(--wasl-green)]'
+        )}
         title="Message effects"
+        aria-label="Message effects"
       >
-        <Sparkles className="w-4 h-4" />
+        <Sparkles className="w-[18px] h-[18px]" />
       </button>
 
       {/* New Commit dialog (Cirkle-inspired) */}

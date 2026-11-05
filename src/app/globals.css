@@ -69,6 +69,8 @@
   --color-wasl-teal: var(--wasl-teal);
   --color-wasl-teal-dark: var(--wasl-teal-dark);
   --color-wasl-bubble-out: var(--wasl-bubble-out);
+  --color-wasl-bubble-out-2: var(--wasl-bubble-out-2);
+  --color-wasl-bubble-out-text: var(--wasl-bubble-out-text);
   --color-wasl-bubble-in: var(--wasl-bubble-in);
   --color-wasl-chat-bg: var(--wasl-chat-bg);
   --color-wasl-sidebar-bg: var(--wasl-sidebar-bg);
@@ -125,10 +127,12 @@
   --wasl-green-dark: #00796b;       /* Cirkle teal-700 — darker accent */
   --wasl-teal: #1a4a5a;             /* Cirkle deep teal — headers/gradients */
   --wasl-teal-dark: #123843;       /* Cirkle deep teal dark — gradient end */
-  --wasl-bubble-out: #d4f0ed;      /* Light teal tint for outgoing bubbles */
-  --wasl-bubble-in: #ffffff;       /* White for incoming bubbles */
-  --wasl-chat-bg: #f5f2ed;          /* Warm cream chat background (Cirkle cream tint) */
-  --wasl-sidebar-bg: #fdfcf9;       /* Cirkle cream — sidebar background */
+  --wasl-bubble-out: #00b39b;      /* Aurora v2 — outgoing gradient start (mint teal) */
+  --wasl-bubble-out-2: #008578;    /* Aurora v2 — outgoing gradient end (deep teal) */
+  --wasl-bubble-out-text: #ffffff; /* Aurora v2 — text on outgoing gradient */
+  --wasl-bubble-in: #ffffff;       /* White elevated surface for incoming bubbles */
+  --wasl-chat-bg: #e8edf0;          /* Aurora v2 — cool porcelain canvas */
+  --wasl-sidebar-bg: #f7f9fa;       /* Aurora v2 — crisp cool sidebar */
 
   /* Cirkle brand tokens — constant across themes (gold / teal / rose / steel / charcoal / cream).
      Imported from github.com/fortleem/CIRKLE and tuned to match the live
@@ -184,10 +188,12 @@
   --wasl-green-dark: #00a391;
   --wasl-teal: #1a4a5a;             /* Cirkle deep teal — same as light mode */
   --wasl-teal-dark: #123843;
-  --wasl-bubble-out: #1a3a3a;        /* Dark teal tint for outgoing bubbles */
-  --wasl-bubble-in: #1f2c34;
-  --wasl-chat-bg: #0b141a;
-  --wasl-sidebar-bg: #111b21;
+  --wasl-bubble-out: #0e6e60;        /* Aurora v2 — outgoing gradient start (deep emerald) */
+  --wasl-bubble-out-2: #0a5751;    /* Aurora v2 — outgoing gradient end (darker teal) */
+  --wasl-bubble-out-text: #eafffa;  /* Aurora v2 — near-white text on gradient */
+  --wasl-bubble-in: #1d282e;        /* elevated dark surface */
+  --wasl-chat-bg: #0d1418;          /* Aurora v2 — deep charcoal-cyan canvas */
+  --wasl-sidebar-bg: #10181d;
 }
 
 /* ==========================================================================
@@ -206,10 +212,12 @@
   --wasl-green-dark: #00776e;        /* Cirkle teal-700 — hover */
   --wasl-teal: #1a4a5a;              /* deep teal — headers */
   --wasl-teal-dark: #123843;
-  --wasl-bubble-out: #f5ecd6;        /* warm cream-gold for outgoing bubbles */
-  --wasl-bubble-in: #ffffff;         /* white for incoming bubbles */
-  --wasl-chat-bg: #f0ebe0;           /* cream chat background (Cirkle cream-tinted) */
-  --wasl-sidebar-bg: #fdfcf9;        /* Cirkle cream surface */
+  --wasl-bubble-out: #00b39b;        /* Aurora v2 — outgoing gradient start */
+  --wasl-bubble-out-2: #008578;    /* Aurora v2 — outgoing gradient end */
+  --wasl-bubble-out-text: #ffffff;  /* white text on teal gradient */
+  --wasl-bubble-in: #ffffff;         /* white elevated surface */
+  --wasl-chat-bg: #e9edef;           /* Aurora v2 — cool porcelain canvas */
+  --wasl-sidebar-bg: #f8fafa;        /* crisp cool surface */
 
   /* Override shadcn tokens to harmonize with Cirkle */
   --primary: oklch(0.62 0.10 190);            /* Cirkle teal #009588 */
@@ -233,10 +241,12 @@
   --wasl-green-dark: #009588;
   --wasl-teal: #2a6a7a;
   --wasl-teal-dark: #1a4a5a;
-  --wasl-bubble-out: #1a3f3a;          /* dark teal for outgoing — slightly brighter */
-  --wasl-bubble-in: #252018;           /* dark cream — better contrast from bg */
-  --wasl-chat-bg: #0d0b08;             /* near-black with warm tint */
-  --wasl-sidebar-bg: #181712;          /* Cirkle charcoal — slightly warmer */
+  --wasl-bubble-out: #0e6e60;          /* Aurora v2 — outgoing gradient start */
+  --wasl-bubble-out-2: #0a5751;      /* Aurora v2 — outgoing gradient end */
+  --wasl-bubble-out-text: #eafffa;    /* near-white text on gradient */
+  --wasl-bubble-in: #1c2a2e;           /* elevated dark-teal surface */
+  --wasl-chat-bg: #0c1416;             /* deep charcoal-teal canvas */
+  --wasl-sidebar-bg: #111a1d;          /* charcoal-teal sidebar */
 
   --background: oklch(0.09 0.005 70);
   --foreground: oklch(0.96 0.02 40);          /* brighter text for contrast */
@@ -2618,10 +2628,12 @@ kbd {
 
 /* ---- Premium dark mode refinements ---- */
 .dark {
-  --wasl-bubble-out: #1a3a3a;
-  --wasl-bubble-in: #1f2c34;
-  --wasl-chat-bg: #0b141a;
-  --wasl-sidebar-bg: #111b21;
+  --wasl-bubble-out: #0e6e60;
+  --wasl-bubble-out-2: #0a5751;
+  --wasl-bubble-out-text: #eafffa;
+  --wasl-bubble-in: #1d282e;
+  --wasl-chat-bg: #0d1418;
+  --wasl-sidebar-bg: #10181d;
   /* Premium dark mode: richer blacks, not pure black */
   --background: oklch(0.13 0.005 142.5);
   --card: oklch(0.15 0.006 142.5);
@@ -3999,3 +4011,469 @@ button.w-full:hover {
   .wasl-reaction-anim { animation: none !important; }
   .wasl-translate-result { animation: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURORA v2 — TOTAL CHAT UI UPSCALE (Cirkle Aurora design language)
+   Modern messenger surface system:
+   • Cool porcelain canvas with soft aurora mesh (no more beige)
+   • Outgoing bubbles: deep teal GRADIENT with crisp white text
+   • Incoming bubbles: elevated white surface with layered soft shadows
+   • Glassmorphic header, frosted date pills, floating glass composer
+   • Spring-physics micro-interactions, zero-horizontal-clip entrances
+   This layer intentionally sits LAST in the cascade so it wins all
+   specificity ties against the legacy definitions above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Bubble system ───────────────────────────────────────────────────── */
+.wasl-bubble-out {
+  background: linear-gradient(135deg, var(--wasl-bubble-out) 0%, var(--wasl-bubble-out-2) 100%) !important;
+  color: var(--wasl-bubble-out-text) !important;
+  border-radius: 18px 18px 4px 18px !important;
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--wasl-bubble-out-2) 30%, transparent),
+    0 4px 14px color-mix(in oklab, var(--wasl-bubble-out-2) 22%, transparent) !important;
+}
+.dark .wasl-bubble-out {
+  color: var(--wasl-bubble-out-text) !important;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 18px color-mix(in oklab, var(--wasl-bubble-out-2) 38%, transparent) !important;
+}
+.wasl-bubble-in {
+  background: var(--wasl-bubble-in) !important;
+  color: var(--foreground) !important;
+  border-radius: 18px 18px 18px 4px !important;
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--foreground) 7%, transparent),
+    0 3px 10px color-mix(in oklab, var(--foreground) 6%, transparent) !important;
+}
+.dark .wasl-bubble-in {
+  color: #e9edef !important;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+/* Grouped (consecutive same sender) — WhatsApp-style tightened corners */
+.wasl-bubble-grouped-out {
+  border-radius: 18px 6px 6px 18px !important;
+}
+.wasl-bubble-grouped-in {
+  border-radius: 6px 18px 18px 6px !important;
+}
+/* Grouped without tail keeps smooth outer edge; tail only on group end */
+.wasl-bubble-out.wasl-bubble-grouped:not(.wasl-bubble-tail-out) {
+  border-bottom-right-radius: 6px !important;
+}
+.wasl-bubble-in.wasl-bubble-grouped:not(.wasl-bubble-tail-in) {
+  border-bottom-left-radius: 6px !important;
+}
+
+/* Bubble hover glow — teal aura on outgoing, lift on incoming */
+.group\/msg:hover > div > .wasl-bubble-out {
+  box-shadow:
+    0 2px 4px color-mix(in oklab, var(--wasl-bubble-out-2) 30%, transparent),
+    0 8px 22px color-mix(in oklab, var(--wasl-bubble-out) 35%, transparent) !important;
+  transition: box-shadow 0.25s var(--wasl-ease);
+}
+.group\/msg:hover > div > .wasl-bubble-in {
+  box-shadow:
+    0 2px 4px color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 6px 18px color-mix(in oklab, var(--foreground) 9%, transparent) !important;
+  transition: box-shadow 0.25s var(--wasl-ease);
+}
+
+/* ── 2. Bubble tails matched to gradient end color ──────────────────────── */
+.wasl-bubble-tail-out::after {
+  background: var(--wasl-bubble-out-2) !important;
+}
+.wasl-bubble-tail-in::after {
+  background: var(--wasl-bubble-in) !important;
+}
+
+/* ── 3. Inside-bubble content contrast (on the teal gradient) ───────────── */
+/* Utility color overrides — ANY muted/foreground-% utility inside an
+   outgoing bubble gets remapped to translucent white so meta rows,
+   card headers and timestamps stay readable on the teal gradient.
+   Specificity (0,2,0) + !important beats the single-class utilities. */
+.wasl-bubble-out .text-muted-foreground {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 88%, transparent) !important;
+}
+.wasl-bubble-out .text-foreground\/50 {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 78%, transparent) !important;
+}
+.wasl-bubble-out .text-foreground\/60 {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 80%, transparent) !important;
+}
+.wasl-bubble-out .text-foreground\/70 {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 84%, transparent) !important;
+}
+.wasl-bubble-out .hover\:text-foreground:hover {
+  color: var(--wasl-bubble-out-text) !important;
+}
+/* Muted meta (timestamps, delivered ticks) on outgoing gradient */
+.wasl-bubble-out .wasl-meta-muted {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 78%, transparent) !important;
+}
+/* Base (non-bubble) colors for the tick markers so they stay correct
+   wherever StatusTicks renders outside a gradient bubble. */
+.wasl-ticks-read { color: var(--wasl-teal); }
+.dark .wasl-ticks-read { color: var(--wasl-green); }
+.wasl-ticks-muted { color: color-mix(in oklab, var(--foreground) 50%, transparent); }
+/* Read ticks — bright mint on the gradient */
+.wasl-bubble-out .wasl-ticks-read { color: #c9fff3 !important; }
+.wasl-bubble-out .wasl-ticks-muted { color: color-mix(in oklab, var(--wasl-bubble-out-text) 80%, transparent) !important; }
+/* Read-by-all pulse keeps its mint glow */
+.wasl-bubble-out .wasl-ticks-read-all { filter: drop-shadow(0 0 4px rgba(180, 255, 235, 0.6)); }
+/* Bold + italic inherit white on outgoing */
+.wasl-bubble-out strong { color: var(--wasl-bubble-out-text); }
+/* Inline code chip on gradient */
+.wasl-bubble-out code {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: var(--wasl-bubble-out-text) !important;
+}
+/* Markdown links on gradient — light mint, always readable */
+.wasl-bubble-out .wasl-md-link {
+  color: #d6fff5 !important;
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+.wasl-bubble-out .wasl-md-link:hover { text-decoration-color: rgba(255, 255, 255, 0.9); }
+/* Reply quote card inside outgoing bubble */
+.wasl-bubble-out .wasl-reply-quote {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-left-color: rgba(255, 255, 255, 0.65) !important;
+}
+.wasl-bubble-out .wasl-reply-quote:hover { background: rgba(255, 255, 255, 0.22) !important; }
+.wasl-bubble-out .wasl-reply-quote .wasl-reply-name {
+  color: #d6fff5 !important;
+}
+.wasl-bubble-out .wasl-reply-quote .wasl-reply-text {
+  color: color-mix(in oklab, var(--wasl-bubble-out-text) 82%, transparent) !important;
+}
+/* "edited" label on gradient */
+.wasl-bubble-out .wasl-edited-label { color: color-mix(in oklab, var(--wasl-bubble-out-text) 75%, transparent) !important; }
+.wasl-bubble-out .wasl-edited-label:hover { color: var(--wasl-bubble-out-text) !important; }
+/* Translate pill on gradient — inverted glass */
+.wasl-bubble-out .wasl-translate-pill {
+  color: var(--wasl-bubble-out-text) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+.wasl-bubble-out .wasl-translate-pill:hover { background: rgba(255, 255, 255, 0.25) !important; }
+.wasl-bubble-out .wasl-translate-result {
+  color: var(--wasl-bubble-out-text) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-left-color: rgba(255, 255, 255, 0.65) !important;
+}
+/* Voice player surface on gradient */
+.wasl-bubble-out .wasl-voice-wave .wasl-waveform-bar { background: rgba(255, 255, 255, 0.45); }
+.wasl-bubble-out .wasl-voice-wave .wasl-waveform-bar.wasl-waveform-active { background: #ffffff; }
+
+/* ── 4. Aurora mesh canvas — default wallpaper ──────────────────────────── */
+.wasl-chat-pattern {
+  background-image:
+    radial-gradient(1100px 700px at 88% -8%,
+      color-mix(in oklab, var(--wasl-green) 11%, transparent) 0%, transparent 60%),
+    radial-gradient(1000px 720px at -12% 108%,
+      color-mix(in oklab, var(--wasl-teal) 10%, transparent) 0%, transparent 58%),
+    radial-gradient(820px 560px at 108% 88%,
+      color-mix(in oklab, var(--cirkle-rose, #c25a6e) 6%, transparent) 0%, transparent 55%),
+    radial-gradient(700px 500px at 45% 48%,
+      color-mix(in oklab, var(--wasl-green) 4%, transparent) 0%, transparent 55%) !important;
+  background-size: auto !important;
+  background-attachment: fixed;
+}
+.dark .wasl-chat-pattern {
+  background-image:
+    radial-gradient(1100px 700px at 88% -8%,
+      color-mix(in oklab, var(--wasl-green) 9%, transparent) 0%, transparent 60%),
+    radial-gradient(1000px 720px at -12% 108%,
+      color-mix(in oklab, var(--wasl-teal) 12%, transparent) 0%, transparent 58%),
+    radial-gradient(820px 560px at 108% 88%,
+      color-mix(in oklab, var(--cirkle-rose, #c25a6e) 5%, transparent) 0%, transparent 55%) !important;
+}
+
+/* ── 5. Frosted glass date pill + unread divider ─────────────────────────── */
+.wasl-date-pill {
+  background: color-mix(in oklab, var(--background) 62%, transparent) !important;
+  color: var(--muted-foreground) !important;
+  backdrop-filter: blur(16px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.6) !important;
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent) !important;
+  border-radius: 999px !important;
+  padding: 4px 14px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  box-shadow: 0 2px 10px color-mix(in oklab, var(--foreground) 8%, transparent) !important;
+}
+.dark .wasl-date-pill {
+  background: color-mix(in oklab, var(--background) 55%, transparent) !important;
+  border-color: color-mix(in oklab, var(--foreground) 10%, transparent) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ── 6. Entrance animations — vertical rise, zero horizontal clip ────────── */
+@keyframes wasl-bubble-in-left {
+  0%   { opacity: 0 !important; transform: translateY(10px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wasl-bubble-in-right {
+  0%   { opacity: 0 !important; transform: translateY(10px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wasl-bubble-enter-left,
+.wasl-bubble-enter-right {
+  animation-duration: 0.28s;
+}
+
+/* ── 7. Glassmorphic chat header v2 ─────────────────────────────────────── */
+.wasl-chat-header {
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  background: color-mix(in oklab, var(--background) 72%, transparent) !important;
+  border-bottom: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent) !important;
+  box-shadow: 0 1px 12px color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+.dark .wasl-chat-header {
+  background: color-mix(in oklab, var(--background) 68%, transparent) !important;
+  box-shadow: 0 1px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* ── 8. Floating glass composer v2 ──────────────────────────────────────── */
+.wasl-composer-v2 {
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid color-mix(in oklab, var(--foreground) 9%, transparent);
+  box-shadow:
+    0 2px 6px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 12px 32px color-mix(in oklab, var(--foreground) 10%, transparent);
+  transition: box-shadow 0.25s var(--wasl-ease), border-color 0.25s var(--wasl-ease);
+}
+.dark .wasl-composer-v2 {
+  background: color-mix(in oklab, var(--background) 80%, transparent);
+  border-color: color-mix(in oklab, var(--foreground) 12%, transparent);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.wasl-composer-v2:focus-within {
+  border-color: color-mix(in oklab, var(--wasl-green) 45%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--wasl-green) 14%, transparent),
+    0 2px 6px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 14px 36px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+/* Send button — teal gradient orb with glow (Aurora v2 signature) */
+.wasl-send-btn {
+  background: linear-gradient(135deg, var(--wasl-green) 0%, var(--wasl-bubble-out-2) 100%);
+  box-shadow:
+    0 2px 8px color-mix(in oklab, var(--wasl-green) 45%, transparent),
+    0 4px 14px color-mix(in oklab, var(--wasl-green) 30%, transparent);
+}
+.wasl-send-btn:hover {
+  background: linear-gradient(135deg, color-mix(in oklab, var(--wasl-green) 92%, white) 0%, var(--wasl-bubble-out-2) 100%);
+  box-shadow:
+    0 3px 10px color-mix(in oklab, var(--wasl-green) 55%, transparent),
+    0 6px 18px color-mix(in oklab, var(--wasl-green) 35%, transparent);
+  transform: translateY(-1px);
+}
+.dark .wasl-send-btn {
+  box-shadow:
+    0 2px 8px color-mix(in oklab, var(--wasl-green) 40%, transparent),
+    0 4px 16px color-mix(in oklab, var(--wasl-green) 25%, transparent);
+}
+
+/* ── 9. Typing indicator bubble v2 ──────────────────────────────────────── */
+.wasl-typing-bubble {
+  background: var(--wasl-bubble-in);
+  border-radius: 18px 18px 18px 4px;
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--foreground) 7%, transparent),
+    0 3px 10px color-mix(in oklab, var(--foreground) 6%, transparent);
+  padding: 10px 14px;
+}
+
+/* ── 10. Scroll-to-bottom glass FAB ──────────────────────────────────────── */
+.wasl-scroll-bottom-btn {
+  background: color-mix(in oklab, var(--background) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow:
+    0 2px 6px color-mix(in oklab, var(--foreground) 8%, transparent),
+    0 8px 24px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.wasl-scroll-bottom-btn:hover {
+  background: color-mix(in oklab, var(--background) 95%, transparent);
+  transform: translateY(-1px);
+}
+.dark .wasl-scroll-bottom-btn {
+  background: color-mix(in oklab, var(--background) 75%, transparent);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ── 11. System bubble — centered frosted glass ──────────────────────────── */
+.wasl-bubble-system {
+  background: color-mix(in oklab, var(--background) 62%, transparent) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+  color: var(--muted-foreground) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 1px 6px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* ── 12. Reaction pills v2 — floating glass chips ────────────────────────── */
+.wasl-reaction-pill {
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.wasl-reaction-pill:hover { transform: translateY(-1px); }
+
+/* ── 13. Protected bubble — refined security aura ────────────────────────── */
+.wasl-protected-bubble {
+  outline: 1.5px solid color-mix(in oklab, var(--wasl-green) 35%, transparent);
+  outline-offset: 2px;
+}
+.dark .wasl-protected-bubble {
+  outline-color: color-mix(in oklab, var(--wasl-green) 45%, transparent);
+}
+
+/* ── 14. Slim refined scrollbar ──────────────────────────────────────────── */
+.wasl-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.wasl-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+.wasl-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
+/* ── 15. Reduced motion — Aurora v2 compliance ──────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-bubble-enter-left,
+  .wasl-bubble-enter-right { animation: none !important; }
+  .wasl-scroll-bottom-btn:hover { transform: none; }
+  .wasl-reaction-pill:hover { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AURORA v2 — SIDEBAR (chat screen) upscale
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 16. Sidebar header — premium duotone with sheen + hairline ─────────── */
+.wasl-sidebar-header-v2 {
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 10px rgba(0, 0, 0, 0.18);
+}
+.wasl-sidebar-header-v2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in oklab, var(--wasl-green) 55%, transparent) 30%,
+    color-mix(in oklab, var(--cirkle-gold, #c2a060) 35%, transparent) 70%,
+    transparent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+/* Cirkle hero header — deeper, more premium mix (kept recognizable) */
+.wasl-gradient-hero-cirkle {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklab, var(--cirkle-gold) 22%, transparent) 0%, transparent 50%),
+    linear-gradient(135deg, #143c48 0%, #1a4a5a 48%, #123843 100%) !important;
+}
+
+/* ── 17. Conversation rows — floating card rhythm ────────────────────────── */
+.wasl-conv-card {
+  border-radius: 16px !important;
+  padding: 10px 12px !important;
+}
+.wasl-conv-row:not(.wasl-conv-card-active):hover {
+  background: color-mix(in oklab, var(--foreground) 4.5%, transparent) !important;
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 10px color-mix(in oklab, var(--foreground) 7%, transparent) !important;
+}
+.dark .wasl-conv-row:not(.wasl-conv-card-active):hover {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35) !important;
+}
+/* Active row — teal tint + left accent + soft glow */
+.wasl-conv-card-active {
+  background: linear-gradient(100deg,
+    color-mix(in oklab, var(--wasl-green) 14%, transparent) 0%,
+    color-mix(in oklab, var(--wasl-green) 6%, transparent) 55%,
+    transparent 100%) !important;
+  border-color: color-mix(in oklab, var(--wasl-green) 22%, transparent) !important;
+  box-shadow:
+    inset 3px 0 0 var(--wasl-green),
+    0 2px 12px color-mix(in oklab, var(--wasl-green) 14%, transparent) !important;
+}
+.dark .wasl-conv-card-active {
+  box-shadow:
+    inset 3px 0 0 var(--wasl-green),
+    0 2px 14px rgba(0, 0, 0, 0.35) !important;
+}
+/* Unread badge — glowing teal orb */
+.wasl-badge-bounce {
+  box-shadow: 0 2px 10px color-mix(in oklab, var(--wasl-green) 45%, transparent);
+  background-image: linear-gradient(135deg, var(--wasl-green), var(--wasl-bubble-out-2));
+}
+/* Unread conversation name — bump weight */
+.wasl-conv-name-unread { font-weight: 700 !important; }
+
+/* ── 18. Filter tabs — modern segmented pill control ─────────────────────── */
+.wasl-tab-bar {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent) !important;
+  border-radius: 999px !important;
+  padding: 4px !important;
+  margin: 8px 10px 6px !important;
+  border-bottom: 0 !important;
+}
+.wasl-tab-item {
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  padding: 5px 13px !important;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  transition: all 0.2s var(--wasl-ease);
+}
+.wasl-tab-item:hover:not(.wasl-tab-item-active) {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+.wasl-tab-item-active {
+  background: linear-gradient(135deg, var(--wasl-green), var(--wasl-bubble-out-2)) !important;
+  color: #fff !important;
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--wasl-green) 35%, transparent),
+    0 3px 10px color-mix(in oklab, var(--wasl-green) 30%, transparent) !important;
+}
+.wasl-tab-item-active span { color: #fff !important; background: rgba(255, 255, 255, 0.22) !important; }
+
+/* ── 19. Reduced motion — sidebar compliance ────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .wasl-conv-row:not(.wasl-conv-card-active):hover { transform: none !important; }
+}
+
+/* ── 20. PWA install banner — never cover the floating composer on mobile ── */
+@media (max-width: 767px) {
+  .wasl-pwa-banner { bottom: 118px !important; }
+}
+
+
+

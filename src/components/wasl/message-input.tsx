@@ -545,7 +545,11 @@ export function MessageInput({
   }
 
   return (
-    <div className="relative bg-[var(--wasl-chat-bg)] px-2 sm:px-4 py-2 border-t border-border/60">
+    <div className="relative bg-gradient-to-t from-[var(--wasl-chat-bg)] via-[var(--wasl-chat-bg)]/85 to-transparent px-2.5 sm:px-4 pt-1.5 pb-2 sm:pb-3">
+      {/* Aurora v2 — floating glass composer card. The reply preview, action
+          buttons, textarea and send button all live on one elevated glass
+          surface with a layered shadow and a teal focus halo. */}
+      <div className="wasl-composer-v2 rounded-3xl p-1.5 sm:p-2 max-w-4xl mx-auto">
       {/* Reply preview bar — WhatsApp/Telegram-style quote preview that
           appears above the toolbar row whenever `replyTo` is set in the store.
           Clicking the bar (or pressing Enter/Space when focused) scrolls the
@@ -568,7 +572,7 @@ export function MessageInput({
             }
           }}
           title="Jump to original message"
-          className="wasl-reply-banner-in mb-2 mx-1 flex items-start gap-2 bg-muted/40 dark:bg-[var(--wasl-sidebar-bg)] rounded-lg p-2 shadow-sm border-y border-r border-border cursor-pointer hover:bg-muted/60 dark:hover:bg-[var(--wasl-sidebar-bg)]/80 transition-colors"
+          className="wasl-reply-banner-in mb-1.5 mx-1 flex items-start gap-2 bg-muted/40 dark:bg-[var(--wasl-sidebar-bg)] rounded-xl p-2 cursor-pointer hover:bg-muted/60 dark:hover:bg-[var(--wasl-sidebar-bg)]/80 transition-colors"
           style={{ borderLeft: '3px solid var(--wasl-green)' }}
         >
           <CornerUpLeft className="w-4 h-4 mt-0.5 text-[var(--wasl-green)] shrink-0" />
@@ -600,7 +604,7 @@ export function MessageInput({
         </div>
       )}
 
-      <div className="flex items-end gap-1 sm:gap-2 max-w-4xl mx-auto overflow-x-auto wasl-scroll sm:overflow-visible pb-1 sm:pb-0">
+      <div className="flex items-end gap-0.5 sm:gap-1 max-w-4xl mx-auto overflow-x-auto wasl-scroll sm:overflow-visible pb-0.5 sm:pb-0">
         {/* Emoji button */}
         <div className="relative shrink-0">
           <button
@@ -860,8 +864,9 @@ export function MessageInput({
           </div>
         )}
 
-        {/* Textarea */}
-        <div className="flex-1 bg-white dark:bg-[var(--wasl-sidebar-bg)] rounded-2xl shadow-sm border border-border/60 px-3 py-1.5 relative wasl-input-premium">
+        {/* Textarea — Aurora v2: transparent inner surface; the outer glass
+            card (wasl-composer-v2) provides the elevated pill look. */}
+        <div className="flex-1 bg-transparent rounded-xl px-2.5 py-1.5 relative wasl-input-premium">
 
           {/* Slash-command palette (from Cirkle blueprint) */}
           {showSlash && (
@@ -1031,8 +1036,8 @@ export function MessageInput({
             className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 text-white wasl-tap-scale',
               value.trim()
-                ? 'bg-[var(--wasl-green)] hover:bg-[var(--wasl-green-dark)] wasl-send-pulse shadow-md shadow-[var(--wasl-green)]/30'
-                : 'bg-gray-400 hover:bg-gray-500',
+                ? 'wasl-send-btn wasl-send-pulse'
+                : 'bg-foreground/15 dark:bg-white/10 hover:bg-foreground/25 dark:hover:bg-white/20',
               whoosh && 'wasl-whoosh'
             )}
             title={value.trim() ? 'Send' : 'Record voice message'}
@@ -1045,6 +1050,7 @@ export function MessageInput({
             )}
           </button>
         )}
+      </div>
       </div>
     </div>
   )

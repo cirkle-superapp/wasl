@@ -375,7 +375,7 @@ export function VoicePlayer({
                     backgroundColor: active
                       ? accentColor
                       : mine
-                      ? 'color-mix(in oklab, var(--foreground) 30%, transparent)'
+                      ? 'color-mix(in oklab, #ffffff 42%, transparent)'
                       : 'color-mix(in oklab, var(--foreground) 22%, transparent)',
                     animationDelay: `${(i % 5) * 0.08}s`,
                   }}

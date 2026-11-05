@@ -910,7 +910,7 @@ export function MessageBubble({
                 )
               }
               title="Jump to original message"
-              className="block w-full text-left rounded-md mb-1 px-2 py-1 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10 transition-colors border-l-[3px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wasl-green)]/40"
+              className="wasl-reply-quote block w-full text-left rounded-md mb-1 px-2 py-1 bg-muted/30 dark:bg-white/5 hover:bg-muted/50 dark:hover:bg-white/10 transition-colors border-l-[3px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wasl-green)]/40"
               style={{
                 borderLeftColor: mine
                   ? 'var(--wasl-green)'
@@ -918,7 +918,7 @@ export function MessageBubble({
               }}
             >
               <div
-                className="text-[11px] font-semibold leading-tight"
+                className="wasl-reply-name text-[11px] font-semibold leading-tight"
                 style={{
                   color: mine ? 'var(--wasl-green)' : 'var(--wasl-teal)',
                 }}
@@ -927,7 +927,7 @@ export function MessageBubble({
                   ? 'You'
                   : replyToSenderName || 'Original message'}
               </div>
-              <div className="text-xs text-muted-foreground truncate leading-snug">
+              <div className="wasl-reply-text text-xs text-muted-foreground truncate leading-snug">
                 {replyTo.content}
               </div>
             </button>
@@ -994,6 +994,11 @@ export function MessageBubble({
               {isHighlighted
                 ? highlightText(message.content, highlightQuery)
                 : renderMarkdownLite(message.content)}
+              {/* WhatsApp-style trailing spacer — reserves a visual gap between
+                  the last text line and the floated timestamp meta span so
+                  they never read as one run-on line. Four non-breaking spaces
+                  ≈ 60% of the timestamp width at 10px. */}
+              {'\u00A0\u00A0\u00A0\u00A0'}
               {/* Inline translation (Task 96 — Telegram/WhatsApp competitor feature)
                   Shows a "Translate" pill below incoming messages that might be in
                   a foreign language. Only appears on INCOMING text messages (not
@@ -1045,7 +1050,7 @@ export function MessageBubble({
                       e.stopPropagation()
                       setEditHistoryOpen(true)
                     }}
-                    className="inline-flex items-center gap-0.5 italic hover:text-foreground transition-colors cursor-pointer"
+                    className="wasl-edited-label inline-flex items-center gap-0.5 italic hover:text-foreground transition-colors cursor-pointer"
                     title="Edited — click to view edit history"
                   >
                     <Pencil className="w-[10px] h-[10px] inline -mt-px" aria-hidden />
@@ -1561,22 +1566,22 @@ function StatusTicks({
   if (isReadAll) {
     title = 'Read by all'
     tickColorClass =
-      'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] wasl-ticks-read-all'
+      'wasl-ticks-read wasl-ticks-read-all'
     label = 'Read by all'
   } else if (isPartialRead) {
     title = `Read by ${readCount} of ${totalRecipients}`
-    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+    tickColorClass = 'wasl-ticks-read'
     label = `${readCount}/${totalRecipients}`
   } else if (status === 'read') {
     // Legacy "read" status without a readCount summary (1-on-1 chats where
     // the server didn't populate the summary, or older messages). Per the
     // design rules, we use the wasl-teal/green palette — never blue/indigo.
     title = 'Read — click to see details'
-    tickColorClass = 'text-[var(--wasl-teal)] dark:text-[var(--wasl-green)]'
+    tickColorClass = 'wasl-ticks-read'
   } else {
     // Delivered (no reads yet).
     title = 'Delivered'
-    tickColorClass = 'text-foreground/50'
+    tickColorClass = 'wasl-ticks-muted'
   }
 
   const ticksEl = (
@@ -1588,7 +1593,7 @@ function StatusTicks({
   // count badge. Both are intentionally tiny (text-[9px]) and muted so they
   // stay unobtrusive next to the timestamp.
   const labelEl = label ? (
-    <span className="text-[9px] font-medium leading-none text-foreground/50 ml-0.5 select-none">
+    <span className="wasl-ticks-muted text-[9px] font-medium leading-none text-foreground/50 ml-0.5 select-none">
       {label}
     </span>
   ) : null

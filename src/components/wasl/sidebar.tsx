@@ -320,22 +320,22 @@ export function Sidebar({
 
   return (
     <div className="h-full flex flex-col bg-[var(--wasl-sidebar-bg)]">
-      {/* Header */}
+      {/* Header — Aurora v2: deep teal duotone with top sheen + hairline */}
       <div
         className={cn(
-          'text-white px-4 py-3 flex items-center justify-between gap-2 wasl-header-animated',
+          'relative text-white px-4 py-3 flex items-center justify-between gap-2 wasl-header-animated wasl-sidebar-header-v2',
           isCirkle ? 'wasl-gradient-hero-cirkle' : 'bg-[var(--wasl-teal)]'
         )}
         style={!isCirkle ? {
-          background: 'linear-gradient(135deg, var(--wasl-teal) 0%, var(--wasl-teal-dark) 50%, var(--wasl-teal) 100%)',
-          backgroundSize: '200% 200%',
+          background: 'linear-gradient(135deg, #17505e 0%, var(--wasl-teal) 42%, var(--wasl-teal-dark) 100%)',
+          backgroundSize: '180% 180%',
         } : undefined}
       >
-        <div className="flex items-center gap-2 min-w-0 text-white">
+        <div className="flex items-center gap-2.5 min-w-0 text-white">
           <WaslLogo size={36} animated monochrome={!isCirkle} />
           <div className="flex flex-col leading-none">
-            <div className="font-display text-lg font-semibold truncate wasl-text-gradient">Wasl</div>
-            <span className="font-arabic text-[9px] tracking-[0.3em] uppercase text-white/50 mt-0.5">دواير</span>
+            <div className="font-display text-lg font-semibold tracking-tight truncate text-white drop-shadow-sm">Wasl</div>
+            <span className="font-arabic text-[9px] tracking-[0.3em] uppercase text-white/55 mt-0.5">دواير</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -489,41 +489,34 @@ export function Sidebar({
         <FocusModeToggle />
       </div>
 
-      {/* Official Announcements + Contacts buttons */}
-      <div className="px-3 pt-2 bg-[var(--wasl-sidebar-bg)] space-y-1.5">
+      {/* Aurora v2 quick-access chips — one compact row instead of three
+          tall stacked cards. Same actions, 1/3 of the vertical space. */}
+      <div className="px-3 pt-2.5 pb-0.5 bg-[var(--wasl-sidebar-bg)] flex items-center gap-1.5">
         <button
           onClick={() => setAnnouncementsOpen(true)}
-          className="w-full flex items-center gap-2 p-2 rounded-lg border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/5 hover:bg-[var(--wasl-green)]/10 transition-colors text-left"
+          className="group/chip flex-1 min-w-0 flex items-center justify-center gap-1.5 p-2 rounded-xl border border-[var(--wasl-green)]/20 bg-[var(--wasl-green)]/[0.06] hover:bg-[var(--wasl-green)]/12 hover:border-[var(--wasl-green)]/35 transition-all text-left"
+          title="Official Announcements — Government · Banks · Utilities"
         >
           <WaslAnnounce className="w-4 h-4 text-[var(--wasl-green)] shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-foreground">Official Announcements</div>
-            <div className="text-[10px] text-muted-foreground">Government · Banks · Utilities</div>
-          </div>
+          <span className="text-[11px] font-medium text-foreground truncate">Updates</span>
         </button>
         <button
           onClick={() => setContactsOpen(true)}
-          className="w-full flex items-center gap-2 p-2 rounded-lg border border-border/40 hover:bg-muted/40 transition-colors text-left"
+          className="group/chip flex-1 min-w-0 flex items-center justify-center gap-1.5 p-2 rounded-xl border border-border/50 hover:bg-muted/50 hover:border-border transition-all text-left"
+          title="Contacts — address book"
         >
           <WaslContact className="w-4 h-4 text-[var(--wasl-teal)] dark:text-[var(--wasl-green)] shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-foreground">Contacts</div>
-            <div className="text-[10px] text-muted-foreground">Address book</div>
-          </div>
+          <span className="text-[11px] font-medium text-foreground truncate">Contacts</span>
         </button>
         <button
           onClick={() => setBookmarksOpen(true)}
-          className="w-full flex items-center gap-2 p-2 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+          className="group/chip flex-1 min-w-0 flex items-center justify-center gap-1.5 p-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] hover:bg-amber-500/12 hover:border-amber-500/45 transition-all text-left"
+          title="Bookmarks — save for later"
         >
           <WaslBookmark className="w-4 h-4 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-foreground">Bookmarks</div>
-            <div className="text-[10px] text-muted-foreground">
-              Save for later
-            </div>
-          </div>
+          <span className="text-[11px] font-medium text-foreground truncate">Bookmarks</span>
           {bookmarksCount > 0 && (
-            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-500 text-white">
+            <span className="shrink-0 text-[10px] min-w-[18px] h-[18px] px-1 rounded-full font-semibold bg-amber-500 text-white flex items-center justify-center">
               {bookmarksCount > 99 ? '99+' : bookmarksCount}
             </span>
           )}
@@ -840,8 +833,8 @@ function ConversationRow({
     <div
       onClick={onClick}
       className={cn(
-        'group relative flex items-center gap-3 cursor-pointer border-b border-border/60',
-        'wasl-conv-card wasl-conv-row',
+        'group relative flex items-center gap-3 cursor-pointer',
+        'wasl-conv-card wasl-conv-row mx-1.5 my-[3px] rounded-2xl',
         index < 6 && `wasl-anim-slide-up wasl-stagger-${index + 1}`,
         active
           ? 'wasl-conv-card-active'
