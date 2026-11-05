@@ -635,14 +635,29 @@ export function ChatApp({ user }: { user: any }) {
 // ---------------------------------------------------------------------------
 
 function JoinViaInviteDialog() {
+  // Client-mount gate — renders nothing during SSR AND the client's first
+  // render, then reads the URL after mount. Why: `useSearchParams()` inside
+  // the SSR stream is an async hydration wildcard — in dev its suspension can
+  // interleave with the hydration walk and shift React's useId treeIds,
+  // producing "server rendered HTML didn't match" warnings for unrelated
+  // Radix components (dropdown menus, etc). The join dialog only matters on
+  // client interactions, so a one-frame mount delay is imperceptible.
+  const [mounted, setMounted] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-mount flag
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+  return <JoinViaInviteDialogInner />
+}
+
+function JoinViaInviteDialogInner() {
   const searchParams = useSearchParams()
   const token = searchParams.get('join')
 
   if (!token) return null
-  return <JoinViaInviteDialogInner key={token} token={token} />
+  return <JoinViaInviteDialogBody key={token} token={token} />
 }
 
-function JoinViaInviteDialogInner({ token }: { token: string }) {
+function JoinViaInviteDialogBody({ token }: { token: string }) {
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -739,9 +754,8 @@ function JoinViaInviteDialogInner({ token }: { token: string }) {
         <div className="rounded-md bg-muted/40 border border-border/60 p-2.5 text-xs text-muted-foreground flex items-center gap-2">
           <Users className="w-3.5 h-3.5 shrink-0" />
           <code className="break-all">
-            {typeof window !== 'undefined'
-              ? `${window.location.origin}/?join=${token}`
-              : `/?join=${token}`}
+            {/* Client-mounted only — window is always available here. */}
+            {`${window.location.origin}/?join=${token}`}
           </code>
         </div>
         <DialogFooter>

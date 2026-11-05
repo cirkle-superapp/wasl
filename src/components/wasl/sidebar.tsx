@@ -85,6 +85,16 @@ export function Sidebar({
     onlineUserIds,
   } = useWaslStore()
   const [search, setSearch] = useState('')
+  // Hydration safety: Radix DropdownMenus call React's useId, and in dev the
+  // async page boundary (await getSession()) can hydrate in a deferred wave,
+  // recomputing useId treeIds in a different order and producing
+  // "server rendered HTML didn't match" warnings for these menus (known
+  // ecosystem issue: radix-ui/primitives#3700). The menus below render
+  // pixel-identical disabled placeholders during SSR and mount one tick
+  // after hydration — removing their ids from the hydration comparison
+  // entirely. Menus require a click anyway, so the swap is imperceptible.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
   const [filter, setFilter] = useState<'all' | 'unread' | 'groups' | 'priority'>('all')
   const [loading, setLoading] = useState(true)
   const [phoneNumbersOpen, setPhoneNumbersOpen] = useState(false)
@@ -231,13 +241,22 @@ export function Sidebar({
     return true
   })
 
-  // Client-side conversation pinning (stored in localStorage)
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => {
+  // Client-side conversation pinning (stored in localStorage).
+  // IMPORTANT (hydration safety): start from an empty set on both the server
+  // and the client's FIRST render — reading localStorage inside a useState
+  // initializer makes the client's first render differ from SSR (React then
+  // regenerates Radix useIds via hydration mismatch-recovery). The stored
+  // pins are applied in the mount effect below, well before the conversation
+  // list finishes loading, so pinning behavior is unchanged.
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => new Set())
+
+  // Hydrate persisted pins once on mount (client-only).
+  useEffect(() => {
     try {
       const stored = localStorage.getItem('wasl-pinned-conversations')
-      return stored ? new Set(JSON.parse(stored)) : new Set()
-    } catch { return new Set() }
-  })
+      if (stored) setPinnedIds(new Set(JSON.parse(stored)))
+    } catch { /* ignore corrupted storage */ }
+  }, [])
 
   function togglePin(id: string) {
     setPinnedIds((prev) => {
@@ -361,18 +380,27 @@ export function Sidebar({
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title="Toggle theme"
           >
-            {theme === 'dark' ? (
-              <Sun className="w-5 h-5" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
+            {/* Hydration-safe icon swap: render BOTH icons and let CSS pick
+                the right one. next-themes' inline <head> script applies the
+                `dark` class to <html> BEFORE hydration, so server and client
+                markup are identical (useTheme() is `undefined` on the server
+                but reads localStorage on the client's first render — a
+                conditional icon would force React into hydration
+                mismatch-recovery and regenerate every Radix useId on the
+                page, producing "attributes of the server rendered HTML
+                didn't match" console errors). */}
+            <Sun className="hidden dark:block w-5 h-5" />
+            <Moon className="block dark:hidden w-5 h-5" />
           </Button>
+          {mounted ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
                 className="text-white hover:bg-white/10 hover:text-white"
+                title="More options"
+                aria-label="Open menu"
               >
                 <MoreVertical className="w-5 h-5" />
               </Button>
@@ -420,6 +448,18 @@ export function Sidebar({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white hover:bg-white/10 hover:text-white"
+              aria-hidden
+              tabIndex={-1}
+              disabled
+            >
+              <MoreVertical className="w-5 h-5" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -654,6 +694,7 @@ export function Sidebar({
         </button>
         {/* Portal quick-switcher — opens a dropdown to switch between the
             user's portals without opening the full phone-numbers dialog. */}
+        {mounted ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -707,6 +748,17 @@ export function Sidebar({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        ) : (
+          <button
+            type="button"
+            className="p-2 rounded-lg text-muted-foreground hover:text-[var(--wasl-green)] hover:bg-muted transition-colors shrink-0"
+            aria-hidden
+            tabIndex={-1}
+            disabled
+          >
+            <Phone className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <PhoneNumbersDialog open={phoneNumbersOpen} onOpenChange={setPhoneNumbersOpen} />
