@@ -23,6 +23,8 @@ import {
   BarChart3,
   Heart,
   Send,
+  Languages,
+  Check as CheckIcon,
 } from 'lucide-react'
 import { WaslAvatar, WaslGroupAvatar } from './wasl-avatar'
 import { WaslLogo } from './wasl-logo'
@@ -35,6 +37,7 @@ import { SmartReplyChips } from './smart-reply-chips'
 import { ScheduleDialog } from './schedule-dialog'
 import { ScheduleBatchDialog } from './schedule-batch-dialog'
 import { SmartChatMenu } from './smart-chat-menu'
+import { AutoTranslateToggle } from './auto-translate-toggle'
 import { MessageEffect, type EffectType } from './message-effects'
 import {
   WaslVideoCall,
@@ -596,9 +599,20 @@ export function ChatWindow({
         throw new Error('Failed to send')
       }
       const msg: ChatMessage = await res.json()
-      if (messageIdsRef.current.has(msg.id)) return
-      messageIdsRef.current.add(msg.id)
-      addMessage(activeConversationId, msg)
+      // ── Dedup race (server-side broadcast fix, Task 94) ────────────────────
+      // The POST route ALSO broadcasts `message:received` over socket.io to
+      // every room member — INCLUDING the sender. When that socket echo wins
+      // the race against this REST response, onMessageReceived has already
+      // added the id to `messageIdsRef` + the store. The old early-return
+      // here (`if (has) return`) then skipped EVERYTHING below — including
+      // the demo-companion-bot trigger, which silently died. Fix: only skip
+      // the *UI bookkeeping* when duplicated; the bot trigger below must run
+      // regardless, because the message WAS sent successfully either way.
+      const isEchoDuplicate = messageIdsRef.current.has(msg.id)
+      if (!isEchoDuplicate) {
+        messageIdsRef.current.add(msg.id)
+        addMessage(activeConversationId, msg)
+      }
       setReplyTo(null)
       // Trigger message effect if the content starts with an effect prefix
       // (Task 96 — iMessage-style particle effects)
@@ -608,12 +622,16 @@ export function ChatWindow({
         // Clear the effect after 3s (the Canvas animation duration)
         setTimeout(() => setActiveEffect(null), 3500)
       }
-      // Broadcast via socket
-      const socket = getSocket()
-      socket.emit('message:send', {
-        conversationId: activeConversationId,
-        message: msg,
-      })
+      // Broadcast via socket (skip when the server-side broadcast already
+      // echoed the message back — a second emit would be a no-op duplicate
+      // for the room, but skipping keeps the wire quiet)
+      if (!isEchoDuplicate) {
+        const socket = getSocket()
+        socket.emit('message:send', {
+          conversationId: activeConversationId,
+          message: msg,
+        })
+      }
       // Update sidebar conversation preview
       if (conversation) {
         upsertConversation({
@@ -626,6 +644,8 @@ export function ChatWindow({
 
       // ---- Demo companion bot: if this is a 1-on-1 chat with a demo user,
       // simulate a typing indicator + contextual reply after a short delay.
+      // Runs even when the socket echo deduped the UI updates above — the
+      // bot reply depends on the SEND, not on local rendering.
       if (
         type === 'text' &&
         conversation &&
@@ -1476,6 +1496,11 @@ export function ChatWindow({
           <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} title="Search messages">
             <WaslSearch className="w-5 h-5" />
           </Button>
+          {/* Cross-Lingual Auto-Translate toggle (LEAPFROG — beyond iMessage
+              iOS 19's announced auto-translate). Pick a language for THIS
+              conversation and every incoming foreign message translates
+              itself inline, cached per message. Persisted per device. */}
+          <AutoTranslateToggle conversationId={conversation.id} />
           <SmartChatMenu
             pendingCount={0}
             onQuickAction={(action) => {

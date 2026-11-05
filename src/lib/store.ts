@@ -318,6 +318,20 @@ type WaslState = {
   setDraft: (conversationId: string, content: string) => void
   clearDraft: (conversationId: string) => void
 
+  // ---- Cross-Lingual Auto-Translate (LEAPFROG — beyond iMessage iOS 19) ------
+  // Per-conversation target language for LIVE auto-translation of incoming
+  // messages. Keyed by conversationId → human language name ("English",
+  // "Arabic", "French"…). A missing entry = auto-translate OFF for that
+  // conversation. Persisted to localStorage (hydration-safe: written only
+  // from client interactions, hydrated after mount).
+  autoTranslateLangs: Record<string, string>
+  setAutoTranslateLang: (conversationId: string, lang: string | null) => void
+  hydrateAutoTranslateLangs: () => void
+  // Cache of auto-translations keyed by messageId → { lang, text }. Prevents
+  // re-fetching when bubbles re-render or the user scrolls. In-memory only.
+  autoTranslations: Record<string, { lang: string; text: string }>
+  setAutoTranslation: (messageId: string, lang: string, text: string) => void
+
   // ---- Voice / Video call state (Cirkle-inspired WebRTC) -------------------
   // `activeCall` is the call currently being placed (outgoing) or in progress.
   // `incomingCall` is a call waiting for the user to accept / reject.
@@ -629,6 +643,45 @@ export const useWaslStore = create<WaslState>((set) => ({
       delete next[conversationId]
       return { drafts: next }
     }),
+
+  // ---- Cross-Lingual Auto-Translate (LEAPFROG — beyond iMessage iOS 19) ----
+  autoTranslateLangs: {},
+  setAutoTranslateLang: (conversationId, lang) =>
+    set((state) => {
+      const next = { ...state.autoTranslateLangs }
+      if (lang === null || lang === undefined || lang === '') {
+        delete next[conversationId]
+      } else {
+        next[conversationId] = lang
+      }
+      // Persist — safe: only invoked from client interactions, never during
+      // SSR / the hydration pass.
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('wasl:auto-translate-langs', JSON.stringify(next))
+        }
+      } catch { /* private mode / quota — non-fatal */ }
+      return { autoTranslateLangs: next }
+    }),
+  hydrateAutoTranslateLangs: () => {
+    try {
+      const raw = localStorage.getItem('wasl:auto-translate-langs')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          set({ autoTranslateLangs: parsed })
+        }
+      }
+    } catch { /* corrupted JSON — keep defaults */ }
+  },
+  autoTranslations: {},
+  setAutoTranslation: (messageId, lang, text) =>
+    set((state) => ({
+      autoTranslations: {
+        ...state.autoTranslations,
+        [messageId]: { lang, text },
+      },
+    })),
 
   // ---- Voice / Video call state (Cirkle-inspired WebRTC) -------------------
   activeCall: null,

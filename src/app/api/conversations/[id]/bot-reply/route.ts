@@ -74,7 +74,18 @@ export async function POST(
     .map((m) => `${m.senderId === session.id ? 'User' : other.user.name}: ${sanitizeForAI(m.content)}`)
     .join('\n')
 
-  const systemPrompt = `You are ${other.user.name}, a friendly person chatting on Wasl (a messaging app). Keep replies short (1-2 sentences), casual, and natural. Be warm and conversational. Don't use markdown formatting.`
+  // Language mirroring — Wasl is MENA-first: when the user writes in Arabic
+  // (or any non-Latin script), the companion bot answers in the SAME language
+  // so the demo feels native. Detected from the user's own recent messages.
+  const userTexts = recent.filter((m) => m.senderId === session.id).map((m) => m.content)
+  const arabicChars = userTexts.join(' ').match(/[\u0600-\u06FF]/g)?.length ?? 0
+  const latinChars = userTexts.join(' ').match(/[A-Za-z]/g)?.length ?? 0
+  const languageRule =
+    arabicChars > latinChars
+      ? 'ALWAYS reply in Arabic (فصحى مبسطة أو عامية مصرية خفيفة). Your reply must be in Arabic script.'
+      : 'Reply in the same language the user writes in.'
+
+  const systemPrompt = `You are ${other.user.name}, a friendly person chatting on Wasl (a messaging app). Keep replies short (1-2 sentences), casual, and natural. Be warm and conversational. Don't use markdown formatting. ${languageRule}`
 
   const userMessage = `Recent conversation:\n${contextMessages}\n\nGenerate a short, natural reply from ${other.user.name}:`
 

@@ -3996,6 +3996,86 @@ button.w-full:hover {
   border-left: 2px solid var(--wasl-green);
   animation: wasl-slide-up 0.25s var(--wasl-ease) both;
 }
+/* Auto-translate badge — tiny provenance label inside the result block */
+.wasl-translate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: var(--wasl-radius-full);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--wasl-green);
+  background: color-mix(in oklab, var(--wasl-green) 10%, transparent);
+}
+/* Auto-translate in-flight state — subtle, non-blocking */
+.wasl-translate-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted-foreground, var(--foreground, inherit));
+  opacity: 0.7;
+}
+
+/* ── Smart Intent Chips (LEAPFROG — beyond WhatsApp "message text actions") ──
+ * Compact tappable chips rendered below a text message when actionable
+ * entities are detected: dates (→ calendar), phones, emails, meeting
+ * links, addresses. Light-weight, pill-shaped, theme-aware. */
+.wasl-intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--wasl-radius-full);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  max-width: 220px;
+  color: var(--wasl-teal);
+  background: color-mix(in oklab, var(--wasl-teal) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wasl-teal) 22%, transparent);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s var(--wasl-ease);
+  animation: wasl-slide-up 0.2s var(--wasl-ease) both;
+}
+.wasl-intent-chip:hover {
+  background: color-mix(in oklab, var(--wasl-teal) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-teal) 45%, transparent);
+  transform: translateY(-1px);
+}
+.wasl-intent-chip:active { transform: translateY(0); }
+/* Accent variant — meeting join links get the signature green */
+.wasl-intent-chip-accent {
+  color: var(--wasl-green);
+  background: color-mix(in oklab, var(--wasl-green) 10%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-green) 28%, transparent);
+}
+.wasl-intent-chip-accent:hover {
+  background: color-mix(in oklab, var(--wasl-green) 18%, transparent);
+  border-color: color-mix(in oklab, var(--wasl-green) 50%, transparent);
+}
+/* Suffix segment (e.g. the copy button next to a phone chip) — joins the
+ * previous chip seamlessly: shared pill with an internal divider. */
+.wasl-intent-chip-suffix {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding: 3px 6px;
+  background: transparent;
+}
+/* Dark-mode adaptation: chips ride on darker bubbles — lift contrast */
+.dark .wasl-intent-chip {
+  color: color-mix(in oklab, var(--wasl-teal) 70%, white);
+}
+.dark .wasl-intent-chip-accent {
+  color: color-mix(in oklab, var(--wasl-green) 70%, white);
+}
 
 /* ── Saved Messages special styling ────────────────────────────────────
  * The self-chat appears at the top of the sidebar with a distinctive

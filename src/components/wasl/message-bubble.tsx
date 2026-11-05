@@ -22,6 +22,8 @@ import {
   FileText,
   Download,
   Music,
+  Loader2,
+  Languages,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatTimestamp } from '@/lib/time'
@@ -38,6 +40,7 @@ import { ReadReceiptsDialog } from './read-receipts-dialog'
 import { EditHistoryDialog } from './edit-history-dialog'
 import { MessageInfoDialog } from './message-info-dialog'
 import { VoicePlayer } from './voice-player'
+import { IntentChips } from './intent-chips'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -400,6 +403,18 @@ export function MessageBubble({
   // Inline translation state (Task 96 — competitor feature: Telegram/WhatsApp translate)
   const [translation, setTranslation] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
+  // ---- Cross-Lingual Auto-Translate (LEAPFROG — beyond iMessage iOS 19) ----
+  // When the user enables a target language for this conversation (globe
+  // toggle in the chat header), incoming foreign messages translate
+  // themselves automatically — no pill click. Results cache per message id.
+  const autoTranslateLang = useWaslStore(
+    (s) => s.autoTranslateLangs[message.conversationId] ?? null
+  )
+  const cachedAutoTranslation = useWaslStore(
+    (s) => s.autoTranslations[message.id] ?? null
+  )
+  const setAutoTranslation = useWaslStore((s) => s.setAutoTranslation)
+
   const toolbarRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const protection = useProtectionState(message)
@@ -420,6 +435,41 @@ export function MessageBubble({
   // NOT enabled "privacy always allow". In that case the bubble becomes
   // read-only: no copy, no forward, no context menu, no drag, no screenshot.
   const blocked = protection.blocked
+
+  // ---- Cross-Lingual Auto-Translate effect (LEAPFROG — beyond iMessage
+  // iOS 19). Fires once per (message, target language) pair. Guards: own
+  // messages, non-text payloads, protected bubbles, over-length text, and
+  // (for English targets) messages that obviously aren't foreign — the last
+  // one keeps AI usage proportionate in an English-UI session. NOTE: must
+  // live AFTER `blocked` is declared (TDZ).
+  const autoEligible =
+    !!autoTranslateLang &&
+    !mine &&
+    !blocked &&
+    message.type === 'text' &&
+    !message.content.startsWith('data:') &&
+    message.content.length <= 2000 &&
+    !(autoTranslateLang === 'English' && !looksForeign(message.content))
+  const autoCached = cachedAutoTranslation?.lang === autoTranslateLang
+  useEffect(() => {
+    if (!autoEligible || autoCached) return
+    let cancelled = false
+    fetch('/api/ai/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message.content, targetLang: autoTranslateLang }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.translation) {
+          setAutoTranslation(message.id, autoTranslateLang!, d.translation)
+        }
+      })
+      .catch(() => { /* offline — the loading pill simply stays */ })
+    return () => {
+      cancelled = true
+    }
+  }, [autoEligible, autoCached, message.id, message.content, autoTranslateLang, setAutoTranslation])
 
   // ---- Keyboard capture-blocking (PrintScreen / Ctrl+C / Ctrl+S / Ctrl+P) ---
   // Mounted only when `blocked` is true. We attach a `keyup` listener to
@@ -999,41 +1049,63 @@ export function MessageBubble({
                   they never read as one run-on line. Four non-breaking spaces
                   ≈ 60% of the timestamp width at 10px. */}
               {'\u00A0\u00A0\u00A0\u00A0'}
-              {/* Inline translation (Task 96 — Telegram/WhatsApp competitor feature)
-                  Shows a "Translate" pill below incoming messages that might be in
-                  a foreign language. Only appears on INCOMING text messages (not
-                  the user's own) whose content looks non-English: non-ASCII
-                  script (Arabic/Cyrillic/CJK/etc.) or accented Latin letters. */}
-              {!mine && message.type === 'text' && !message.content.startsWith('data:') && looksForeign(message.content) && (
-                <>
-                  {translation ? (
-                    <div className="wasl-translate-result">{translation}</div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="wasl-translate-pill"
-                      disabled={translating}
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        if (translating) return
-                        setTranslating(true)
-                        try {
-                          const res = await fetch('/api/ai/translate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: message.content }),
-                          })
-                          if (!res.ok) { toast.error('Translation failed'); return }
-                          const data = await res.json()
-                          setTranslation(data.translation)
-                        } catch { toast.error('Network error') }
-                        finally { setTranslating(false) }
-                      }}
-                    >
-                      {translating ? 'Translating…' : 'Translate'}
-                    </button>
-                  )}
-                </>
+              {/* Translation — two modes:
+                  1. AUTO (Cross-Lingual Live Translate — LEAPFROG beyond
+                     iMessage iOS 19): when the user picked a target language
+                     for this conversation, incoming foreign messages
+                     translate themselves inline; results cache per message.
+                  2. MANUAL (Task 96 — Telegram/WhatsApp competitor pill):
+                     a "Translate" pill on incoming foreign-language messages;
+                     one tap translates.
+                  Protected (blocked) bubbles show neither — their content must
+                  not be shipped to the AI or re-rendered outside the bubble. */}
+              {!mine && message.type === 'text' && !message.content.startsWith('data:') && !blocked && (
+                autoTranslateLang ? (
+                  autoCached ? (
+                    <div className="wasl-translate-result">
+                      <span className="whitespace-pre-wrap">{cachedAutoTranslation!.text}</span>
+                      <span className="wasl-translate-badge">
+                        <Languages className="w-2.5 h-2.5" aria-hidden />
+                        auto · {autoTranslateLang}
+                      </span>
+                    </div>
+                  ) : autoEligible ? (
+                    <span className="wasl-translate-loading">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" aria-hidden />
+                      Translating to {autoTranslateLang}…
+                    </span>
+                  ) : null
+                ) : looksForeign(message.content) ? (
+                  <>
+                    {translation ? (
+                      <div className="wasl-translate-result">{translation}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="wasl-translate-pill"
+                        disabled={translating}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (translating) return
+                          setTranslating(true)
+                          try {
+                            const res = await fetch('/api/ai/translate', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ text: message.content }),
+                            })
+                            if (!res.ok) { toast.error('Translation failed'); return }
+                            const data = await res.json()
+                            setTranslation(data.translation)
+                          } catch { toast.error('Network error') }
+                          finally { setTranslating(false) }
+                        }}
+                      >
+                        {translating ? 'Translating…' : 'Translate'}
+                      </button>
+                    )}
+                  </>
+                ) : null
               )}
               <span className="inline-flex items-center gap-1 ml-2 align-bottom text-[10px] text-foreground/50 float-right mt-1">
                 {protection.isProtected && (
@@ -1081,6 +1153,15 @@ export function MessageBubble({
               domain={linkPreview.domain}
               path={linkPreview.path}
             />
+          )}
+          {/* Smart Intent Chips (LEAPFROG — beyond WhatsApp "message text
+              actions"): detects dates → calendar, phones → call, emails,
+              meeting links → join, addresses → map — rendered as tappable
+              chips below the text. Client-side only, zero API cost. Skipped
+              for protected (blocked) bubbles since actions could leak
+              content (e.g. a .ics file would copy the text out). */}
+          {message.type === 'text' && !blocked && !message.content.startsWith('data:') && (
+            <IntentChips text={message.content} mine={mine} />
           )}
         </div>
 

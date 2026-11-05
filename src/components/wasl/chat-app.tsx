@@ -44,6 +44,7 @@ export function ChatApp({ user }: { user: any }) {
     showProfilePanel,
     setBookmarkedIds,
     setDrafts,
+    hydrateAutoTranslateLangs,
   } = useWaslStore()
   const [newChatOpen, setNewChatOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -73,6 +74,9 @@ export function ChatApp({ user }: { user: any }) {
   // Bootstrap user state
   useEffect(() => {
     setUser(user)
+    // Restore per-conversation auto-translate language settings (persisted
+    // in localStorage — LEAPFROG feature beyond iMessage iOS 19 auto-translate).
+    hydrateAutoTranslateLangs()
     // Mark self as online and start heartbeat
     fetch('/api/profile', {
       method: 'POST',
@@ -124,7 +128,7 @@ export function ChatApp({ user }: { user: any }) {
       })
       .catch((e) => console.error(e))
 
-  }, [user.id, setBookmarkedIds, setUser, setDrafts])
+  }, [user.id, setBookmarkedIds, setUser, setDrafts, hydrateAutoTranslateLangs])
 
   // ── Register this device for multi-device sync (Task 93) ─────────────
   // Called once on app boot (when we have a user). POSTs to /api/devices
