@@ -67,3 +67,8 @@ db/backups/*.db
 
 # Dev supervisor PID file
 .zscripts/
+
+# SQLite WAL transient files — never commit (corruption risk)
+db/custom.db-shm
+db/custom.db-wal
+tool-results/
