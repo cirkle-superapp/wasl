@@ -36,17 +36,33 @@ export async function POST(req: NextRequest) {
     .map((m) => `${m.senderId === session.id ? 'Me' : 'Them'}: ${sanitizeForAI(m.content)}`)
     .join('\n')
 
-  const systemPrompt = `You are a helpful assistant generating 3 short, natural chat reply suggestions. Each reply should be concise (under 50 characters), friendly, and conversational. Return exactly 3 replies, one per line, no numbering or bullets. Keep it casual like a chat app.`
+  const systemPrompt = `You are a chat-reply suggestion generator. Output ONLY 3 short reply suggestions, one per line, as PLAIN TEXT. No reasoning, no analysis, no markdown, no bold, no numbering, no labels, no explanation — just the 3 replies themselves. Each reply is concise (under 50 characters), friendly, conversational.`
 
-  const userMessage = `Here's the recent conversation:\n${context}\n\nGenerate 3 short reply suggestions for "Me" to send next. Each on its own line:`
+  const userMessage = `Here's the recent conversation:\n${context}\n\nGenerate 3 short reply suggestions for "Me" to send next. Output ONLY the 3 replies, one per line, nothing else:`
 
   const aiResult = await aiChatFast(systemPrompt, userMessage, 100)
 
   if (aiResult) {
     const replies = aiResult
       .split('\n')
-      .map((r) => r.replace(/^\d+[\.\)]\s*/, '').replace(/^[-•]\s*/, '').trim())
-      .filter((r) => r.length > 0 && r.length < 100)
+      .map((r) =>
+        r
+          .replace(/^\d+[\.\)]\s*/, '')
+          .replace(/^[-•*]\s*/, '')
+          // strip stray markdown wrappers around the whole line (e.g. "**Hey!**")
+          .replace(/^\*\*(.+)\*\*$/, '$1')
+          .trim()
+      )
+      // reject reasoning artifacts / meta-text / anything that isn't a chat reply
+      .filter(
+        (r) =>
+          r.length > 0 &&
+          r.length < 80 &&
+          !/^#{1,6}\s/.test(r) && // markdown headers
+          !/^\*\*/.test(r) && // bold labels
+          !/^(?:analyze|analysis|understanding|thought|thinking|reasoning|let me|i'll now|first,|step \d)/i.test(r) && // chain-of-thought starters
+          !/^(?:role|task|goal|context|instruction|requirement)\s*:/i.test(r) // labeled meta
+      )
       .slice(0, 3)
 
     if (replies.length >= 2) {

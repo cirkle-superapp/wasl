@@ -1,0 +1,14 @@
+# ═══════════════════════════════════════════════════════════════════════
+# .watchdog-allowlist — escape hatch for INTENTIONAL file deletions
+# ═══════════════════════════════════════════════════════════════════════
+# The protected-files watchdog (scripts/protected-files-watchdog.sh)
+# auto-restores ANY deleted tracked file within 60 seconds.
+#
+# If you INTENTIONALLY want to delete a tracked file:
+#   1. Add its repo-relative path here (one per line, exact match)
+#   2. Delete the file
+#   3. Commit the deletion
+#   4. REMOVE the entry from this list afterwards
+#
+# Entries below are currently ignored by the watchdog.
+# ═══════════════════════════════════════════════════════════════════════

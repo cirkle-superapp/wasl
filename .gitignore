@@ -72,3 +72,8 @@ db/backups/*.db
 db/custom.db-shm
 db/custom.db-wal
 tool-results/
+
+# watchdog transient state (auto DB snapshots stay local; force-add when archiving)
+.db-last-backup
+db/backups/custom-2026-*.db
+.watchdog.log

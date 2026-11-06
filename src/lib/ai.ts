@@ -200,6 +200,57 @@ interface CallResult {
   text: string | null
 }
 
+/**
+ * Strip chain-of-thought / reasoning pollution from model output.
+ *
+ * ROOT-CAUSE FIX for reasoning leakage: some models (DeepSeek-R1-style,
+ * some free OpenRouter models) emit their reasoning INSIDE `content`
+ * instead of `reasoning_content`. The real answer follows the reasoning
+ * block. Patterns handled (narrow + unambiguous — no false-positive risk
+ * for legitimate answers):
+ *   1. `<think>...</think>` / `<thinking>...</thinking>` fenced blocks
+ *   2. An UNTERMINATED think block (cut mid-reasoning → no answer came)
+ *   3. A leading reasoning prelude: bold-labeled meta headers and bullets
+ *      like "**Analyze the Request:**" / "*   **Role:** ..." / "*   **Task:** …"
+ *      up to the first line that doesn't look like reasoning.
+ *
+ * Returns "" when the entire output was reasoning (no answer). Callers
+ * treat that as a model failure so the health tracker benches the model.
+ */
+const REASONING_ARTIFACT =
+  /^\*\*\s*(?:analyze|analysis|understanding|understand|break\s?down|thought|thinking|reasoning|plan|approach|role|task|goal|context|step\s*\d*)\b[^*]*\*\*\s*:?\s*$/i
+const REASONING_BULLET =
+  /^(?:[*•-]|\d+[.)])\s+\*\*\s*(?:role|task|goal|context|step|approach|analysis|understanding|instruction|requirement)\b[^*]*\**\s*[:,]?/i
+
+export function stripReasoning(text: string): string {
+  let out = text
+  // 1) Terminated fenced reasoning blocks — remove entirely.
+  out = out.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+  // 2) Unterminated think block — everything from the tag onward is
+  //    reasoning (the answer never arrived).
+  const open = out.search(/<think(?:ing)?>/i)
+  if (open !== -1 && !/<\/think(?:ing)?>/i.test(out)) {
+    out = out.slice(0, open)
+  }
+  // 3) Leading reasoning prelude (bold meta headers + labeled bullets).
+  const lines = out.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    const l = lines[i].trim()
+    if (l === '') {
+      i++
+      continue
+    }
+    if (REASONING_ARTIFACT.test(l) || REASONING_BULLET.test(l)) {
+      i++
+      continue
+    }
+    break
+  }
+  if (i > 0) out = lines.slice(i).join('\n')
+  return out.trim()
+}
+
 /** Extract the answer from an OpenAI-compatible response. */
 function extractContent(data: unknown): string | null {
   const d = data as {
@@ -209,7 +260,9 @@ function extractContent(data: unknown): string | null {
   // NOTE: `reasoning_content` is chain-of-thought, NOT the answer — a null
   // content with populated reasoning means the model ran out of budget.
   if (typeof content === 'string' && content.trim().length > 0) {
-    return content.trim()
+    const clean = stripReasoning(content)
+    // Empty after stripping → the model emitted ONLY reasoning → failure.
+    return clean.length > 0 ? clean : null
   }
   return null
 }
@@ -299,7 +352,9 @@ async function geminiChat(
         candidates?: { content?: { parts?: { text?: string }[] } }[]
       }
     )?.candidates?.[0]?.content?.parts?.[0]?.text
-    return text && text.trim().length > 0 ? text.trim() : null
+    if (!text || text.trim().length === 0) return null
+    const clean = stripReasoning(text)
+    return clean.length > 0 ? clean : null
   } catch {
     return null
   }
@@ -700,6 +755,44 @@ export function getConsensusHealth(): {
 // ═══════════════════════════════════════════════════════════════════════
 // Prompt sanitization — keep AI prompts inside model context limits
 // ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Aggregate snapshot for /api/ai/status: configured providers, benched
+ * models, and the active jury for each tier. Contains NO secrets.
+ */
+export function aiProviderStatus(): {
+  configuredProviders: number
+  benchedCount: number
+  providers: Record<Provider, boolean>
+  benched: { provider: Provider; model: string; benchedUntil: number }[]
+  juryFast: string[]
+  juryFull: string[]
+} {
+  const providers = getProviderStatus()
+  const configured = (Object.keys(providers) as Provider[]).filter(
+    (p) => providers[p]
+  )
+  const health = getConsensusHealth().filter((h) => h.benched)
+  const juryFast = selectJury('fast', 3).map(
+    ({ provider, cfg }) => `${provider}/${cfg.model}`
+  )
+  const juryFull = selectJury('full', 3).map(
+    ({ provider, cfg }) => `${provider}/${cfg.model}`
+  )
+  return {
+    configuredProviders: configured.length,
+    benchedCount: health.length,
+    providers,
+    benched: health.map((h) => ({
+      provider: h.provider,
+      model: h.model,
+      benchedUntil: h.benchedUntil,
+    })),
+    juryFast,
+    juryFull,
+  }
+}
+
 
 /**
  * Make a message's content safe to embed in an LLM prompt:
