@@ -221,18 +221,50 @@ const REASONING_ARTIFACT =
   /^\*\*\s*(?:analyze|analysis|understanding|understand|break\s?down|thought|thinking|reasoning|plan|approach|role|task|goal|context|step\s*\d*)\b[^*]*\*\*\s*:?\s*$/i
 const REASONING_BULLET =
   /^(?:[*•-]|\d+[.)])\s+\*\*\s*(?:role|task|goal|context|step|approach|analysis|understanding|instruction|requirement)\b[^*]*\**\s*[:,]?/i
+// Markdown heading-style reasoning labels at the start of the output:
+//   "# Analysis", "## Reasoning", "### Step 1: ...", "#### Rationale"
+// Only stripped as LEADING lines (before the real answer begins).
+const REASONING_HEADING =
+  /^#{1,4}\s+(?:analysis|reasoning|thinking|thoughts|plan|approach|break\s?down|step\s*\d*|context|rationale)\b.*$/i
 
 export function stripReasoning(text: string): string {
   let out = text
-  // 1) Terminated fenced reasoning blocks — remove entirely.
-  out = out.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
-  // 2) Unterminated think block — everything from the tag onward is
-  //    reasoning (the answer never arrived).
-  const open = out.search(/<think(?:ing)?>/i)
-  if (open !== -1 && !/<\/think(?:ing)?>/i.test(out)) {
-    out = out.slice(0, open)
+  // 1) Pipe-tag reasoning tokens (OpenRouter free models):
+  //    `<|thinking|>...</|thinking|>` — remove entirely. The closing tag's
+  //    slash can come BEFORE or AFTER the leading pipe (both forms observed
+  //    in the wild), so we accept either.
+  out = out.replace(
+    /<\|thinking\|>[\s\S]*?(?:<\/\|thinking\|>|<\|\/thinking\|>)/gi,
+    ''
+  )
+  //    Unterminated pipe-tag — everything from the tag onward is reasoning.
+  const pipeOpen = out.search(/<\|thinking\|>/i)
+  if (
+    pipeOpen !== -1 &&
+    !/(?:<\/\|thinking\|>|<\|\/thinking\|>)/i.test(out)
+  ) {
+    out = out.slice(0, pipeOpen)
   }
-  // 3) Leading reasoning prelude (bold meta headers + labeled bullets).
+  // 2) Bracketed reasoning tags: [thinking]...[/thinking], <reasoning>...</reasoning>
+  out = out.replace(
+    /\[(?:thinking|thoughts|reasoning|analysis)\][\s\S]*?\/(?:thinking|thoughts|reasoning|analysis)\]/gi,
+    ''
+  )
+  out = out.replace(
+    /<(?:reasoning|thought|analysis)[^>]*>[\s\S]*?<\/(?:reasoning|thought|analysis)>/gi,
+    ''
+  )
+  // 3) Terminated fenced reasoning blocks — remove entirely.
+  out = out.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+  // 4) Unterminated think block — everything from the tag onward is
+  //    reasoning (the answer never arrived).
+  const thinkOpen = out.search(/<think(?:ing)?>/i)
+  if (thinkOpen !== -1 && !/<\/think(?:ing)?>/i.test(out)) {
+    out = out.slice(0, thinkOpen)
+  }
+  // 5) Leading reasoning prelude (bold meta headers + labeled bullets +
+  //    markdown headings) until the first line that doesn't look like
+  //    reasoning.
   const lines = out.split('\n')
   let i = 0
   while (i < lines.length) {
@@ -241,13 +273,29 @@ export function stripReasoning(text: string): string {
       i++
       continue
     }
-    if (REASONING_ARTIFACT.test(l) || REASONING_BULLET.test(l)) {
+    if (
+      REASONING_ARTIFACT.test(l) ||
+      REASONING_BULLET.test(l) ||
+      REASONING_HEADING.test(l)
+    ) {
       i++
       continue
     }
     break
   }
   if (i > 0) out = lines.slice(i).join('\n')
+  // 6) Strip a "Final Answer:" / "**Answer:**" / "Conclusion:" label at the
+  //    very start of the remaining output — keep the content after the label
+  //    on the same line. Handles asterisks on EITHER side of the colon
+  //    (`**Final Answer:**`, `**Answer**:`, `Answer:`). Only matches a label
+  //    immediately followed by a colon (ASCII or fullwidth), so
+  //    "the answer is..." is left untouched.
+  out = out.replace(
+    /^\s*\**\s*(?:final answer|answer|response|reply|conclusion|output|result)\s*\**\s*[:：]+\**\s*/i,
+    ''
+  )
+  // 7) Trim trailing horizontal rules / separator artifacts.
+  out = out.replace(/\n\s*(?:-{3,}|\*{3,}|_{3,})\s*$/g, '')
   return out.trim()
 }
 
