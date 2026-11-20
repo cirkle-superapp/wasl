@@ -67,9 +67,9 @@ export async function POST(req: NextRequest) {
     const safePassword = typeof password === 'string' ? password : ''
     const safeName = typeof name === 'string' ? name.trim() : ''
 
-    if (safePassword.length < 6) {
+    if (safePassword.length < 8) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
+        { error: 'Password must be at least 8 characters' },
         { status: 400 }
       )
     }

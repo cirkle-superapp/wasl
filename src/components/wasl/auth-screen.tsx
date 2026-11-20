@@ -9,19 +9,21 @@ import {
   useMotionValue,
   useSpring,
   useTransform,
+  useAnimationControls,
   type Variants,
 } from 'framer-motion'
 import {
   Loader2, User, Lock, Mail, Phone, AtSign, Check, X, Sparkles, Eye, EyeOff,
   ShieldCheck, Zap, Users, Smartphone, Monitor, Cpu, Apple, Mic, BarChart3,
-  FileSignature, ChevronRight, Globe, MessageCircleHeart,
+  FileSignature, ChevronRight, Globe, MessageCircleHeart, AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWaslStore } from '@/lib/store'
 import { CirkleMark } from './cirkle-mark'
 
 const DEMO_USERNAME = 'demo'
-const DEMO_PASSWORD = 'demo123'
+const DEMO_PASSWORD = 'demo1234' // 8+ chars — NIST 800-63B aligned minimum
+const LEGACY_DEMO_PASSWORD = 'demo123' // demo accounts from before the 8-char minimum
 
 // ── Cirkle color palette ──────────────────────────────────────────────
 const C = {
@@ -153,12 +155,183 @@ const FEATURES = [
   { icon: FileSignature, label: 'Verified commitments' },
 ]
 
+// ── Password strength (NIST 800-63B aligned, dependency-free) ──────────
+const COMMON_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '123456', '1234567', '12345678',
+  '123456789', '1234567890', 'qwerty', 'qwerty123', 'letmein', 'welcome',
+  'admin', 'admin123', 'iloveyou', 'monkey', 'dragon', 'sunshine',
+  'princess', 'football', 'abc123', '111111', '000000', 'test123',
+  'passw0rd', 'master', 'hello', 'freedom', 'whatever', 'trustno1',
+  'demo123', 'demo1234', 'wasl1234',
+])
+
+/** Score a password 0–4: length + character variety − common-list penalty. */
+function scorePassword(pw: string): number {
+  if (!pw) return 0
+  if (COMMON_PASSWORDS.has(pw.toLowerCase()) || /^(.)\1+$/.test(pw)) return 0
+  let score = 0
+  if (pw.length >= 8) score++
+  if (pw.length >= 12) score++
+  const variety =
+    (/[a-z]/.test(pw) ? 1 : 0) +
+    (/[A-Z]/.test(pw) ? 1 : 0) +
+    (/\d/.test(pw) ? 1 : 0) +
+    (/[^A-Za-z0-9]/.test(pw) ? 1 : 0)
+  if (variety >= 2) score++
+  if (variety >= 3) score++
+  return Math.min(4, Math.max(0, score))
+}
+
+const PW_STRENGTH = [
+  { label: 'Too weak', color: '#ef4444' },
+  { label: 'Weak', color: '#f97316' },
+  { label: 'Fair', color: '#eab308' },
+  { label: 'Good', color: '#84cc16' },
+  { label: 'Strong', color: '#22c55e' },
+]
+
+/** Four-segment password strength meter with a live label. */
+function StrengthMeter({ password }: { password: string }) {
+  const score = scorePassword(password)
+  const meta = PW_STRENGTH[score]
+  return (
+    <div style={{ marginTop: 7 }} aria-live="polite">
+      <div style={{ display: 'flex', gap: 4 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: 4,
+              borderRadius: 2,
+              background: i < score ? meta.color : `${C.teal}17`,
+              transition: 'background 0.35s ease',
+            }}
+          />
+        ))}
+      </div>
+      {password.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: meta.color }}>{meta.label}</span>
+          <span style={{ fontSize: 10, color: `${C.teal}88` }}>
+            {password.length >= 12
+              ? '12+ chars'
+              : password.length >= 8
+                ? '8+ chars ✓'
+                : `${8 - password.length} more for 8`}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Confirmed-identifier chip shown on the login / signup steps. */
+function IdentifierChip({
+  icon: Icon,
+  value,
+  type,
+  onChange,
+}: {
+  icon: typeof Mail
+  value: string
+  type: 'email' | 'phone' | 'username'
+  onChange: () => void
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '7px 8px 7px 12px',
+        borderRadius: 12,
+        background: `${C.teal}0a`,
+        border: `1.5px solid ${C.teal}1e`,
+      }}
+    >
+      <Icon style={{ width: 15, height: 15, color: C.goldDark, flexShrink: 0 }} />
+      <span
+        style={{
+          flex: 1,
+          fontSize: 13,
+          fontWeight: 600,
+          color: C.teal,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {value}
+      </span>
+      <span
+        style={{
+          fontSize: 9.5,
+          color: `${C.teal}99`,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {type}
+      </span>
+      <button
+        type="button"
+        onClick={onChange}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          fontSize: 11,
+          fontWeight: 600,
+          color: C.goldDark,
+          padding: '3px 7px',
+          borderRadius: 7,
+          flexShrink: 0,
+          fontFamily: 'inherit',
+        }}
+      >
+        Change
+      </button>
+    </div>
+  )
+}
+
+// ── Adaptive auth step transitions (slide + fade, direction-aware) ────
+const stepVariants: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 48 }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.36, ease: EASE } },
+  exit: (d: number) => ({ opacity: 0, x: d * -48, transition: { duration: 0.26, ease: EASE } }),
+}
+
 export function AuthScreen() {
-  // ── Form state (unchanged logic) ────────────────────────────────────
-  const [mode, setMode] = useState<'login' | 'signup'>('signup')
+  // ── Adaptive one-tab auth — step machine ────────────────────────
+  //   'id'     → one smart field (email / phone / Cirkle username)
+  //   'login'  → identifier confirmed to exist → password
+  //   'signup' → identifier is new → name + username + password
+  const [step, setStep] = useState<'id' | 'login' | 'signup'>('id')
+  const [dir, setDir] = useState<1 | -1>(1) // slide direction between steps
+
+  // Step 1 — the identifier being typed
+  const [idInput, setIdInput] = useState('')
+  const [idError, setIdError] = useState('')
+  const [checking, setChecking] = useState(false)
+
+  // The confirmed identifier (set once the lookup routes the flow)
   const [identifier, setIdentifier] = useState('')
-  const [signupIdentifier, setSignupIdentifier] = useState('')
+  const [idType, setIdType] = useState<'email' | 'phone' | 'username'>('username')
+  const [knownName, setKnownName] = useState<string | null>(null)
+
+  // Login step
+  const [pwError, setPwError] = useState('')
+
+  // Shared fields
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [capsLock, setCapsLock] = useState(false)
+
+  // Signup extras
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [usernameTouched, setUsernameTouched] = useState(false)
@@ -168,11 +341,14 @@ export function AuthScreen() {
     message: string
     suggestions: string[]
   }>({ checking: false, available: null, message: '', suggestions: [] })
+  // Optional email/phone — only shown when the step-1 identifier was a username
+  const [contactOverride, setContactOverride] = useState('')
+
   const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
   const setUser = useWaslStore((s) => s.setUser)
   const router = useRouter()
   const usernameTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shakeControls = useAnimationControls()
 
   const reduce = useReducedMotion()
 
@@ -181,9 +357,18 @@ export function AuthScreen() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
+  // ── Intro gate — the page-load field stagger plays ONCE. Later step
+  //    changes animate as one sliding unit, so navigating back and forth
+  //    feels instant instead of re-staggering every field.
+  const [introDone, setIntroDone] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setIntroDone(true), 1600)
+    return () => clearTimeout(t)
+  }, [])
+
   // ── Live username availability check (debounced) ────────────────────
   useEffect(() => {
-    if (mode !== 'signup' || !usernameTouched) return
+    if (step !== 'signup' || !usernameTouched) return
     const u = username.trim().toLowerCase()
     if (!u) {
       setUsernameStatus({ checking: false, available: null, message: '', suggestions: [] })
@@ -201,121 +386,213 @@ export function AuthScreen() {
       }
     }, 350)
     return () => { if (usernameTimer.current) clearTimeout(usernameTimer.current) }
-  }, [username, usernameTouched, mode])
+  }, [username, usernameTouched, step])
 
   // ── Auto-generate username from name ────────────────────────────────
   useEffect(() => {
-    if (mode !== 'signup' || usernameTouched) return
+    if (step !== 'signup' || usernameTouched) return
     const auto = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 15)
     if (auto && auto !== username) setUsername(auto)
-  }, [name, usernameTouched, mode, username])
+  }, [name, usernameTouched, step, username])
 
-  const authenticate = useCallback(
-    async (
-      overrideMode?: 'login' | 'signup',
-      overrideIdentifier?: string,
-      overridePassword?: string,
-      overrideName?: string,
-      overrideUsername?: string,
-      overrideSignupId?: string
-    ) => {
-      const m = overrideMode ?? mode
-      const p = overridePassword ?? password
-      setLoading(true)
-      try {
-        if (m === 'login') {
-          const id = overrideIdentifier ?? identifier
-          if (!id.trim()) { toast.error('Please enter your email, phone, or username'); return }
-          if (!p) { toast.error('Please enter your password'); return }
-          const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: id, password: p }),
-          })
-          const data = await res.json()
-          if (!res.ok) { toast.error(data?.error || 'Login failed'); return }
-          setUser(data)
-          toast.success(`Welcome to Wasl, ${data.name}!`)
-          router.refresh()
-        } else {
-          const n = (overrideName ?? name).trim()
-          const u = (overrideUsername ?? username).trim().toLowerCase()
-          const sid = overrideSignupId ?? signupIdentifier
-          if (!n || n.length < 2) { toast.error('Please enter your name (at least 2 characters)'); return }
-          if (!u || u.length < 3) { toast.error('Please choose a Cirkle username (at least 3 characters)'); return }
-          if (!p || p.length < 6) { toast.error('Password must be at least 6 characters'); return }
-          const res = await fetch('/api/auth/signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: sid || undefined, password: p, name: n, username: u }),
-          })
-          const data = await res.json()
-          if (!res.ok) {
-            if (data.suggestions?.length) { toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` }) }
-            else { toast.error(data?.error || 'Sign up failed') }
-            return
-          }
-          setUser(data)
-          toast.success(`Welcome to Wasl, ${data.name}!`)
-          router.refresh()
-        }
-      } catch (err) {
-        console.error(err)
-        toast.error('Network error')
-      } finally {
-        setLoading(false)
+  // ── Error shake (shared controller — replays on every trigger) ─────
+  function triggerShake() {
+    void shakeControls.start({
+      x: [0, -9, 9, -6, 6, -2, 0],
+      transition: { duration: 0.42, ease: 'easeInOut' },
+    })
+  }
+
+  // ── Step 1 → 2: look up the identifier, route to login or signup ────
+  async function submitIdentifier(e?: React.FormEvent) {
+    e?.preventDefault()
+    const id = idInput.trim()
+    if (!id) {
+      setIdError('Enter your email, phone number, or Cirkle username')
+      triggerShake()
+      return
+    }
+    // Client-side format sanity (the API re-validates).
+    const localType =
+      id.includes('@')
+        ? 'email'
+        : /^\+?[\d\s-]+$/.test(id) && id.replace(/[\s-]/g, '').length >= 8
+          ? 'phone'
+          : 'username'
+    if (localType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(id)) {
+      setIdError("That email address doesn't look right")
+      triggerShake()
+      return
+    }
+    setIdError('')
+    setChecking(true)
+    try {
+      const res = await fetch(`/api/auth/check-identifier?id=${encodeURIComponent(id)}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setIdError(data?.error || 'Something went wrong')
+        triggerShake()
+        return
       }
-    },
-    [mode, identifier, password, name, username, signupIdentifier, setUser, router]
-  )
+      setIdentifier(id)
+      setIdType(data.type)
+      setKnownName(data.firstName ?? null)
+      setPassword('')
+      setPwError('')
+      if (data.exists) {
+        setDir(1)
+        setStep('login')
+      } else {
+        setDir(1)
+        setStep('signup')
+        // Arriving via a username — prefill it into the username field.
+        if (data.type === 'username') {
+          setUsername(id.toLowerCase())
+          setUsernameTouched(true)
+        }
+      }
+    } catch {
+      setIdError('Network error — check your connection')
+      triggerShake()
+    } finally {
+      setChecking(false)
+    }
+  }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault()
-    void authenticate()
+  // ── Login step: submit the password ──────────────────────────────────
+  async function loginSubmit(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (!password) {
+      setPwError('Enter your password')
+      triggerShake()
+      return
+    }
+    setPwError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (res.status === 401) {
+          setPwError(data?.error || 'Incorrect password — try again')
+          triggerShake()
+        } else {
+          toast.error(data?.error || 'Login failed')
+        }
+        return
+      }
+      setUser(data)
+      toast.success(`Welcome to Wasl, ${data.name}!`)
+      router.refresh()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Signup step: create the account ──────────────────────────────────
+  async function signupSubmit(e?: React.FormEvent) {
+    e?.preventDefault()
+    const n = name.trim()
+    const u = username.trim().toLowerCase()
+    if (!n || n.length < 2) { toast.error('Please enter your name (at least 2 characters)'); return }
+    if (!u || u.length < 3) { toast.error('Please choose a Cirkle username (at least 3 characters)'); return }
+    if (!password || password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    // Contact: the email/phone from step 1, or the optional field when the
+    // user arrived with a username.
+    const contact = idType === 'username' ? contactOverride.trim() : identifier
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: contact || undefined, password, name: n, username: u }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.suggestions?.length) {
+          toast.error(data.error, { description: `Try: ${data.suggestions.join(', ')}` })
+        } else {
+          toast.error(data?.error || 'Sign up failed')
+        }
+        return
+      }
+      setUser(data)
+      toast.success(`Welcome to Wasl, ${data.name}!`)
+      router.refresh()
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Back to step 1 (from the identifier chip) ────────────────────────
+  function backToId() {
+    setDir(-1)
+    setStep('id')
+    setPwError('')
+  }
+
+  // ── Caps Lock detection for the password fields ──────────────────────
+  function checkCapsLock(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (typeof e.getModifierState === 'function') {
+      setCapsLock(e.getModifierState('CapsLock'))
+    }
+  }
+
+  async function seedDemoWorld() {
+    try {
+      await fetch('/api/seed-demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true }),
+      })
+      fetch('/api/seed-schools', { method: 'POST' }).catch(() => {})
+    } catch {}
   }
 
   async function handleDemoLogin() {
-    setIdentifier(DEMO_USERNAME)
-    setPassword(DEMO_PASSWORD)
-    setMode('login')
     setLoading(true)
     try {
-      const loginRes = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: DEMO_USERNAME, password: DEMO_PASSWORD }),
-      })
-      if (loginRes.ok) {
-        const data = await loginRes.json()
-        setUser(data)
-        try {
-          await fetch('/api/seed-demo', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reset: true }),
-          })
-          fetch('/api/seed-schools', { method: 'POST' }).catch(() => {})
-        } catch {}
-        toast.success(`Welcome to Wasl, ${data.name}!`)
-        router.refresh()
-        return
-      }
-      const signupRes = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: '+201001234567', password: DEMO_PASSWORD, name: 'Demo User', username: DEMO_USERNAME }),
-      })
-      const data = await signupRes.json()
-      if (!signupRes.ok) { toast.error(data?.error || 'Failed to start demo'); return }
-      setUser(data)
-      try {
-        await fetch('/api/seed-demo', {
+      // Existing demo account? Try the current password, then the legacy one
+      // (databases created before the 8-character minimum).
+      for (const pw of [DEMO_PASSWORD, LEGACY_DEMO_PASSWORD]) {
+        const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reset: true }),
+          body: JSON.stringify({ identifier: DEMO_USERNAME, password: pw }),
         })
-      } catch {}
-      toast.success(`Welcome to Wasl, ${data.name}!`)
+        if (res.ok) {
+          const user = await res.json()
+          setUser(user)
+          await seedDemoWorld()
+          toast.success(`Welcome to Wasl, ${user.name}!`)
+          router.refresh()
+          return
+        }
+      }
+      // Fresh database — create the demo account, then seed it.
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: '+201001234567',
+          password: DEMO_PASSWORD,
+          name: 'Demo User',
+          username: DEMO_USERNAME,
+        }),
+      })
+      const user = await res.json()
+      if (!res.ok) { toast.error(user?.error || 'Failed to start demo'); return }
+      setUser(user)
+      await seedDemoWorld()
+      toast.success(`Welcome to Wasl, ${user.name}!`)
       router.refresh()
     } catch (err) {
       console.error(err)
@@ -381,10 +658,14 @@ export function AuthScreen() {
     [reduce, mx, my]
   )
 
-  const loginIdType = identifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(identifier) && identifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
-  const LoginIcon = loginIdType === 'email' ? Mail : loginIdType === 'phone' ? Phone : AtSign
-  const signupIdType = signupIdentifier.includes('@') ? 'email' : /^\+?[\d\s-]+$/.test(signupIdentifier) && signupIdentifier.replace(/[\s-]/g, '').length >= 8 ? 'phone' : 'username'
-  const SignupIdIcon = signupIdType === 'email' ? Mail : signupIdType === 'phone' ? Phone : AtSign
+  // ── Live identifier detection (step 1) + chip icon (steps 2+) ──────
+  const idInputType = idInput.includes('@')
+    ? 'email'
+    : /^\+?[\d\s-]+$/.test(idInput) && idInput.replace(/[\s-]/g, '').length >= 8
+      ? 'phone'
+      : 'username'
+  const IdInputIcon = idInputType === 'email' ? Mail : idInputType === 'phone' ? Phone : AtSign
+  const ChipIcon = idType === 'email' ? Mail : idType === 'phone' ? Phone : AtSign
 
   // ── Shared input styles ─────────────────────────────────────────────
   const inputStyle: React.CSSProperties = {
@@ -419,6 +700,76 @@ export function AuthScreen() {
     pointerEvents: 'none',
     display: 'flex',
     alignItems: 'center',
+  }
+  const h2Style: React.CSSProperties = {
+    fontSize: '1.35rem',
+    fontWeight: 700,
+    color: C.teal,
+    margin: 0,
+    fontFamily: 'inherit',
+    letterSpacing: '-0.01em',
+  }
+  const subStyle: React.CSSProperties = {
+    fontSize: 12.5,
+    color: `${C.teal}99`,
+    margin: 0,
+    fontFamily: 'inherit',
+  }
+  const submitBtnStyle: React.CSSProperties = {
+    width: '100%',
+    height: '48px',
+    border: 'none',
+    borderRadius: '13px',
+    fontSize: 14.5,
+    fontWeight: 600,
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    background: `linear-gradient(135deg, ${C.goldLight}, ${C.gold}, ${C.goldDark})`,
+    color: C.charcoal,
+    boxShadow: `0 5px 18px ${C.gold}48`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    position: 'relative',
+    overflow: 'hidden',
+  }
+  const eyeBtnStyle: React.CSSProperties = {
+    position: 'absolute',
+    right: 14,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    color: `${C.teal}99`,
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+  }
+  const inlineErrStyle: React.CSSProperties = {
+    fontSize: 11.5,
+    color: '#ef4444',
+    margin: '5px 0 0',
+    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  }
+  const capsStyle: React.CSSProperties = {
+    fontSize: 11,
+    color: '#b45309',
+    margin: '5px 0 0',
+    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  }
+  const headingWrapStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    marginBottom: 6,
   }
 
   const wordmark = 'Wasl'
@@ -972,125 +1323,226 @@ export function AuthScreen() {
                   background: `linear-gradient(90deg, transparent, ${C.goldLight}aa, transparent)`,
                 }} />
 
-                {/* Mode switcher — animated pill */}
-                <motion.div variants={formField} custom={0} initial="hidden" animate="show" style={{ position: 'relative', display: 'flex', padding: 4, background: 'rgba(26, 74, 90, 0.07)', borderRadius: '15px', border: `1px solid ${C.teal}1e`, marginBottom: 16 }}>
-                  {(['signup', 'login'] as const).map((tab) => {
-                    const active = mode === tab
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setMode(tab)}
-                        aria-pressed={active}
-                        style={{
-                          flex: 1,
-                          position: 'relative',
-                          padding: '10px 16px',
-                          borderRadius: '11px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontFamily: 'inherit',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          background: 'transparent',
-                          color: active ? C.charcoal : `${C.teal}99`,
-                          transition: 'color 0.25s',
-                          zIndex: 1,
-                        }}
-                      >
-                        {active && (
-                          <motion.span
-                            layoutId="authModePill"
-                            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                            style={{
-                              position: 'absolute', inset: 0,
-                              borderRadius: '11px',
-                              background: `linear-gradient(135deg, ${C.goldLight}, ${C.gold}, ${C.goldDark})`,
-                              boxShadow: `0 4px 14px ${C.gold}55`,
-                              zIndex: -1,
-                            }}
-                          />
-                        )}
-                        {tab === 'signup' ? 'Create account' : 'Log in'}
-                      </button>
-                    )
-                  })}
-                </motion.div>
-
-                {/* Heading + form — cross-fades between modes */}
-                <AnimatePresence mode="wait" initial={false}>
+                {/* ── Adaptive one-tab flow ──────────────────────────────
+                    No tabs. One smart field detects email / phone / username;
+                    an account lookup routes to login (exists) or signup. */}
+                <AnimatePresence mode="wait" custom={dir} initial={false}>
                   <motion.div
-                    key={mode}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.32, ease: EASE }}
+                    key={step}
+                    custom={dir}
+                    variants={stepVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
                   >
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: C.teal, margin: '0 0 3px', fontFamily: 'inherit', letterSpacing: '-0.01em' }}>
-                      {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-                    </h2>
-                    <p style={{ fontSize: 12.5, color: `${C.teal}99`, margin: '0 0 18px', fontFamily: 'inherit' }}>
-                      {mode === 'signup'
-                        ? 'Sign up with your Cirkle email or phone.'
-                        : 'Log in with your email, phone, or username.'}
-                    </p>
+                    {step === 'id' && (
+                      <form onSubmit={submitIdentifier} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <motion.div variants={formField} custom={0} initial={introDone ? false : 'hidden'} animate="show" style={headingWrapStyle}>
+                          <h2 style={h2Style}>Get started</h2>
+                          <p style={subStyle}>One place to log in or create your account.</p>
+                        </motion.div>
 
-                    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {mode === 'signup' ? (
-                        <>
-                          {/* Name */}
-                          <motion.div variants={formField} custom={1} initial="hidden" animate="show">
-                            <label style={labelStyle} htmlFor="name">Your name</label>
+                        {/* Smart identifier field — the icon morphs with the detected type */}
+                        <motion.div variants={formField} custom={1} initial={introDone ? false : 'hidden'} animate="show">
+                          <label style={labelStyle} htmlFor="identifier">Email, phone, or Cirkle username</label>
+                          <motion.div animate={shakeControls}>
                             <div style={{ position: 'relative' }}>
-                              <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
+                              <span style={iconWrapStyle}>
+                                <motion.span
+                                  key={idInputType}
+                                  initial={{ opacity: 0, scale: 0.4 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ duration: 0.28, ease: EASE }}
+                                  style={{ display: 'flex' }}
+                                >
+                                  <IdInputIcon style={{ width: 16, height: 16 }} />
+                                </motion.span>
+                              </span>
                               <input
-                                id="name"
+                                id="identifier"
                                 type="text"
                                 className="wasl-input-premium"
-                                placeholder="e.g. Ahmad Ali"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                autoComplete="name"
-                                disabled={loading}
-                                style={inputStyle}
-                              />
-                            </div>
-                          </motion.div>
-
-                          {/* Username with live availability */}
-                          <motion.div variants={formField} custom={2} initial="hidden" animate="show">
-                            <label style={labelStyle} htmlFor="username">Cirkle username</label>
-                            <div style={{ position: 'relative' }}>
-                              <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
-                              <input
-                                id="username"
-                                type="text"
-                                className="wasl-input-premium"
-                                placeholder="ahmad_ali"
-                                value={username}
-                                onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
+                                placeholder="you@cirkle.app · +20 100 … · @username"
+                                value={idInput}
+                                onChange={(e) => { setIdInput(e.target.value); setIdError('') }}
                                 autoComplete="username"
-                                disabled={loading}
+                                enterKeyHint="go"
+                                disabled={checking}
                                 style={inputStyle}
+                                aria-invalid={!!idError}
+                                aria-describedby={idError ? 'identifier-error' : undefined}
                               />
-                              {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} /></span>}
-                              {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
-                              {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
+                              {checking && (
+                                <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: C.goldDark, pointerEvents: 'none' }}>
+                                  <Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} />
+                                </span>
+                              )}
                             </div>
                           </motion.div>
+                          {idError && (
+                            <p id="identifier-error" role="alert" style={inlineErrStyle}>
+                              <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> {idError}
+                            </p>
+                          )}
+                        </motion.div>
 
-                          {/* Email/Phone optional */}
-                          <motion.div variants={formField} custom={3} initial="hidden" animate="show">
-                            <label style={labelStyle} htmlFor="signup-id">Cirkle email or phone <span style={{ fontWeight: 400, color: `${C.teal}66` }}>(optional)</span></label>
+                        {/* Continue */}
+                        <motion.div variants={formField} custom={2} initial={introDone ? false : 'hidden'} animate="show">
+                          <motion.button
+                            type="submit"
+                            className="wasl-btn-sheen"
+                            disabled={checking || !idInput.trim()}
+                            whileHover={checking ? undefined : { y: -2, boxShadow: `0 10px 28px ${C.gold}70` }}
+                            whileTap={checking ? undefined : { scale: 0.985 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                            style={{ ...submitBtnStyle, cursor: checking ? 'not-allowed' : 'pointer', opacity: checking || !idInput.trim() ? 0.55 : 1 }}
+                          >
+                            {checking && <Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} />}
+                            Continue
+                            {!checking && <ChevronRight style={{ width: 15, height: 15 }} />}
+                          </motion.button>
+                        </motion.div>
+                      </form>
+                    )}
+
+                    {step === 'login' && (
+                      <form onSubmit={loginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <IdentifierChip icon={ChipIcon} value={identifier} type={idType} onChange={backToId} />
+                        <div style={headingWrapStyle}>
+                          <h2 style={h2Style}>Welcome back{knownName ? `, ${knownName}` : ''}</h2>
+                          <p style={subStyle}>Enter your password to continue.</p>
+                        </div>
+
+                        {/* Password */}
+                        <motion.div variants={formField} custom={1} initial={introDone ? false : 'hidden'} animate="show">
+                          <label style={labelStyle} htmlFor="password">Password</label>
+                          <motion.div animate={shakeControls}>
                             <div style={{ position: 'relative' }}>
-                              <span style={iconWrapStyle}><SignupIdIcon style={{ width: 16, height: 16 }} /></span>
+                              <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
                               <input
-                                id="signup-id"
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                className="wasl-input-premium"
+                                placeholder="Your password"
+                                value={password}
+                                onChange={(e) => { setPassword(e.target.value); setPwError('') }}
+                                onKeyDown={checkCapsLock}
+                                onKeyUp={checkCapsLock}
+                                autoComplete="current-password"
+                                enterKeyHint="go"
+                                autoFocus
+                                disabled={loading}
+                                style={{ ...inputStyle, paddingRight: '42px' }}
+                                aria-invalid={!!pwError}
+                                aria-describedby={pwError ? 'password-error' : undefined}
+                              />
+                              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} style={eyeBtnStyle}>
+                                {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                              </button>
+                            </div>
+                          </motion.div>
+                          {capsLock && (
+                            <p style={capsStyle}>
+                              <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> Caps Lock is on
+                            </p>
+                          )}
+                          {pwError && (
+                            <p id="password-error" role="alert" style={inlineErrStyle}>
+                              <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> {pwError}
+                            </p>
+                          )}
+                        </motion.div>
+
+                        {/* Submit */}
+                        <motion.div variants={formField} custom={2} initial={introDone ? false : 'hidden'} animate="show">
+                          <motion.button
+                            type="submit"
+                            className="wasl-btn-sheen"
+                            disabled={loading || !password}
+                            whileHover={loading ? undefined : { y: -2, boxShadow: `0 10px 28px ${C.gold}70` }}
+                            whileTap={loading ? undefined : { scale: 0.985 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                            style={{ ...submitBtnStyle, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.65 : 1 }}
+                          >
+                            {loading && <Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} />}
+                            Log in
+                            {!loading && <ChevronRight style={{ width: 15, height: 15 }} />}
+                          </motion.button>
+                        </motion.div>
+                      </form>
+                    )}
+
+                    {step === 'signup' && (
+                      <form onSubmit={signupSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <IdentifierChip icon={ChipIcon} value={identifier} type={idType} onChange={backToId} />
+                        <div style={headingWrapStyle}>
+                          <h2 style={h2Style}>Create your account</h2>
+                          <p style={subStyle}>A few quick details and you're in.</p>
+                        </div>
+
+                        {/* Name */}
+                        <motion.div variants={formField} custom={1} initial={introDone ? false : 'hidden'} animate="show">
+                          <label style={labelStyle} htmlFor="name">Your name</label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={iconWrapStyle}><User style={{ width: 16, height: 16 }} /></span>
+                            <input
+                              id="name"
+                              type="text"
+                              className="wasl-input-premium"
+                              placeholder="e.g. Ahmad Ali"
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              autoComplete="name"
+                              enterKeyHint="next"
+                              autoFocus
+                              disabled={loading}
+                              style={inputStyle}
+                            />
+                          </div>
+                        </motion.div>
+
+                        {/* Username with live availability */}
+                        <motion.div variants={formField} custom={2} initial={introDone ? false : 'hidden'} animate="show">
+                          <label style={labelStyle} htmlFor="username">Cirkle username</label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={iconWrapStyle}><AtSign style={{ width: 16, height: 16 }} /></span>
+                            <input
+                              id="username"
+                              type="text"
+                              className="wasl-input-premium"
+                              placeholder="ahmad_ali"
+                              value={username}
+                              onChange={(e) => { setUsername(e.target.value); setUsernameTouched(true) }}
+                              autoComplete="username"
+                              enterKeyHint="next"
+                              disabled={loading}
+                              style={inputStyle}
+                              aria-describedby="username-status"
+                            />
+                            {usernameStatus.checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)' }}><Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} /></span>}
+                            {!usernameStatus.checking && usernameStatus.available === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }}><Check style={{ width: 16, height: 16 }} /></span>}
+                            {!usernameStatus.checking && usernameStatus.available === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }}><X style={{ width: 16, height: 16 }} /></span>}
+                          </div>
+                          <p id="username-status" style={{ fontSize: 10.5, color: `${C.teal}77`, margin: '4px 0 0' }}>
+                            {usernameStatus.available === false && usernameStatus.suggestions.length > 0
+                              ? `Taken — try ${usernameStatus.suggestions.slice(0, 3).join(', ')}`
+                              : 'Your unique handle on Cirkle — 3+ letters, numbers, or underscores.'}
+                          </p>
+                        </motion.div>
+
+                        {/* Optional contact — only when the identifier was a username */}
+                        {idType === 'username' && (
+                          <motion.div variants={formField} custom={3} initial={introDone ? false : 'hidden'} animate="show">
+                            <label style={labelStyle} htmlFor="signup-contact">Email or phone <span style={{ fontWeight: 400, color: `${C.teal}66` }}>(optional)</span></label>
+                            <div style={{ position: 'relative' }}>
+                              <span style={iconWrapStyle}><Mail style={{ width: 16, height: 16 }} /></span>
+                              <input
+                                id="signup-contact"
                                 type="text"
                                 className="wasl-input-premium"
                                 placeholder="you@cirkle.app or +20 100 4567"
-                                value={signupIdentifier}
-                                onChange={(e) => setSignupIdentifier(e.target.value)}
+                                value={contactOverride}
+                                onChange={(e) => setContactOverride(e.target.value)}
                                 autoComplete="off"
                                 disabled={loading}
                                 style={inputStyle}
@@ -1100,102 +1552,57 @@ export function AuthScreen() {
                               Add an email or phone so you can log in later.
                             </p>
                           </motion.div>
-                        </>
-                      ) : (
-                        <motion.div variants={formField} custom={1} initial="hidden" animate="show">
-                          <label style={labelStyle} htmlFor="identifier">Email, phone, or username</label>
+                        )}
+
+                        {/* Password + strength meter */}
+                        <motion.div variants={formField} custom={idType === 'username' ? 4 : 3} initial={introDone ? false : 'hidden'} animate="show">
+                          <label style={labelStyle} htmlFor="password">Password</label>
                           <div style={{ position: 'relative' }}>
-                            <span style={iconWrapStyle}><LoginIcon style={{ width: 16, height: 16 }} /></span>
+                            <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
                             <input
-                              id="identifier"
-                              type="text"
+                              id="password"
+                              type={showPassword ? 'text' : 'password'}
                               className="wasl-input-premium"
-                              placeholder="you@cirkle.app, +20…, or @username"
-                              value={identifier}
-                              onChange={(e) => setIdentifier(e.target.value)}
-                              autoComplete="username"
+                              placeholder="At least 8 characters"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              onKeyDown={checkCapsLock}
+                              onKeyUp={checkCapsLock}
+                              autoComplete="new-password"
+                              enterKeyHint="go"
                               disabled={loading}
-                              style={inputStyle}
+                              style={{ ...inputStyle, paddingRight: '42px' }}
                             />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} style={eyeBtnStyle}>
+                              {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                            </button>
                           </div>
+                          <StrengthMeter password={password} />
+                          {capsLock && (
+                            <p style={capsStyle}>
+                              <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} /> Caps Lock is on
+                            </p>
+                          )}
                         </motion.div>
-                      )}
 
-                      {/* Password */}
-                      <motion.div variants={formField} custom={mode === 'signup' ? 4 : 2} initial="hidden" animate="show">
-                        <label style={labelStyle} htmlFor="password">Password</label>
-                        <div style={{ position: 'relative' }}>
-                          <span style={iconWrapStyle}><Lock style={{ width: 16, height: 16 }} /></span>
-                          <input
-                            id="password"
-                            type={showPassword ? 'text' : 'password'}
-                            className="wasl-input-premium"
-                            placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                            disabled={loading}
-                            style={{ ...inputStyle, paddingRight: '42px' }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            style={{
-                              position: 'absolute',
-                              right: 14,
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              color: `${C.teal}99`,
-                              padding: 4,
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
+                        {/* Submit */}
+                        <motion.div variants={formField} custom={idType === 'username' ? 5 : 4} initial={introDone ? false : 'hidden'} animate="show">
+                          <motion.button
+                            type="submit"
+                            className="wasl-btn-sheen"
+                            disabled={loading || usernameStatus.available === false}
+                            whileHover={loading ? undefined : { y: -2, boxShadow: `0 10px 28px ${C.gold}70` }}
+                            whileTap={loading ? undefined : { scale: 0.985 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                            style={{ ...submitBtnStyle, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.65 : 1 }}
                           >
-                            {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
-                          </button>
-                        </div>
-                      </motion.div>
-
-                      {/* Submit */}
-                      <motion.div variants={formField} custom={mode === 'signup' ? 5 : 3} initial="hidden" animate="show">
-                        <motion.button
-                          type="submit"
-                          className="wasl-btn-sheen"
-                          disabled={loading || (mode === 'signup' && usernameStatus.available === false)}
-                          whileHover={loading ? undefined : { y: -2, boxShadow: `0 10px 28px ${C.gold}70` }}
-                          whileTap={loading ? undefined : { scale: 0.985 }}
-                          transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-                          style={{
-                            width: '100%',
-                            height: '48px',
-                            border: 'none',
-                            borderRadius: '13px',
-                            fontSize: 14.5,
-                            fontWeight: 600,
-                            fontFamily: 'inherit',
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            opacity: loading ? 0.65 : 1,
-                            background: `linear-gradient(135deg, ${C.goldLight}, ${C.gold}, ${C.goldDark})`,
-                            color: C.charcoal,
-                            boxShadow: `0 5px 18px ${C.gold}48`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            position: 'relative' as const,
-                            overflow: 'hidden' as const,
-                          }}
-                        >
-                          {loading && <Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} />}
-                          {mode === 'signup' ? 'Create account' : 'Log in'}
-                          {!loading && <ChevronRight style={{ width: 15, height: 15 }} />}
-                        </motion.button>
-                      </motion.div>
-                    </form>
+                            {loading && <Loader2 style={{ width: 16, height: 16, animation: 'wasl-spin 0.8s linear infinite' }} />}
+                            Create account
+                            {!loading && <ChevronRight style={{ width: 15, height: 15 }} />}
+                          </motion.button>
+                        </motion.div>
+                      </form>
+                    )}
                   </motion.div>
                 </AnimatePresence>
 
